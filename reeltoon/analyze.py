@@ -1,14 +1,11 @@
-"""Analyze a reference reel with Claude: frames + metadata + transcript in,
+"""Analyze a reference reel: frames + metadata + transcript in,
 a structured ReelAnalysis out."""
 
 from __future__ import annotations
 
-import base64
 import json
 
-import anthropic
-
-from .config import settings
+from .llm import generate_structured, image_part
 from .models import ReelAnalysis
 from .store import Job
 
@@ -24,18 +21,10 @@ expression, only its general format."""
 
 
 def analyze(job: Job) -> ReelAnalysis:
-    client = anthropic.Anthropic()
-
-    content: list[dict] = []
-    for frame in sorted(job.path("frames").glob("frame_*.jpg")):
-        content.append({
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/jpeg",
-                "data": base64.standard_b64encode(frame.read_bytes()).decode(),
-            },
-        })
+    contents = [
+        image_part(frame.read_bytes())
+        for frame in sorted(job.path("frames").glob("frame_*.jpg"))
+    ]
 
     meta = json.loads(job.path("source.json").read_text())
     transcript = job.path("transcript.txt")
@@ -46,16 +35,8 @@ def analyze(job: Job) -> ReelAnalysis:
     if transcript.exists():
         parts.append(f"Audio transcript: {transcript.read_text()}")
     parts.append("Analyze this reel's format.")
-    content.append({"type": "text", "text": "\n\n".join(parts)})
+    contents.append("\n\n".join(parts))
 
-    response = client.messages.parse(
-        model=settings.claude_model,
-        max_tokens=16000,
-        thinking={"type": "adaptive"},
-        system=_SYSTEM,
-        messages=[{"role": "user", "content": content}],
-        output_format=ReelAnalysis,
-    )
-    analysis: ReelAnalysis = response.parsed_output
+    analysis: ReelAnalysis = generate_structured(_SYSTEM, contents, ReelAnalysis)
     job.path("analysis.json").write_text(analysis.model_dump_json(indent=2))
     return analysis

@@ -1,13 +1,8 @@
-anthropic>=0.116.0
+google-genai>=1.30
 pydantic>=2.7
 python-dotenv>=1.0
-requests>=2.32
 yt-dlp>=2025.1.1
 edge-tts>=6.1
-
-# Publishing (only needed for the platforms you use)
-google-api-python-client>=2.130
-google-auth-oauthlib>=1.2
 
 # Optional: local transcription of reference reels (better analysis)
 # faster-whisper>=1.0

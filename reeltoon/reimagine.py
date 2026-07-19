@@ -1,11 +1,10 @@
 """Turn a ReelAnalysis into an original cartoon short: script, shot list,
-caption, hashtags — via Claude structured outputs."""
+caption, hashtags — via structured generation."""
 
 from __future__ import annotations
 
-import anthropic
-
 from .config import settings
+from .llm import generate_structured
 from .models import CartoonScript, ReelAnalysis
 from .store import Job
 from .styles import STYLES
@@ -39,26 +38,15 @@ def write_script(job: Job, style: str | None = None) -> CartoonScript:
     else:
         style_instruction = f"Use the style preset key '{style}'."
 
-    client = anthropic.Anthropic()
-    response = client.messages.parse(
-        model=settings.claude_model,
-        max_tokens=16000,
-        thinking={"type": "adaptive"},
-        system=_SYSTEM,
-        messages=[{
-            "role": "user",
-            "content": (
-                "Here is the format analysis of a trending reel:\n\n"
-                f"{analysis.model_dump_json(indent=2)}\n\n"
-                f"{style_instruction}\n\n"
-                "Write an original cartoon short that participates in this "
-                "format. Make it genuinely funny or satisfying, not a generic "
-                "imitation."
-            ),
-        }],
-        output_format=CartoonScript,
+    prompt = (
+        "Here is the format analysis of a trending reel:\n\n"
+        f"{analysis.model_dump_json(indent=2)}\n\n"
+        f"{style_instruction}\n\n"
+        "Write an original cartoon short that participates in this format. "
+        "Make it genuinely funny or satisfying, not a generic imitation."
     )
-    script: CartoonScript = response.parsed_output
+
+    script: CartoonScript = generate_structured(_SYSTEM, [prompt], CartoonScript)
     if script.style_key not in STYLES:
         script.style_key = next(iter(STYLES))
     job.path("script.json").write_text(script.model_dump_json(indent=2))

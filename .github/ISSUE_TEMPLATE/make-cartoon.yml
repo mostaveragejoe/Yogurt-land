@@ -1,0 +1,26 @@
+name: 🎬 Make a cartoon
+description: Paste a reel link — a cartoon version gets generated and posted back here.
+title: "Cartoon: "
+labels: [cartoon]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: Reel URL
+      description: Link to the reel to reimagine (YouTube Shorts and TikTok links work best)
+      placeholder: https://www.youtube.com/shorts/XXXXXXXX
+    validations:
+      required: true
+  - type: dropdown
+    id: style
+    attributes:
+      label: Cartoon style
+      options:
+        - auto
+        - rubber_hose
+        - saturday_morning
+        - anime
+        - flat_modern
+        - claymation
+        - pixel
+      default: 0

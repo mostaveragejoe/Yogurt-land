@@ -4,11 +4,12 @@ Typical flow:
     python -m reeltoon create <reel-url>       # analyze -> script -> render
     python -m reeltoon list                    # see the review queue
     python -m reeltoon show <job-id>           # inspect script + video path
-    python -m reeltoon approve <job-id>
-    python -m reeltoon post <job-id> --to youtube,instagram
 
-Hands-off mode (renders everything, and posts too if --auto-approve):
-    python -m reeltoon autopilot --urls-file trending.txt --post-to youtube --auto-approve
+Batch mode:
+    python -m reeltoon autopilot --urls-file trending.txt
+
+From an iPhone, don't use this CLI at all — open a GitHub issue with the
+"Make a cartoon" template and let the make-cartoon workflow run it (README).
 """
 
 from __future__ import annotations
@@ -200,7 +201,7 @@ def main() -> None:
 
     p = sub.add_parser("post", help="post an approved job")
     p.add_argument("job_id")
-    p.add_argument("--to", default="youtube", help="comma-separated: youtube,instagram,tiktok")
+    p.add_argument("--to", default="youtube", help="currently supported: youtube")
     p.set_defaults(func=cmd_post)
 
     p = sub.add_parser("autopilot", help="batch-process a file of reel URLs")

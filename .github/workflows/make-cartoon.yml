@@ -1,0 +1,130 @@
+# Make a cartoon from your phone:
+#   open a new issue with the "🎬 Make a cartoon" template, paste a reel URL,
+#   submit. This workflow renders the cartoon and comments the video + caption
+#   back on the issue.
+#
+# One-time setup: add a repo secret named GEMINI_API_KEY
+# (free key from https://aistudio.google.com — no credit card).
+
+name: make-cartoon
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Reel URL
+        required: true
+      style:
+        description: Cartoon style
+        default: auto
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  make:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.issue.labels.*.name, 'cartoon')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse request
+        id: req
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          INPUT_URL: ${{ inputs.url }}
+          INPUT_STYLE: ${{ inputs.style }}
+        run: |
+          if [ -n "$INPUT_URL" ]; then
+            URL="$INPUT_URL"; STYLE="${INPUT_STYLE:-auto}"
+          else
+            URL=$(printf '%s' "$ISSUE_BODY" | grep -oE 'https?://[^ >"\r\n]+' | head -1)
+            STYLE=$(printf '%s' "$ISSUE_BODY" | grep -oE 'rubber_hose|saturday_morning|anime|flat_modern|claymation|pixel' | head -1)
+            STYLE="${STYLE:-auto}"
+          fi
+          if [ -z "$URL" ]; then
+            echo "No URL found in the issue body" >&2; exit 1
+          fi
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "style=$STYLE" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ffmpeg + dependencies
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
+          pip install -q -r requirements.txt
+
+      - name: Generate cartoon
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          python -m reeltoon create "${{ steps.req.outputs.url }}" --style "${{ steps.req.outputs.style }}" \
+            2>&1 | tee run.log
+
+      - name: Publish video as a release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          JOB_DIR=$(ls -d data/jobs/*/ | head -1)
+          VIDEO="$JOB_DIR/final.mp4"
+          TAG="cartoon-${{ github.run_number }}"
+          TITLE=$(python -c "import json;print(json.load(open('$JOB_DIR/script.json'))['title'])")
+          CAPTION=$(python - <<'EOF'
+          import glob, json
+          s = json.load(open(glob.glob("data/jobs/*/script.json")[0]))
+          print(s["caption"] + "\n\n" + " ".join("#" + t for t in s["hashtags"]))
+          EOF
+          )
+          cp "$VIDEO" "cartoon-${{ github.run_number }}.mp4"
+          gh release create "$TAG" "cartoon-${{ github.run_number }}.mp4" \
+            --title "$TITLE" --notes "$CAPTION"
+          {
+            echo "video_url=https://github.com/${{ github.repository }}/releases/download/$TAG/cartoon-${{ github.run_number }}.mp4"
+            echo "caption<<CAPEOF"
+            echo "$CAPTION"
+            echo "CAPEOF"
+            echo "title=$TITLE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Reply on the issue
+        if: github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > comment.md <<'EOF'
+          ## 🎬 Your cartoon is ready!
+
+          **${{ steps.release.outputs.title }}**
+
+          📥 **[Download the video](${{ steps.release.outputs.video_url }})** — tap, then Share → Save Video, and post it from any app.
+
+          Copy-paste caption:
+
+          ```
+          ${{ steps.release.outputs.caption }}
+          ```
+          EOF
+          gh issue comment ${{ github.event.issue.number }} --body-file comment.md
+          gh issue close ${{ github.event.issue.number }}
+
+      - name: Report failure on the issue
+        if: failure() && github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "❌ Generation failed. Last log lines:"
+            echo
+            echo '```'
+            tail -20 run.log 2>/dev/null || echo "no log"
+            echo '```'
+            echo "Common causes: Instagram links often block server downloads (try a YouTube Shorts or TikTok link), or the free Gemini quota was hit for today."
+          } > fail.md
+          gh issue comment ${{ github.event.issue.number }} --body-file fail.md
