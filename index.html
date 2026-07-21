@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Yogurt Air — a tiny airline tycoon</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="map"></canvas>
+
+  <header id="hud">
+    <div class="hud-left">
+      <span id="hud-title">✈ Yogurt Air</span>
+      <span class="hud-stat" title="Coins"><span class="coin-ico">¢</span><span id="hud-coins">0</span></span>
+      <span class="hud-stat" title="Bux (premium)"><span class="bux-ico">Ƀ</span><span id="hud-bux">0</span></span>
+      <span class="hud-stat" title="Level / XP">
+        Lv <span id="hud-level">1</span>
+        <span id="xpbar"><span id="xpbar-fill"></span></span>
+      </span>
+    </div>
+    <div class="hud-right">
+      <button id="btn-fleet">Fleet</button>
+      <button id="btn-store">Store</button>
+      <button id="btn-help">Help</button>
+      <button id="btn-reset" title="Start over">Reset</button>
+    </div>
+  </header>
+
+  <aside id="panel" class="hidden">
+    <button id="panel-close">×</button>
+    <div id="panel-body"></div>
+  </aside>
+
+  <div id="modal-backdrop" class="hidden">
+    <div id="modal">
+      <button id="modal-close">×</button>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
+  <script src="js/data.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

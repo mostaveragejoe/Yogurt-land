@@ -1,0 +1,233 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --panel-bg: #10182acc;
+  --panel-border: #2b3c5c;
+  --text: #dce7f5;
+  --muted: #7f93b3;
+  --accent: #ffd75e;
+  --coin: #ffd75e;
+  --bux: #6fd3ff;
+  --good: #7be08a;
+  --bad: #ff8080;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: #060b16;
+  color: var(--text);
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#map {
+  position: fixed;
+  inset: 0;
+  display: block;
+  cursor: grab;
+}
+#map.dragging { cursor: grabbing; }
+
+/* ---------- HUD ---------- */
+#hud {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: linear-gradient(#0b1322ee, #0b132299);
+  border-bottom: 1px solid var(--panel-border);
+  z-index: 20;
+  flex-wrap: wrap;
+}
+.hud-left, .hud-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+#hud-title { font-weight: 700; letter-spacing: 0.5px; color: var(--accent); }
+.hud-stat { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; }
+.coin-ico { color: var(--coin); font-weight: 800; }
+.bux-ico { color: var(--bux); font-weight: 800; }
+#xpbar {
+  display: inline-block;
+  width: 90px; height: 8px;
+  background: #1c2940;
+  border-radius: 4px;
+  overflow: hidden;
+}
+#xpbar-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #7be08a, #b8f0a0);
+  transition: width 0.3s;
+}
+
+button {
+  background: #1b2a45;
+  color: var(--text);
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: #26375a; border-color: #40587f; }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: #2c4a2f; border-color: #3f7045; }
+button.primary:hover:not(:disabled) { background: #38603c; }
+button.danger { background: #4a2626; border-color: #7a3d3d; }
+button.small { padding: 3px 8px; font-size: 12px; }
+
+/* ---------- Side panel ---------- */
+#panel {
+  position: fixed;
+  top: 56px; left: 12px; bottom: 12px;
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+}
+#panel.hidden { display: none; }
+#panel-close, #modal-close {
+  position: absolute;
+  top: 6px; right: 8px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+#panel-close:hover, #modal-close:hover { color: var(--text); }
+#panel-body { padding: 14px; overflow-y: auto; flex: 1; }
+
+#panel-body h2 { font-size: 17px; margin-bottom: 2px; }
+#panel-body h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin: 14px 0 6px;
+}
+.sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #16223a;
+  margin-bottom: 5px;
+}
+.row .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.clickable { cursor: pointer; }
+.row.clickable:hover { background: #1e2e4e; }
+.pay { color: var(--coin); font-weight: 600; white-space: nowrap; }
+.pay.bux { color: var(--bux); }
+.dim { color: var(--muted); font-size: 12px; }
+.tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  background: #24344f;
+  color: var(--muted);
+}
+.tag.owned { background: #24422a; color: var(--good); }
+.tag.flying { background: #203a52; color: var(--bux); }
+
+.slotbar { display: inline-flex; gap: 3px; }
+.slot {
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  border: 1px solid #3a4f75;
+  font-size: 9px;
+  text-align: center;
+  line-height: 12px;
+}
+.slot.filled-p { background: #3f6ea8; border-color: #6ba0dd; }
+.slot.filled-c { background: #a8743f; border-color: #dda86b; }
+
+/* ---------- Modal ---------- */
+#modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #04070fb0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#modal-backdrop.hidden { display: none; }
+#modal {
+  position: relative;
+  width: 560px;
+  max-width: calc(100vw - 30px);
+  max-height: calc(100vh - 60px);
+  background: #0f1728;
+  border: 1px solid var(--panel-border);
+  border-radius: 12px;
+  padding: 18px;
+  overflow-y: auto;
+}
+#modal h2 { margin-bottom: 10px; font-size: 18px; }
+#modal h3 { margin: 12px 0 6px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+#modal p { margin: 6px 0; line-height: 1.5; }
+#modal ul { margin: 6px 0 6px 20px; line-height: 1.6; }
+
+.store-plane {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #16223a;
+  margin-bottom: 8px;
+}
+.store-plane .info { flex: 1; }
+.store-plane .name { font-weight: 700; }
+.store-plane.locked { opacity: 0.5; }
+.stats { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+/* ---------- Toasts ---------- */
+#toasts {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 40;
+  pointer-events: none;
+  max-width: 320px;
+}
+.toast {
+  background: #16223aee;
+  border: 1px solid var(--panel-border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  animation: toast-in 0.25s ease-out;
+}
+.toast.good { border-left-color: var(--good); }
+.toast.bad { border-left-color: var(--bad); }
+@keyframes toast-in {
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  #panel { width: auto; right: 12px; top: auto; height: 46vh; }
+}
