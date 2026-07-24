@@ -1,7 +1,9 @@
 # Art Bible: Hollowdeep
 
 *Created: 2026-07-24*
-*Status: In Progress — Sections 1–4 being authored; 5–9 skeleton*
+*Status: Sections 1–4 complete and gate-reviewed; 5–9 skeleton*
+
+> **Art Director Sign-Off (AD-ART-BIBLE)**: REVISED 2026-07-24 — creative-director returned CONCERNS (5 substantive + cleanup); all recommended fixes applied same day. Scope reviewed: Sections 1–4 (visual identity core).
 
 > Scope note: This is a constraint document. Every section narrows the visual
 > solution space in exchange for coherence. Sections marked `[To be designed]`
@@ -15,7 +17,7 @@
 
 > **Light sets the mood. Shape tells your story.**
 
-Warmth is the game's aesthetic soul — the Warm Hearth palette is the visual mood of Hollowdeep, and it stays exactly that: mood. It is not a claim signal, not a readability channel, and nothing in combat, threat state, or repair logic ever reads or reacts to it. Lighting exists to make the colony feel beautiful and lived-in, full stop. What actually carries meaning — who you are, what you value, how you think — is the architecture itself: the shapes, styles, and materials the player chooses to build, anywhere, at any depth, from day one.
+Warmth is the game's aesthetic soul — the Warm Hearth palette is the visual mood of Hollowdeep, and it stays exactly that: mood. It is not a claim signal and not an authored code the player must learn: no mechanic queries it and no logic branches on it — no system, anywhere in the game, ever reads the state of a light. That is a strict engineering rule, not a suggestion. It does not mean the player can't *notice* the physical consequences of light and dark — a dark gap where a lamp used to stand before a breach is simply what destroying a lamp looks like, and the player is welcome to feel that. The rule only forbids meaning being *authored* into that perception: nothing in combat, threat state, or repair logic ever reads or reacts to it, and no design decision should ever start from "what should this color communicate about game state." Lighting exists to make the colony feel beautiful and lived-in, full stop. What actually carries meaning — who you are, what you value, how you think — is the architecture itself: the shapes, styles, and materials the player chooses to build, anywhere, at any depth, from day one.
 
 ### Supporting Principles
 
@@ -39,11 +41,19 @@ Godot 4.7.1 supports this cleanly: force Nearest filtering per-import or project
 
 **Deferred**: the camera question (fixed/quantized isometric à la Gnomoria vs. free orbit) is deliberately NOT locked here — it must also serve turn-based tactics readability. It gets a dedicated Camera & Composition decision later.
 
+**Presentation-layer exemption**: multi-Z-level focus treatment — the cutaway/slice view that dims, desaturates, or ghosts non-focus Z-levels so the player can see the level they're working on — is explicitly exempt from the world-color rule above, in the same exemption class as UI chrome (Section 4.2). It is a rendering/presentation channel, not a world-material or lighting truth, and carries no more "meaning" than a UI panel border does. The actual treatment (how much dimming, whether levels above vs. below the focus level get different treatment, opacity vs. desaturation vs. both) is deferred to the Camera & Composition decision, since it's inseparable from the camera choice itself.
+
+**Dependency chain to flag**: camera decision → texel density → UI base pixel unit → icon sizes. The camera decision (fixed/quantized vs. free orbit, and now also the Z-level cutaway treatment) constrains how large a colonist silhouette reads on-screen, which constrains the texel density Section 1 defers to Section 8, which constrains the UI's base pixel unit (Section 3.3) and therefore icon sizing (Section 3.3's 16–24px thumbnail test). **Sections 3.1 and 3.3 need re-validation once the camera decision lands** — their current numbers are reasonable placeholders, not load-bearing until camera is locked.
+
+### Rendering Constant: Minimum Ambient Floor
+
+To make lighting genuinely optional rather than secretly load-bearing, Hollowdeep defines a documented **minimum ambient fill** as a global rendering constant, applied in every state — including a fully unlit player base in tactics mode: no surface the camera can see ever crushes to true black. This is a rendering floor, not a mechanic — it exists so an all-torches-extinguished corridor stays legible (if bleak) geometry, never an unreadable void the player is punished for failing to light. The exact value (a minimum luminance/ambient-occlusion floor set on the `WorldEnvironment` resource) is fixed in Section 8 Asset Standards alongside texel density. Section 2.1's "nothing crushed to black, nothing blown out" is this same constant, not a peacetime-only choice.
+
 ### Bavarian + Roman Integration
 
 Both references are **style vocabularies in the building palette, not stages of a progression** — a player can raise Roman-coded vaults at the surface or fachwerk cottages at the colony's deepest point on day one; nothing gates one by depth or material tier. Materials look like what they are and light does what light does: a Roman stone wall lit warmly looks warm, exactly like a lit Bavarian plaster wall — no hue constraint distinguishes them.
 
-Practically, both vocabularies share one grid-based kit-of-parts (wall, doorway, ceiling, support modules) with swappable dressing — exposed beam framing and painted bauernmalerei-style folk trim for the Bavarian set; rounded arches, engaged pilasters, and vaulted ceiling silhouettes for the Roman set — keeping authoring cost close to linear rather than doubling the kit. This is a budget decision, not a lore one. The Roman set stays stylized and legible rather than literal (no full classical-order capital libraries — ornate sculptural detail reads as noise at pixel-art fidelity, in direct tension with Legibility Before Beauty). The Bavarian set is a coded construction-and-color influence rather than a literal costume simulation; character/culture specifics belong to Section 5.
+Practically, both vocabularies share one grid-based kit-of-parts (wall, doorway, ceiling, support modules) with swappable dressing — exposed beam framing and painted bauernmalerei-style folk trim for the Bavarian set; rounded arches, engaged pilasters, and vaulted ceiling silhouettes for the Roman set — keeping authoring cost sublinear rather than doubling the kit. This is a budget decision, not a lore one. The Roman set stays stylized and legible rather than literal (no full classical-order capital libraries — ornate sculptural detail reads as noise at pixel-art fidelity, in direct tension with Legibility Before Beauty). The Bavarian set is a coded construction-and-color influence rather than a literal costume simulation; character/culture specifics belong to Section 5.
 
 ---
 
@@ -54,7 +64,7 @@ Every state shares one lighting truth per Section 1: warmth comes from where the
 ### 2.1 Colony Mode — Settled / Peacetime
 
 - **Emotional target**: The specific pride of watching a home you built keep working without you standing in it — unhurried domestic contentment, quietly proud rather than merely "cozy," with an undertone of watchfulness since you know it won't stay quiet forever.
-- **Lighting character**: Warm-dominant. Many small local warm sources (hearths, lamps, candles) placed by the player, each with soft falloff, pooling light room-to-room rather than one flat wash. Ambient fill stays low and cool-neutral so the warm pools read as the eye's destination. Low-to-moderate contrast overall — nothing crushed to black, nothing blown out.
+- **Lighting character**: Warm-dominant. Many small local warm sources (hearths, lamps, candles) placed by the player, each with soft falloff, pooling light room-to-room rather than one flat wash. Ambient fill stays low and cool-neutral so the warm pools read as the eye's destination. Low-to-moderate contrast overall — nothing crushed to black, nothing blown out (the global minimum-ambient-floor rendering constant defined in Section 1, applied here, not a peacetime-only choice).
 - **Atmospheric descriptors**: lived-in, industrious, unhurried, intimate, steady.
 - **Energy level**: Low-moderate, continuous — colonists moving on their own idle loops, no player-driven urgency.
 - **Visual element that carries the mood**: A hearth or oven with a slow steam/smoke curl, colonists' small idle-task animations visible in the pixel-art silhouette nearby (stirring, hauling, sitting) — motion that reads as a home functioning, not a stage set.
@@ -118,6 +128,8 @@ Colonists and raiders read at tile-grid, pixel-art scale — small moving silhou
 
 **Design test**: when two archetypes or states could be told apart by a color swap alone, reject that solution and find a silhouette solution — proportion, gear shape, or pose — instead.
 
+**Production budget** (MVP-era; revisit only by deliberate decision, never by organic accumulation): a fixed **6 silhouette families** — 3 colonist work-archetypes, 1 soldier, 2 raider families — and a fixed **3 pose-bias states** per family (idle / working / alert). Gear and role variation within a family is expressed as a small set of swappable silhouette props (tools, weapons, headgear) mounted on **one shared base rig**, never as per-class meshes. This is what keeps the chunky-proportion, silhouette-first system in budget for a solo dev; expanding family or pose-state count is a scope call for `producer`, not something that should creep in per-asset.
+
 ### 3.2 Environment Geometry
 
 *Anchors: Pillar 5 — Depth Is the Frontier (wild); Pillar 1 — The Blueprint Is the Player (built)*
@@ -153,7 +165,9 @@ Not everything can draw the eye, or nothing does — deliberate figure/ground hi
 - **Hero shapes** (bespoke silhouette, scale break from the grid rhythm, ornament concentration): hearths and lamps, doorways/thresholds, the wild/built frontier seam, colonists, and breach/damage points — exactly the "visual element that carries the mood" entries from Section 2. Breach points earn hero-shape treatment to serve Pillar 3: a wound in the architecture must be instantly recognizable as a wound, not blend into the wall run around it.
 - **Supporting shapes** (repeated, deliberately plain, low ornament): wall runs, floor tiles, filler corridor lengths, generic stone/plaster facing. Variation handled at the texture level (grime, wear, tone noise) rather than geometry — cheap, repeatable, and receding.
 
-**Design test**: when deciding whether an element deserves hero-shape treatment, ask whether the player needs to recognize it instantly across a busy screen (hearths, doorways, breach points, colonists) or whether it's structural filler (wall runs, floor tiles) — keep hero-tier elements rare per screen, or nothing reads as important.
+**Design test**: when deciding whether an element deserves hero-shape treatment, ask whether the player needs to recognize it instantly across a busy screen (hearths, doorways, breach points, colonists) or whether it's structural filler (wall runs, floor tiles) — keep hero-tier elements to roughly **3–5 simultaneously prominent per typical screen composition**; past that, nothing reads as important.
+
+**Forward declaration for Section 6**: breach/damage points being a hero shape (above) only solves *that* damage is legible — it doesn't yet solve *what kind* of damage is legible. Pillar 3 (Scars Teach) needs collapse, burn, and battering damage to be visually distinct from each other, not just distinct from undamaged geometry, so a player can read the engineering lesson (a burned granary reads differently from a battered gate) at a glance. That taxonomy is Environment & Level Art's job — Section 6 must author it before any damage-state assets are built.
 
 ---
 
@@ -165,7 +179,7 @@ Two disciplines govern everything below. First, per Sections 1–3: **materials 
 
 ### 4.1 Primary Palette
 
-| Color | Indicative Hex | Role — what it means in this world |
+| Color | Indicative Hex | Role — where it lives in this world |
 |---|---|---|
 | **Hearth Amber** | `#E8A23D` | The warmth of habitation. The color of every hearth, lamp, and candle the player has ever lit — the game's aesthetic soul, per Section 1. |
 | **Parchment Cream** | `#E4D3B4` | Warmth without saturation. Whitewashed plaster, vellum, bare timber-infill — the neutral surface that lets amber light and folk accents do the talking. |
@@ -187,15 +201,17 @@ The world carries zero semantic color. The *only* place color means something fi
 
 That is the entire semantic set. Everything else — every material, strata band, and painted trim choice — stays purely aesthetic.
 
+**Design test**: when a proposed color assignment would let a player infer a mechanical state from hue — anywhere, world or UI — reject it and move that information to shape, icon, or motion instead.
+
 ### 4.3 Per-Area Color Temperature (Natural Strata)
 
-Depth communicates through terrain irregularity and hazard density (Section 3), never through hue. Strata color variation exists purely for visual richness — a reward for descent:
+Depth communicates through terrain irregularity and hazard density (Section 3), never through hue — no single Z-level's color ever correlates with hazard tier, and no gradient is fixed or predictable region-to-region. Strata coloration is instead drawn from **depth-weighted probability pools with heavy overlap between adjacent bands**, so a cool/dark trend is only ever felt across hundreds of meters of descent — never diagnosable at any one dig site:
 
-- **Near-surface strata**: warmer-neutral grey-browns, faint iron-oxide staining bleeding down from soil above.
-- **Mid-depth strata**: cooler blue-grey slate and schist tones — Deep Stone Grey's natural range.
-- **Deep strata**: darker charcoal-blue basalt and granite, punctuated by rare Mineral Vein Accents (verdigris copper, white quartz, ochre streaks).
+- **Near-surface pool** (dominant near the surface, tapering with depth, never absent): warmer-neutral grey-browns, faint iron-oxide staining bleeding down from soil above.
+- **Mid-depth pool** (dominant mid-range, present in traces both near-surface and deep): cooler blue-grey slate and schist tones — Deep Stone Grey's natural range.
+- **Deep pool** (dominant far down, present in rare traces even near-surface): darker charcoal-blue basalt and granite, punctuated by rare Mineral Vein Accents (verdigris copper, white quartz, ochre streaks).
 
-**Implementation caution**: randomize/vary strata coloration per generated region rather than locking it to a strict depth gradient. A strict gradient would let players pattern-match "this hue = this danger tier," smuggling semantic meaning back into world color through the back door. Keep it beautiful and inconsistent, not a ramp.
+These three descriptions are **pool centers, not fixed assignments** — every generated region samples across all three pools with depth-weighted probability, and the overlap between adjacent pools must be wide enough that two players digging at the same Z-level in different regions get visibly different strata color. That overlap is the mechanism, not a caveat on top of it: it's what keeps the trend a felt, geological beauty rather than a readable difficulty ramp.
 
 ### 4.4 UI Palette
 
