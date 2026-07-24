@@ -159,7 +159,64 @@ Not everything can draw the eye, or nothing does — deliberate figure/ground hi
 
 ## 4. Color System
 
-[To be designed]
+Two disciplines govern everything below. First, per Sections 1–3: **materials look like what they are and light does what light does** — the world's color is never a code to be read, only a beauty to be seen. Second, pixel-art fidelity means every individual texture draws from a tight, quantized sub-palette rather than free gradients — cheap to author, coherent by construction. The tool for both is a single **master palette resource** (a shared `.tres`/palette asset in Godot) that world materials, UI, and per-texture sub-palettes all draw their values from — "Hearth Amber" is one token used everywhere it appears, not several values drifting apart across assets.
+
+*(Hex values are indicative starting points for the master palette, not final color-managed output — to be refined once real pixel-art textures and Godot's HDR pipeline are in hand.)*
+
+### 4.1 Primary Palette
+
+| Color | Indicative Hex | Role — what it means in this world |
+|---|---|---|
+| **Hearth Amber** | `#E8A23D` | The warmth of habitation. The color of every hearth, lamp, and candle the player has ever lit — the game's aesthetic soul, per Section 1. |
+| **Parchment Cream** | `#E4D3B4` | Warmth without saturation. Whitewashed plaster, vellum, bare timber-infill — the neutral surface that lets amber light and folk accents do the talking. |
+| **Timber Umber** | `#6B4226` | The hand of the builder. Raw and finished wood — fachwerk beams, furniture, doorframes — the material color of craft itself. |
+| **Deep Stone Grey** | `#5E6670` | The mountain, honestly rendered. One true material color for raw and worked stone alike — it reads cool in the unlit wilds and warm under hearth light for the same reason a real rock does: because of what's actually lighting it, never because of a coded state. |
+| **Mineral Vein Accent** | `#4F8A72` (verdigris) / `#C9C2B0` (quartz) | The beauty found in depth. Rare, decorative color variation in unexcavated strata — a visual reward for descending, never a danger-tier signal (see 4.3). |
+| **Bauernmalerei Red** | `#B23A2E` | The celebratory human hand. A saturated folk-painted trim color, available to the player anywhere, on anything, from day one. |
+| **Alpine Folk Blue-Green** | `#3A6B6E` | The cooler counterpart to Folk Red — the other half of the traditional bauernmalerei accent pair, equally a free player choice. |
+
+### 4.2 Semantic Color Usage (UI-Layer Only, Minimal)
+
+The world carries zero semantic color. The *only* place color means something fixed is a small set of UI-chrome conventions — three assignments, each reusing a primary-palette token where possible:
+
+| Semantic role | Color | Rationale |
+|---|---|---|
+| **Active / valid / selected** | Hearth Amber (reused) | Sections 2.3 and 3.3 already established amber linework as the game's "clarity" overlay (reachable tiles, blueprint drafting). Reusing it means the player learns one visual convention, not two. |
+| **Invalid / blocked / threat notification** | **Alert Crimson** `#C43B2E` (UI-exclusive) | The near-universal "stop, look here" convention — lowest learning cost. Deliberately kept out of the world palette (never on a material or a light) so it stays unambiguous, and kept visually distinct from Bauernmalerei Red (which is warmer, dustier) so a red-trimmed door and a "blocked" cursor never read as the same thing. |
+| **Disabled / unavailable** | Deep Stone Grey, desaturated (reused, dimmed) | Reuses an existing token; low saturation is the standard "inert" convention. |
+
+That is the entire semantic set. Everything else — every material, strata band, and painted trim choice — stays purely aesthetic.
+
+### 4.3 Per-Area Color Temperature (Natural Strata)
+
+Depth communicates through terrain irregularity and hazard density (Section 3), never through hue. Strata color variation exists purely for visual richness — a reward for descent:
+
+- **Near-surface strata**: warmer-neutral grey-browns, faint iron-oxide staining bleeding down from soil above.
+- **Mid-depth strata**: cooler blue-grey slate and schist tones — Deep Stone Grey's natural range.
+- **Deep strata**: darker charcoal-blue basalt and granite, punctuated by rare Mineral Vein Accents (verdigris copper, white quartz, ochre streaks).
+
+**Implementation caution**: randomize/vary strata coloration per generated region rather than locking it to a strict depth gradient. A strict gradient would let players pattern-match "this hue = this danger tier," smuggling semantic meaning back into world color through the back door. Keep it beautiful and inconsistent, not a ramp.
+
+### 4.4 UI Palette
+
+The parchment/vellum + amber linework system from 2.5 and 3.3, built almost entirely from tokens already defined in 4.1 so world and UI stay of-a-piece:
+
+| Role | Color | Source |
+|---|---|---|
+| Panel base | Parchment Cream `#E4D3B4` | Reused from primary palette |
+| Ink / body text / ruled lines | Warm Charcoal `#3B2E23` | New — warm near-black, never pure black: hand-drafted ink, not digital text |
+| Linework / overlay accents | Amber Linework `#D98F2B` | Tuned variant of Hearth Amber for legibility against the cream base |
+| Hero-panel corner flourishes | Bauernmalerei Red / Alpine Folk Blue-Green | Reused, reserved for hero panels only per Section 3.3 |
+| Semantic layer | Alert Crimson / desaturated Deep Stone Grey | As defined in 4.2 |
+
+### 4.5 Colorblind Safety
+
+Because the world carries no color semantics, the entire exposure is the three-color UI set in 4.2 — small enough to fully audit:
+
+- **Amber (active) vs. Alert Crimson (invalid/threat)**: the at-risk pair — both warm hues, and red-based color-vision deficiencies compress exactly this distinction. Required backups: distinct icon glyphs (outline/checkmark language for amber; X/exclamation for crimson, per Section 3.3's silhouette-first icon rule), a deliberate value/saturation gap (crimson darker and more saturated), and behavioral reinforcement (crimson states pair with a blocked-cursor icon or reject animation — never color alone).
+- **Alert Crimson vs. Bauernmalerei Red**: different visual layers (flat UI chrome vs. 3D pixel-art world) make confusion unlikely; the two are kept at different value/saturation as a safety margin regardless.
+- **Disabled grey vs. panel neutrals**: desaturation alone is insufficient — disabled elements also drop opacity and/or gain a diagonal hatch pattern.
+- **Standing rule**: every semantic color assignment in 4.2 must ship with a non-color backup — icon shape, pattern, or motion — before it's considered complete.
 
 ---
 
