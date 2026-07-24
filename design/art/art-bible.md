@@ -103,7 +103,57 @@ All five states are achievable with `WorldEnvironment`/`Environment` resource sw
 
 ## 3. Shape Language
 
-[To be designed]
+Every principle below is a direct extension of the Rule — *Light sets the mood, shape tells your story* — applied to geometry. Sections 1 and 2 took color and light off the table as meaning-carriers, so shape is the one channel left to do that work. Nothing here restricts what the player can build (Bavarian and Roman dressing both remain available anywhere, per Section 1): these are authoring rules for the game's own characters, kit-of-parts, and UI — not new constraints on player expression.
+
+### 3.1 Character Silhouette Philosophy
+
+*Anchors: Pillar 2 — Preparation Gets Tested; Pillar 4 — The Colony Lives Without You*
+
+Colonists and raiders read at tile-grid, pixel-art scale — small moving silhouettes glimpsed mid-task or mid-engagement. Archetype must be legible from **silhouette alone**: proportion, gear-shape, and pose, not palette.
+
+- **Proportion direction**: chunky over elongated — stout, toylike mass rather than realistic elongation. Reads better at small scale, matches the rounded warmth of bauernmalerei folk-art figures, and forgives low-poly/low-texel construction. The head is kept slightly oversized to carry hat/hair/role silhouette without extra texel budget on a face.
+- **Archetype-by-silhouette, not color**: worker, soldier, and raider must be tellable apart in grayscale at thumbnail size. Workers read soft and rounded (tool-in-hand, apron/satchel). Soldiers read squared and weapon-forward (shoulder mass, blocky plates, upright posture). Raiders read broken and asymmetric (mismatched gear, ragged profile, off-axis posture) — deliberately the least "orderly" shape family in the game, in contrast to everything the colony builds.
+- **"Know the class before the person"** (the FFT reference made literal): squad composition must read from silhouettes at a glance, before any individual identity resolves — preparation depends on reading a threat *before* the engagement (Pillar 2).
+- **State, not just archetype**: idle, working, and alert/combat states read through pose bias (relaxed vs. tense stance, tool-out vs. weapon-out) so the player can tell what the colony is doing without opening a UI panel (Pillar 4 — silhouette is the primary feedback channel for autonomous colonists).
+
+**Design test**: when two archetypes or states could be told apart by a color swap alone, reject that solution and find a silhouette solution — proportion, gear shape, or pose — instead.
+
+### 3.2 Environment Geometry
+
+*Anchors: Pillar 5 — Depth Is the Frontier (wild); Pillar 1 — The Blueprint Is the Player (built)*
+
+The tile grid gives rectilinear geometry for free, and that default split is the story shape tells: **wild terrain reads as irregular and force-shaped; built architecture reads as rectilinear and tool-shaped.** This is an emergent visual fact, not a mechanical signal — nothing reads it, nothing reacts to it; it's just what carving looks like next to what nature looks like.
+
+- **Wild terrain vocabulary**: faceted, jagged, irregular masses — randomized per-cell corner chamfers, broken edges, and rubble-variant meshes layered onto the same grid, not true sculpted organic geometry (the kit budget can't afford it). The wild should never accidentally read as "designed."
+- **Built architecture vocabulary**: rectilinear-dominant — flat planes, even coursing, deliberate right angles and beveled edges — the visible signature of tool-and-intent, underneath both the Bavarian and Roman dressing families.
+- **Where curves fit**: Roman arches, vaults, and columns are the one deliberate exception, budgeted as a **bounded module family** — a small fixed set of arch/vault/capital meshes authored once at standard grid-cell spans (1-cell / 2-cell arch, fixed vault height) that drop into the same slots as rectilinear pieces. One standardized curve radius means one texture treatment works everywhere (curved surfaces stretch pixel-art UVs unpredictably otherwise). Curves stay rare enough that encountering one reads as "this took real skill."
+- The full vocabulary is available to the player anywhere, at any depth, per Section 1 — the rectilinear/curve split is production discipline for the kit, not a placement rule for the player.
+
+**Design test**: when unsure whether a geometric element belongs to the wild or built vocabulary, ask whether it reads as tool-precise (rectilinear, even, deliberate) or force-of-nature (irregular, faceted, chamfered) — never split the difference into "stylized in-between" geometry; ambiguity here undercuts the carving fantasy.
+
+### 3.3 UI Shape Grammar
+
+*Anchor: Pillar 1 — The Blueprint Is the Player*
+
+Extends Section 2.5's drafting-table/parchment/amber-linework direction: the UI is an extension of the same hand-drafted, tool-shaped identity as the built environment, not a separate "modern app" layer.
+
+- **Corner treatment**: chamfered (straight diagonal cut), not rounded — a chamfer is a crisp diagonal that renders clean at pixel resolution and matches drafting-paper and carved-wood-panel corners; rounded corners anti-alias poorly and read mushy.
+- **Panel framing**: bordered like a technical drawing's title block — a consistent ruled edge, with Bavarian folk-trim corner flourishes reserved for hero panels only (main menu, major overlays) so they stay a flourish rather than noise. Legibility Before Beauty applied to UI: ornament concentrates only where it can't compete with information.
+- **Icon silhouette rules**: single- or double-weight amber linework pictograms, silhouette-first — every icon must read correctly as a solid shape at 16–24px before any internal line detail is added (the same thumbnail test as 3.1).
+- **Grid alignment**: UI panels and icons snap to the same base pixel unit as the world's texel density (Section 1) — no non-integer scaling blur.
+
+**Design test**: when a UI shape choice could go soft-modern (rounded pills, drop shadows, blur) or hand-drafted (chamfered corners, etched linework, ruled borders), choose hand-drafted — the world's shape language shouldn't disappear the moment the player opens a menu.
+
+### 3.4 Hero Shapes vs. Supporting Shapes
+
+*Anchors: Pillar 3 — Scars Teach (breach points); Pillar 1 — The Blueprint Is the Player (everything else)*
+
+Not everything can draw the eye, or nothing does — deliberate figure/ground hierarchy that also keeps the kit budget sane.
+
+- **Hero shapes** (bespoke silhouette, scale break from the grid rhythm, ornament concentration): hearths and lamps, doorways/thresholds, the wild/built frontier seam, colonists, and breach/damage points — exactly the "visual element that carries the mood" entries from Section 2. Breach points earn hero-shape treatment to serve Pillar 3: a wound in the architecture must be instantly recognizable as a wound, not blend into the wall run around it.
+- **Supporting shapes** (repeated, deliberately plain, low ornament): wall runs, floor tiles, filler corridor lengths, generic stone/plaster facing. Variation handled at the texture level (grime, wear, tone noise) rather than geometry — cheap, repeatable, and receding.
+
+**Design test**: when deciding whether an element deserves hero-shape treatment, ask whether the player needs to recognize it instantly across a busy screen (hearths, doorways, breach points, colonists) or whether it's structural filler (wall runs, floor tiles) — keep hero-tier elements rare per screen, or nothing reads as important.
 
 ---
 
