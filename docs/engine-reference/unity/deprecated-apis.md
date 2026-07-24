@@ -1,6 +1,6 @@
 # Unity 6.3 LTS — Deprecated APIs
 
-**Last verified:** 2026-02-13
+**Last verified:** 2026-07-24 (re-verified for Hollowdeep, no changes found)
 
 Quick lookup table for deprecated APIs and their replacements.
 Format: **Don't use X** → **Use Y instead**

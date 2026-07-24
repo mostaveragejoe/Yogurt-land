@@ -67,7 +67,7 @@ The hook is explainable in one sentence, affects gameplay directly, and no shipp
 
 ### Core Mechanics (Systems we build)
 
-1. **Blueprint carving** — the player designs in menus and blueprints with precision; autonomous colonists execute the work in a diggable voxel world.
+1. **Blueprint carving** — the player designs in menus and blueprints with precision; autonomous colonists execute the work in a diggable, layered tile-grid world (Gnomoria/Dwarf Fortress style: each Z-level is a 2D grid of cells, each cell holding a floor type and, separately, a wall type — not free-form/marching-cubes voxel terrain).
 2. **Real-time colony simulation** — needs, jobs, and priorities run without puppeteering; the player directs through plans and orders.
 3. **Breach-triggered mode switch** — one shared world with a swappable time authority: real-time colony life becomes turn-based squad tactics on the same grid.
 4. **Material-tier destructibility** — architecture is fully destructible, but engineering (dirt → granite → reinforced) mitigates damage; defense scales with player skill and investment.
@@ -191,7 +191,7 @@ Progression means going deeper — richer materials and worse threats scale down
 
 | Reference | What We Take From It | What We Do Differently | Why It Matters |
 | ---- | ---- | ---- | ---- |
-| Gnomoria | Cube-world layered mountain, colony management depth, digging-as-core-verb | Full 3D with a lighting-driven identity; combat becomes a distinct turn-based mode | Validates the fortress fantasy and the diggable-world loop |
+| Gnomoria | Layered floor-and-wall tile-grid mountain (per-Z-level, not free-form voxel), colony management depth, digging-as-core-verb | Full 3D presentation with a lighting-driven identity; combat becomes a distinct turn-based mode | Validates the fortress fantasy and the diggable-world loop, and gives a proven, simpler-than-voxel data model to build on |
 | RimWorld | Real-time autonomous colonists, emergent stories from disaster and recovery | Combat is turn-based tactics on the base itself, not real-time skirmish | Proves the market for colony sims with emergent narrative (multi-million sales) |
 | XCOM | Turn-based squad tactics, preparation feeding into missions | The battlefield is the player's own base, not generated mission maps | Proves turn-based tactics sells; supplies the combat grammar |
 | Final Fantasy Tactics | Named characters whose growth and loss carry emotional weight; role/class legibility | Characters are simulation-grown colonists, not authored cast | Supplies the model for making unit loss land as story |
@@ -221,8 +221,8 @@ Progression means going deeper — richer materials and worse threats scale down
 
 | Consideration | Assessment |
 | ---- | ---- |
-| **Recommended Engine** | Unity (developer's stated preference). Pin exact version via `/setup-engine`; TD recommends URP with Forward+ rendering, Input System package from day one |
-| **Key Technical Challenges** | (1) Custom voxel terrain with destructibility — no built-in Unity solution; (2) pathfinding + job AI in a dynamically diggable 3D world — Unity NavMesh is unusable here, custom grid pathfinding required; (3) real-time ↔ turn-based switch over one shared world state — resolved architecturally as "one world, swappable time authority" (first ADR); (4) save/load of a mutable voxel + sim world — badly underestimated, prove early; (5) layered cutaway/cross-section rendering; (6) blueprint/designation UI as a substantial system |
+| **Recommended Engine** | Godot 4 (revised via `/setup-engine`; originally scoped for Unity, changed after clarifying the world model — see note below). Pin exact version via `/setup-engine` |
+| **Key Technical Challenges** | (1) Layered tile-grid terrain with destructibility — simpler than free-form voxel meshing (Gnomoria/DF-style: floor + wall per cell, per Z-level, no marching cubes or continuous mesh deformation — closer to instanced cube/plane rendering than chunked greedy meshing); (2) pathfinding + job AI in a dynamically diggable 3D grid — needs custom grid pathfinding, engine-agnostic; (3) real-time ↔ turn-based switch over one shared world state — resolved architecturally as "one world, swappable time authority" (first ADR); (4) save/load of a mutable grid + sim world — prove early; (5) layered cutaway/cross-section rendering (Z-level visibility); (6) blueprint/designation UI as a substantial system |
 | **Art Style** | 3D stylized low-poly; lighting-driven (Warm Hearth, Cold Dark); neutral modular block kit |
 | **Art Pipeline Complexity** | Low-Medium — one-time shader/lighting setup dominates; minimal ongoing asset production |
 | **Audio Needs** | Moderate — ambient colony soundscape, combat feedback, warm/cold audio identity to mirror the light rule |
@@ -243,14 +243,15 @@ Progression means going deeper — richer materials and worse threats scale down
 
 ### Technical Risks
 
-*(Full assessment: TD-FEASIBILITY gate, verdict CONCERNS — resolved by re-sequencing.)*
+*(Full assessment: TD-FEASIBILITY gate, verdict CONCERNS — resolved by re-sequencing. Note: the TD assessment was run against a free-form-voxel assumption; the world model was later clarified as a Gnomoria-style layered tile grid, which reduces several of these risks — see notes below. Revisit formally at `/architecture-review`.)*
 
-- Custom voxel/chunked terrain with destructibility and cutaway rendering in Unity (HIGH).
-- Colonist AI + pathfinding in a diggable 3D world; DF-depth simulation is explicitly NOT an MVP target (HIGH).
+- Layered tile-grid terrain with destructibility and cutaway rendering — originally assessed as HIGH assuming free-form voxel meshing; now MEDIUM, since a floor+wall-per-cell grid (no marching cubes, no continuous mesh deformation) is closer to instanced prefab rendering than chunked greedy meshing.
+- Colonist AI + pathfinding in a diggable 3D grid; DF-depth simulation is explicitly NOT an MVP target (HIGH).
 - Real-time ↔ turn-based mode switch — HIGH, drops to MEDIUM once the "one world, swappable time authority" spike validates the architecture.
-- Save/load serialization of a large mutable voxel + sim world (HIGH, commonly underestimated).
+- Save/load serialization of a large mutable grid + sim world (HIGH, commonly underestimated).
 - Structural collapse simulation — deferred entirely to Tier 2; MVP uses wall-HP by material tier only (MEDIUM as scoped).
-- Lighting-heavy direction in a voxel world (MEDIUM) — start with modest real dynamic lights; flood-fill light values deferred.
+- Lighting-heavy direction across many cells (MEDIUM) — start with modest real dynamic lights; flood-fill light values deferred.
+- Engine change from Unity to Godot 4 — LOW risk to re-litigate: Godot's gentler learning curve and free-forever licensing suit a first-time solo dev; the earlier Unity Jobs/Burst advantage was weighted for a harder problem (continuous voxel meshing) than this project actually has.
 
 ### Market Risks
 
@@ -269,7 +270,7 @@ Progression means going deeper — richer materials and worse threats scale down
 
 - Is tactics-in-your-own-base fun? → Answered by the Tier 0 greybox fun spike (turn-based skirmish in a hand-placed destructible room, no sim underneath).
 - Does the "one world, swappable time authority" architecture hold? → Answered by the mode-switch spike; written as the first ADR.
-- Can a naive (non-Burst) voxel mesher hit acceptable framerate on a small map with a cutaway view? → Answered by the voxel core spike; Burst optimization deferred until measurement demands it.
+- Can an instanced tile-grid renderer (floor + wall prefabs per cell) hit acceptable framerate on a small map with a cutaway/Z-level view? → Answered by the terrain core spike; this is expected to be materially easier than the free-form voxel meshing originally assumed.
 - Can pathfinding stay correct and performant while the player digs mid-route? → Answered by the diggable-grid pathfinding spike.
 - Does the voxel + agent data model survive a save/load round-trip? → Answered by the serialization spike.
 - What exact Unity version, frame budget, and world-size ceiling? → Answered by `/setup-engine` and `technical-preferences.md` before systems are written.
@@ -302,7 +303,7 @@ The MVP answers ONE question: **"Is the core loop fun?"**
 
 | Tier | Content | Features | Timeline |
 | ---- | ---- | ---- | ---- |
-| **Tier 0 — Foundation spikes** | Throwaway/foundation greyboxes | (1) Voxel dig + cutaway with a naive mesher — game question first, Burst optimization only when measured; (2) mode-switch architecture (one world, swappable time authority); (3) pathfinding on a diggable grid; (4) job AI with ~10 colonists; (5) save/load round-trip; (6) **fun spike** — greybox turn-based skirmish in a hand-placed destructible room, no sim underneath | 6–12 months (honest band for a first-time dev) |
+| **Tier 0 — Foundation spikes** | Throwaway/foundation greyboxes | (1) Layered tile-grid dig + cutaway/Z-level rendering with instanced floor+wall prefabs — game question first, optimize only when measured; (2) mode-switch architecture (one world, swappable time authority); (3) pathfinding on a diggable grid; (4) job AI with ~10 colonists; (5) save/load round-trip; (6) **fun spike** — greybox turn-based skirmish in a hand-placed destructible room, no sim underneath | 6–12 months (honest band for a first-time dev) |
 | **Tier 1 — MVP** (*ships-if-time-runs-out floor*) | Hand-made small mountain, 3 strata, ~10 colonists, 1 raider type | Full core loop: blueprint carving, needs sim, material-tier wall HP, breach-triggered mode switch, rebuild loop | 12–24 months after Tier 0 |
 | **Tier 2 — Vertical Slice / Early Access shape** | Procgen mountains, multiple raider factions | Veteran colonist progression, flood-fill light-claim system (full art identity), structural collapse simulation | 12+ months after Tier 1 |
 | **Tier 3 — Full Vision** | 6–8 strata with unique materials/threats, 4–6 factions, ~15–20 room types | Deep simulation, additional platforms/ports | Open-ended |

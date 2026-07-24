@@ -4,8 +4,8 @@
 |-------|-------|
 | **Engine Version** | Unity 6.3 LTS |
 | **Release Date** | December 2025 |
-| **Project Pinned** | 2026-02-13 |
-| **Last Docs Verified** | 2026-02-13 |
+| **Project Pinned** | 2026-07-24 (Hollowdeep) |
+| **Last Docs Verified** | 2026-07-24 |
 | **LLM Knowledge Cutoff** | May 2025 |
 
 ## Knowledge Gap Warning
@@ -55,3 +55,14 @@ before suggesting Unity API calls.
 - Migration guide: https://docs.unity3d.com/6000.0/Documentation/Manual/upgrade-guides.html
 - Unity 6 support: https://unity.com/releases/unity-6/support
 - C# API reference: https://docs.unity3d.com/6000.0/Documentation/ScriptReference/index.html
+- Upgrade Guide (Unity 6.3 specific): https://docs.unity3d.com/6000.3/Documentation/Manual/UpgradeGuideUnity63.html
+- What's New in Unity 6.3: https://docs.unity3d.com/6000.3/Documentation/Manual/WhatsNewUnity63.html
+- Planned breaking changes (Unity Discussions, updated through 2026-03-27): https://discussions.unity.com/t/planned-breaking-changes-in-unity-6-5-updated-2026-03-27/1694205
+
+## Re-Verification Note (2026-07-24, for Hollowdeep)
+
+Live search confirms the existing Breaking Changes / Deprecated APIs / Best Practices docs below are accurate. Two additional items surfaced, noted here because they aren't in those files and are low-relevance to a single-player 3D project — recorded for completeness rather than added as full sections:
+
+- **Multiplay Hosting** service is discontinued (shut down after March 31, 2026) — not relevant, Hollowdeep is single-player.
+- **Box2D v3** integration improves the 2D physics stack — not relevant, Hollowdeep is a 3D voxel game with custom terrain collision, not Unity's 2D or 3D physics engine.
+- **UI Toolkit** in 6.3 adds native SVG import and custom shader/post-processing support for UI — relevant to the blueprint/designation menu system (Tier 1 MVP); worth revisiting when `/ux-design` scopes that screen.

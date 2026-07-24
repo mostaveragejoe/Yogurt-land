@@ -1,6 +1,6 @@
 # Unity 6.3 LTS — Breaking Changes
 
-**Last verified:** 2026-02-13
+**Last verified:** 2026-07-24 (re-verified for Hollowdeep, no changes found)
 
 This document tracks breaking API changes and behavioral differences between Unity 2022 LTS
 (likely in model training) and Unity 6.3 LTS (current version). Organized by risk level.
