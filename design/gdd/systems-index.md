@@ -1,0 +1,189 @@
+# Systems Index: Hollowdeep
+
+> **Status**: Approved (user + TD-SYSTEM-BOUNDARY + PR-SCOPE gates)
+> **Created**: 2026-07-24
+> **Last Updated**: 2026-07-24
+> **Source Concept**: design/gdd/game-concept.md
+
+---
+
+## Overview
+
+Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that switches into turn-based tactics combat fought inside the player's own architecture. Mechanically this decomposes into: a foundation of shared data and contracts (terrain grid, time authority, events, serialization); a core of simulation infrastructure (pathfinding, colonist data, job dispatch, rendering/cutaway); the gameplay loop itself (excavate → construct → simulate needs → raid trigger → tactics battle → repair); and a menu-driven presentation layer. The dominant architectural facts: the **mode switch is a permanent integration tax** (every simulation system must define behavior under both time authorities), and the **Terrain Data Model and Colonist Entity are the two highest-fan-out systems** — their contracts (ADR-002, ADR-003) gate everything downstream. Design order follows dependency layers, gated by the Tier 0 spikes.
+
+**Documentation routing policy** (recorded decision, per PR-SCOPE gate 2026-07-24): not every system gets a full 8-section GDD. Systems route to one of: **Full GDD** (rule-heavy, expensive-to-unwind), **Quick-spec** (`design/quick-specs/`, 1–2 pages: purpose, rules, public interface, acceptance criteria), **ADR-only** (pure plumbing — the ADR plus code is the spec), **UX spec** (`design/ux/`), or **Audio brief**. Every simulation-bearing spec of any tier MUST include a **"Behavior under each time authority"** section. A future `/review-all-gdds` should treat quick-specs/ADR-only routing as compliant per this policy, not as missing GDDs. If more than two quick-spec systems need promotion to full GDDs during implementation, revisit the routing.
+
+**Sequencing policy** (per PR-SCOPE): documents are authored **just-in-time, one dependency layer ahead of implementation** — not all up front. Order: 3 ADRs (as *Proposed*) + cross-cutting contracts + debug console → **Tier 0 spikes (fun spike first)** → GDD authoring against measured numbers. The Terrain Data Model GDD explicitly waits for terrain-spike draw-call/memory numbers.
+
+---
+
+## Systems Enumeration
+
+| # | System Name | Category | Priority | Status | Doc Type | Design Doc | Depends On |
+|---|-------------|----------|----------|--------|----------|------------|------------|
+| 1 | Terrain Data Model | Core | MVP | Not Started | Full GDD (after terrain spike) + ADR-002 | — | (none — Foundation) |
+| 2 | Time Authority / Mode-Switch (inferred, elaborated) | Core | MVP | Not Started | Full GDD + ADR-001 | — | (none — Foundation) |
+| 3 | World Change Event Bus (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
+| 4 | Seeded RNG / Determinism (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
+| 5 | Material Catalog (inferred) | Economy | MVP | Not Started | Quick-spec | — | (none — Foundation) |
+| 6 | Save/Load & World Serialization (inferred) | Persistence | MVP | Not Started | ADR-only (contract now, format later) | — | Cross-cutting: shape of all state-holding systems |
+| 7 | Terrain Rendering & Cutaway (inferred, TD; absorbs Camera & Z-Level Visibility) | Core | MVP | Not Started | Quick-spec | — | Terrain Data Model, World Change Event Bus |
+| 8 | Pathfinding & Navigation (inferred) | Core | MVP | Not Started | Quick-spec (spike + ADR carry it) | — | Terrain Data Model, World Change Event Bus |
+| 9 | Colonist Entity & Attributes (inferred) | Core | MVP | Not Started | Quick-spec + ADR-003 | — | Terrain Data Model |
+| 10 | Job Assignment & Priority (inferred) | Gameplay | MVP | Not Started | Full GDD (coupled with #13) | — | Colonist Entity, World Change Event Bus |
+| 11 | Stockpile & Hauling (inferred, TD split) | Economy | MVP **(user-mandated, non-negotiable)** | Not Started | Quick-spec | — | Terrain Data Model, Material Catalog, Job Assignment |
+| 12 | Spatial Query / LOS & Cover (inferred, TD) | Core | MVP | Not Started | Quick-spec | — | Terrain Data Model |
+| 13 | Colonist Needs & Simulation | Gameplay | MVP | Not Started | Full GDD (coupled with #10) | — | Colonist Entity, Job Assignment, Material Catalog |
+| 14 | Map Authoring / Content Load (inferred, TD) | Meta | MVP | Not Started | Quick-spec | — | Terrain Data Model |
+| 15 | Excavation System | Gameplay | MVP | Not Started | Full GDD (combined with #16) | — | Terrain Data Model, Pathfinding, Colonist Entity, Job Assignment, Material Catalog, Stockpile & Hauling |
+| 16 | Construction System | Gameplay | MVP | Not Started | Full GDD (combined with #15) | — | Same as #15 |
+| 17 | Material-Tier Destructibility & Damage | Gameplay | MVP | Not Started | Full GDD | — | Terrain Data Model, Material Catalog, World Change Event Bus |
+| 18 | Raid / Threat Trigger (inferred) | Gameplay | MVP | Not Started | Full GDD | — | Time Authority, Colonist Entity, strata data (Material Catalog + own scaling tables) |
+| 19 | Combat: Turn Order & Initiative (split per PR-SCOPE) | Gameplay | MVP | Not Started | Full GDD (combat set) | — | Time Authority, Colonist Entity |
+| 20 | Combat: Action Economy (split) | Gameplay | MVP | Not Started | Full GDD (combat set) | — | #19 |
+| 21 | Combat: Movement & Reachability (split) | Gameplay | MVP | Not Started | Full GDD (combat set) | — | #19, Pathfinding, Spatial Query/LOS |
+| 22 | Combat: Targeting & Resolution (split) | Gameplay | MVP | Not Started | Full GDD (combat set) | — | #19, #20, Spatial Query/LOS, Material-Tier Destructibility, Material Catalog (debris/consumption) |
+| 23 | Combat: Raider Decision-Making (absorbs Raider AI) | Gameplay | MVP | Not Started | Full GDD (combat set) | — | #19–#22, Spatial Query/LOS, Pathfinding |
+| 24 | Squad Preparation (fixed loadouts in MVP; equipment half deferred to VS) | Gameplay | MVP | Not Started | Quick-spec | — | Colonist Entity, Time Authority (mode-switch seam) |
+| 25 | Repair & Rebuild — **PROTECTED: loop closer, do not cut** | Gameplay | MVP | Not Started | Quick-spec | — | Construction, Material-Tier Destructibility, Job Assignment, Pathfinding |
+| 26 | Blueprint / Designation UI | UI | MVP | Not Started | UX spec | — | Excavation, Construction |
+| 27 | Combat UI | UI | MVP | Not Started | UX spec | — | Combat set (#19–#23), Terrain Rendering & Cutaway |
+| 28 | Colonist / Roster UI | UI | MVP | Not Started | UX spec | — | Colonist Entity, Needs, Squad Prep |
+| 29 | Dev Tools / Debug Console (inferred, TD) — **PROTECTED: build during Tier 0** | Meta | Tier 0 | Not Started | ADR-only / lightweight | — | grows with each system it pokes |
+| 30 | Colonist Skill & Veterancy (inferred) | Progression | Vertical Slice | Not Started | Quick-spec | — | Colonist Entity (data store), combat-outcome event |
+| 31 | Colonist Identity & Memory | Narrative | Vertical Slice (data fields land in MVP) | Not Started | Quick-spec | — | Colonist Entity, combat-outcome event |
+| 32 | Onboarding / First Session Flow (inferred) | Meta | Vertical Slice | Not Started | UX spec | — | Blueprint UI, Excavation, Construction |
+| 33 | Ambient & Combat Audio (inferred) | Audio | Vertical Slice | Not Started | Audio brief | — | Needs & Sim, Combat set, Raid Trigger |
+| 34 | Structural Collapse (separate future system per PR-SCOPE — MVP Destructibility is designed as if collapse will never exist) | Gameplay | Alpha | Not Started | Full GDD (future) | — | Material-Tier Destructibility, Terrain Data Model |
+| 35 | World / Mountain Generation (procgen) | Meta | Alpha | Not Started | Full GDD (future) | — | Terrain Data Model, Map Authoring |
+
+**Demotions/reorganizations recorded** (PR-SCOPE, user-approved): Strata/Depth Progression is **data, not a system** (material distribution in Material Catalog + threat scaling in Raid Trigger). Notifications & Alerts is a **shared UI component** specified once across the three UX specs. Squad equipment defers to Vertical Slice (MVP uses fixed role loadouts). Stockpile & Hauling **stays MVP by explicit user decision** overriding the producer's recommendation.
+
+---
+
+## Priority Tiers
+
+| Tier | Definition | Count |
+|------|------------|-------|
+| **Tier 0** | Built during spikes (Dev Tools) | 1 |
+| **MVP** | Required for the core loop fun test | 25 systems (28 entries incl. combat split) |
+| **Vertical Slice** | Growth, identity, audio, onboarding | 4 |
+| **Alpha** | Procgen + structural collapse | 2 |
+| **Full Vision** | Content scaling only — no new standalone systems | — |
+
+---
+
+## Dependency Map
+
+### Foundation Layer (no dependencies)
+1. **Terrain Data Model** — pure data: chunked cell arrays, mutation API, change events. Plain C#, ZERO Godot dependency, headlessly unit-testable. The authoritative model is never a GridMap node (GridMap is a candidate *rendering backend* only). Cell record carries: floor type, wall type, material tier, damage/HP, style dressing, reservation tags — memory layout (struct-of-arrays vs per-chunk AoS) decided in ADR-002.
+2. **Time Authority / Mode-Switch** — the tick contract every sim system implements (ADR-001). Under-declaring this dependency is forbidden: every system that advances state over time depends on it (see Cross-Cutting Contracts).
+3. **World Change Event Bus** — one publisher (Terrain), many subscribers. Capped by ADR: a dumb synchronous dispatcher — no priorities, filters, replay, or ordering guarantees.
+4. **Seeded RNG / Determinism** — per-system seeded streams; without it, sim bugs are irreproducible and saves desync.
+5. **Material Catalog** — item/material definitions incl. per-stratum distribution data. Zero deps.
+6. **Save/Load serialization contract** — see Cross-Cutting Contracts (format designed late; contract enforced from the first state-holding system; round-trip test in CI).
+
+### Core Layer
+7. Terrain Rendering & Cutaway — deps: Terrain Data Model, Event Bus. Owns meshing/instancing, Z-level slicing, chunk rebuild, draw-call budget, cutaway focus treatment (presentation-layer channel per art bible §1).
+8. Pathfinding & Navigation — deps: Terrain Data Model, Event Bus (path invalidation on mid-route dig). Includes region/connectivity flood-fill, reachability caching.
+9. Colonist Entity & Attributes — deps: Terrain Data Model. Data store with **write-ownership table** (ADR-003): each field group has exactly one writer. Health write-arbitration (Combat vs Needs) resolved in ADR-003.
+10. Job Assignment & Priority — deps: Colonist Entity, Event Bus. Owns the task queue, arbitration, claiming, cancellation, and **job invalidation on world mutation**. Starts concrete (dig/build/haul); generalizes to the task-producer interface only when the third producer exists.
+11. Stockpile & Hauling — deps: Terrain, Material Catalog, Job Assignment. Reservation logic is a first-class design problem (top genre bug class).
+12. Spatial Query / LOS & Cover — deps: Terrain Data Model. Serves combat LOS/cover and raider AI without exposing combat internals.
+13. Map Authoring / Content Load — deps: Terrain Data Model. The MVP producer of terrain data (hand-authored mountain); procgen (#35) is a later second producer.
+
+### Feature Layer (the loop)
+14. Excavation · 15. Construction · 16. Needs & Simulation (coupled pair with Job Assignment: Needs emits scored task candidates into the queue Job Assignment owns) · 17. Material-Tier Destructibility · 18. Raid Trigger · 19–23. Combat set · 24. Squad Preparation · 25. Repair & Rebuild (scheduled immediately after Construction, NOT at the end).
+
+### Presentation Layer
+26. Blueprint/Designation UI · 27. Combat UI · 28. Roster UI (+ shared Notifications component across all three).
+
+### Polish Layer
+32. Onboarding · 33. Audio.
+
+---
+
+## Cross-Cutting Contracts (annex — hard cap: one page, these three, no fourth)
+
+1. **Time Authority tick contract (ADR-001)**: every simulation system implements the tick interface; every sim spec includes a "Behavior under each time authority" section. Named seam risks: Squad Prep at the mode-switch boundary (who is drafted, where they stand at transition); Notifications queueing across modes.
+2. **Serialization contract (with ADR set)**: authoritative state is plain data separable from Godot nodes; cross-object references by stable ID only; derived/cached state reconstructible, never serialized; every state-holding system exposes `Snapshot()`/`Restore()`; per-system seeded RNG streams. Round-trip test is a CI gate from the first state-holding system. **Open design question routed to creative-director before the Combat GDD: can the player save mid-battle?** ("No" is dramatically cheaper.)
+3. **World Change Events**: Terrain publishes; Pathfinding, Job Assignment, Rendering, Combat LOS, Repair, and the Notifications component subscribe. Dumb synchronous dispatcher by ADR.
+
+---
+
+## Recommended Design Order
+
+| Order | Item | Type | Priority | Layer | Agent(s) | Est. |
+|-------|------|------|----------|-------|----------|------|
+| 1 | ADR-001 Time Authority | ADR (Proposed) | MVP | Foundation | technical-director, godot-specialist | S |
+| 2 | ADR-002 Terrain Data Model | ADR (Proposed; final numbers await terrain spike) | MVP | Foundation | technical-director, godot-specialist | S |
+| 3 | ADR-003 Entity Data Ownership | ADR (Proposed) | MVP | Foundation | technical-director, lead-programmer | S |
+| 4 | Cross-cutting contracts annex + serialization contract | Contract page | MVP | Foundation | technical-director | S |
+| 5 | Dev Tools / Debug Console | Build (Tier 0) | Tier 0 | — | gameplay-programmer | S |
+| — | **Tier 0 SPIKE GATE: fun spike → terrain spike → mode-switch spike → pathfinding spike → save/load spike** | `/prototype` | — | — | prototyper | — |
+| 6 | Terrain Data Model | Full GDD | MVP | Foundation | systems-designer, godot-specialist | M |
+| 7 | Time Authority / Mode-Switch | Full GDD | MVP | Foundation | systems-designer, technical-director | M |
+| 8 | Colonist Entity & Attributes | Quick-spec | MVP | Core | game-designer | S |
+| 9 | Material Catalog | Quick-spec | MVP | Foundation | economy-designer | S |
+| 10 | Pathfinding & Navigation | Quick-spec | MVP | Core | godot-specialist | S |
+| 11 | Terrain Rendering & Cutaway | Quick-spec | MVP | Core | godot-specialist, technical-artist | S |
+| 12 | Job Assignment + Needs & Simulation | Full GDD (coupled pair, one session set) | MVP | Core/Feature | game-designer, systems-designer | L |
+| 13 | Stockpile & Hauling | Quick-spec | MVP | Core | systems-designer | S |
+| 14 | Excavation + Construction | Full GDD (combined) | MVP | Feature | game-designer | M |
+| 15 | Material-Tier Destructibility | Full GDD | MVP | Feature | systems-designer | M |
+| 16 | Repair & Rebuild | Quick-spec | MVP | Feature | game-designer | S |
+| 17 | Spatial Query / LOS & Cover | Quick-spec | MVP | Core | godot-specialist | S |
+| 18 | Combat set (#19–23) | Full GDD set | MVP | Feature | game-designer, systems-designer | L |
+| 19 | Raid Trigger | Full GDD | MVP | Feature | systems-designer | M |
+| 20 | Squad Preparation | Quick-spec | MVP | Feature | game-designer | S |
+| 21 | Blueprint UI · Combat UI · Roster UI | UX specs | MVP | Presentation | ux-designer | M |
+| 22 | Map Authoring / Content Load | Quick-spec | MVP | Core | tools-programmer | S |
+| 23 | Save/Load format finalization | ADR update | MVP | Cross-cutting | technical-director | S |
+
+*(Vertical Slice docs — Skill & Veterancy, Identity & Memory, Onboarding, Audio brief — authored just-in-time when their layer approaches.)*
+
+---
+
+## Circular Dependencies
+
+- **Combat ↔ Skill & Veterancy** — resolved via ADR-003: Colonist Entity owns skill/veterancy data with Veterancy as sole writer; Combat reads data, emits the combat-outcome event; Veterancy and Identity & Memory both consume that event (multi-consumer schema, not ad-hoc callback).
+- **Job Assignment ↔ Needs** — resolved: Needs is a *task producer* submitting scored candidates into the queue Job Assignment owns; designed as a coupled pair in one session set. Generalization to more producers happens at the third concrete producer, not before.
+
+## High-Risk Systems
+
+| System | Risk Type | Description | Mitigation |
+|--------|-----------|-------------|------------|
+| Terrain Data Model + Rendering (XL) | Technical | Highest fan-out; God-object risk; GC/memory layout on 16.6ms budget | Data/render split (done); ADR-002; terrain spike numbers before GDD; headless unit tests |
+| Pathfinding (XL) | Technical | Dynamic 3D grid invalidation — genre's #1 correctness/perf sink | Dedicated spike; region/connectivity caching design |
+| Combat set (XL) | Design + Technical | Half the game's identity; was under-decomposed | Split into 5 entries; fun spike FIRST, before any combat GDD |
+| Job Assignment + Needs (XL) | Design | Coupled pair; invalidation + reservation bugs | Coupled design session; invalidation as first-class problem |
+| Save/Load | Technical | HIGH (TD-FEASIBILITY); retrofit is a 3-month loss | Contract in Foundation now; CI round-trip gate; mid-battle-save question to CD early |
+| Stockpile & Hauling | Technical | Reservation bug class; kept in MVP by user mandate | Reservation/invalidation designed with Job Assignment, not bolted on |
+| Squad Prep mode-switch seam | Technical | "Hairiest moment in the architecture" (TD) | Explicit seam section in its quick-spec + ADR-001 |
+
+## Progress Tracker
+
+| Metric | Count |
+|--------|-------|
+| Total index entries | 35 |
+| Design docs started | 0 |
+| ADRs written | 0/3 (+contracts annex) |
+| Tier 0 spikes complete | 0/6 |
+| MVP systems designed | 0/25 |
+| Vertical Slice systems designed | 0/4 |
+
+## Gate Record
+
+- **TD-SYSTEM-BOUNDARY** (2026-07-24): CONCERNS — all addressed: terrain data/render split, Resource split into Material Catalog + Stockpile & Hauling, write-ownership table (ADR-003), serialization contract hoisted, Time Authority cross-cutting annex, 6 systems added, edges fixed.
+- **PR-SCOPE #2** (2026-07-24): OPTIMISTIC — adjustments applied: tiered documentation policy, just-in-time authoring, spike gate before GDDs, combat split, 3 demotions accepted; Stockpile & Hauling kept in MVP by explicit user decision. Working-hours assumption behind the 12–24mo Tier 1 band: **[TO CONFIRM: full-time vs evenings/weekends — double the bands if part-time]**.
+- **CD-SYSTEMS**: pending.
+
+## Next Steps
+
+- [ ] CD-SYSTEMS gate (creative-director review of the system set vs pillars)
+- [ ] Write ADR-001, ADR-002, ADR-003 as Proposed (`/architecture-decision`)
+- [ ] Write the cross-cutting contracts annex (one page)
+- [ ] Build the debug console (Tier 0)
+- [ ] Run `/prototype` — fun spike first, then terrain, mode-switch, pathfinding, save/load spikes
+- [ ] After spikes report: begin GDD authoring per the design order (`/design-system terrain-data-model`)
+- [ ] Route the mid-battle-save question to creative-director before the Combat GDD set
