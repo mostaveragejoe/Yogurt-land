@@ -55,6 +55,8 @@ The hook is explainable in one sentence, affects gameplay directly, and no shipp
 | **Narrative** (drama, story arc) | 5 | Emergent stories from battles, scars, and veteran colonists — never authored |
 | **Sensation** (sensory pleasure) | 6 | Warm Hearth, Cold Dark lighting; watching plans come alive |
 | **Submission** (relaxation, comfort zone) | 7 | Peacetime building rhythm between combat events |
+
+> **Note (CD-SYSTEMS, 2026-07-24)**: Sensation and Submission rank low in priority but are the delivery vehicle for the ant-farm satisfaction named in the Core Loop ("planning is the verb, execution is the reward") — which is why visible logistics (Stockpile & Hauling) is MVP. See Pillar 4, Design Test B.
 | **Fellowship** (social connection) | N/A | Single-player; community sharing of fortress designs is external |
 
 ### Key Dynamics (Emergent player behaviors)
@@ -150,9 +152,11 @@ Destruction is real, but every loss must leave a legible lesson and an engineeri
 
 ### Pillar 4: The Colony Lives Without You
 
-During colony operation, the player directs through plans and orders, never micromanagement. Combat is the bounded exception: a mode where direct command is earned — you command the defenders the colony trained, in the architecture you carved, but you did not script who survived to fight.
+During colony operation, the player directs through plans and orders, never micromanagement — and the colony's autonomous work is legible and satisfying to watch, not invisible bookkeeping. Combat is the bounded exception: a mode where direct command is earned — you command the defenders the colony trained, in the architecture you carved, but you did not script who survived to fight.
 
-*Design test*: When we debate control schemes, we choose autonomy plus orders in colony mode; direct command exists only inside the combat mode.
+*Design test A*: When we debate control schemes, we choose autonomy plus orders in colony mode; direct command exists only inside the combat mode.
+
+*Design test B*: When we debate whether colony work should be visible and simulated or abstracted away, we choose visible. *(Added 2026-07-24 per CD-SYSTEMS: this is why Stockpile & Hauling is MVP — the ant-farm satisfaction of watching materials move is a reward, not overhead.)*
 
 ### Pillar 5: Depth Is the Frontier
 

@@ -45,7 +45,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 | 22 | Combat: Targeting & Resolution (split) | Gameplay | MVP | Not Started | Full GDD (combat set) | — | #19, #20, Spatial Query/LOS, Material-Tier Destructibility, Material Catalog (debris/consumption) |
 | 23 | Combat: Raider Decision-Making (absorbs Raider AI) | Gameplay | MVP | Not Started | Full GDD (combat set) | — | #19–#22, Spatial Query/LOS, Pathfinding |
 | 24 | Squad Preparation (fixed loadouts in MVP; equipment half deferred to VS) | Gameplay | MVP | Not Started | Quick-spec | — | Colonist Entity, Time Authority (mode-switch seam) |
-| 25 | Repair & Rebuild — **PROTECTED: loop closer, do not cut** | Gameplay | MVP | Not Started | Quick-spec | — | Construction, Material-Tier Destructibility, Job Assignment, Pathfinding |
+| 25 | Repair & Rebuild — **PROTECTED: loop closer, do not cut** | Gameplay | MVP | Not Started | Quick-spec | — | Construction, Material-Tier Destructibility, Job Assignment, Pathfinding, Material Catalog, Stockpile & Hauling (CD-7: repair consumes hauled materials) |
 | 26 | Blueprint / Designation UI | UI | MVP | Not Started | UX spec | — | Excavation, Construction |
 | 27 | Combat UI | UI | MVP | Not Started | UX spec | — | Combat set (#19–#23), Terrain Rendering & Cutaway |
 | 28 | Colonist / Roster UI | UI | MVP | Not Started | UX spec | — | Colonist Entity, Needs, Squad Prep |
@@ -176,7 +176,21 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 
 - **TD-SYSTEM-BOUNDARY** (2026-07-24): CONCERNS — all addressed: terrain data/render split, Resource split into Material Catalog + Stockpile & Hauling, write-ownership table (ADR-003), serialization contract hoisted, Time Authority cross-cutting annex, 6 systems added, edges fixed.
 - **PR-SCOPE #2** (2026-07-24): OPTIMISTIC — adjustments applied: tiered documentation policy, just-in-time authoring, spike gate before GDDs, combat split, 3 demotions accepted; Stockpile & Hauling kept in MVP by explicit user decision. Working-hours assumption behind the 12–24mo Tier 1 band: **[TO CONFIRM: full-time vs evenings/weekends — double the bands if part-time]**.
-- **CD-SYSTEMS**: pending.
+- **CD-SYSTEMS** (2026-07-24): CONCERNS — 9 notes recorded below; mid-battle-save resolved (NO); Pillar 4 reframed in concept doc; Identity minimum surface landed in MVP; one style vocabulary in MVP with picker in VS.
+
+## Creative Director Notes (CD-SYSTEMS, 2026-07-24 — fold into specs as they are authored)
+
+- **CD-1 (Pillar 3 "teach" half)**: The Combat UI UX spec MUST include a post-battle after-action section — what broke, where, which material tier failed, what breached first. A playtester should be able to point at a wall and say which choice failed.
+- **CD-2 (breach-point selection)**: Owned by **Raid Trigger**. Acceptance criterion: three battles in the same colony feel different because raiders came in from different places. With one raider type and fixed loadouts, this is the MVP's primary variety lever.
+- **CD-3 (anti-permadeath rule)**: Raid Trigger defines a survivability floor; Combat: Raider Decision-Making defines a raider objective and withdraw/satisfaction condition (raiders leave when they get what they came for or the cost exceeds it). No exterminate-all default.
+- **CD-4 (Identity minimum surface in MVP — decided YES)**: persistent name + deterministic appearance seed (Colonist Entity), battles-survived counter (Roster UI), named death notification with location (Notifications component). Fun-spike interpretation protocol: *"deaths feel weightless" is not a combat-design verdict in MVP* — full Identity & Memory is deliberately absent.
+- **CD-5 (style palette — decided)**: MVP ships ONE ornament vocabulary; the style-picker mechanism + second vocabulary land in Vertical Slice. Recorded so Pillar 1's expression half is a deliberate partial in MVP, not an omission.
+- **CD-6 (Pillar 5 owners)**: Material Catalog owns *descent creates escalating material reward*; Raid Trigger owns *descent creates escalating threat*. Both need acceptance criteria in their specs — Pillar 5 must not decay into untuned tables.
+- **CD-7 (repair costs materials)**: Repair & Rebuild consumes materials that must be hauled (deps updated in the table). Logistics under pressure is what gives the Pillar 3 loop a price.
+- **CD-8 (Pillar 4 reframe — applied)**: concept doc Pillar 4 now includes "colony work is legible and satisfying to watch" + Design Test B (choose visible over abstracted). Protects hauling/job visibility from future optimization-to-spreadsheet.
+- **CD-9 (mid-battle save — decided NO)**: autosave at mode-switch into tactics and at battle end; saving disabled inside battles. Combat GDD set carries a battle-length acceptance criterion: **8–15 min target, 20 min hard ceiling**. Post-MVP option if playtests demand: suspend-to-exit as a single non-reloadable state. Serialization scope for combat state shrinks accordingly (contract note).
+- **Anti-pillar watch items**: Combat UI must not introduce timed inputs; Identity & Memory generates history from events only (no authored backstory pools); World Gen stays one vertical mountain; Structural Collapse (Alpha) requires a fresh anti-permadeath check at adoption.
+- **MVP validation limitation (recorded)**: a hand-authored mountain cannot validate the Discovery aesthetic or the "next stratum" retention hook — do not read weak long-term-pull signals in MVP playtests as design failures.
 
 ## Next Steps
 

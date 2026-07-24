@@ -14,7 +14,7 @@ Systems decomposition (/map-systems) — index written and gate-reviewed.
 - [x] Engine configured: Godot 4.7.1 + C# (was Unity; changed after tile-grid clarification)
 - [x] Art bible sections 1-4 (design/art/art-bible.md) — AD-ART-BIBLE gate REVISED/complete
 - [x] Systems index (design/gdd/systems-index.md) — 35 entries, 25 MVP; TD-SYSTEM-BOUNDARY + PR-SCOPE gates addressed
-- [ ] CD-SYSTEMS gate (in progress)
+- [x] CD-SYSTEMS gate — CONCERNS, 9 notes recorded in index; 4 user decisions made
 - [ ] ADR-001 Time Authority, ADR-002 Terrain Data Model, ADR-003 Entity Data Ownership (as Proposed)
 - [ ] Cross-cutting contracts annex (one page)
 - [ ] Debug console (Tier 0)
