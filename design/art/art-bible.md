@@ -49,7 +49,55 @@ Practically, both vocabularies share one grid-based kit-of-parts (wall, doorway,
 
 ## 2. Mood & Atmosphere
 
-[To be designed]
+Every state shares one lighting truth per Section 1: warmth comes from where the player put hearths and lamps, coolness comes from unlit rock, and none of it means anything mechanically. Distinctness between states comes from four solo-dev-cheap levers: **light placement/count** (world lighting, not new logic), **color grading** (a `WorldEnvironment`/`Environment` resource swap in Godot — no new assets), **post-processing** (vignette, DOF, glow — engine-level toggles), and **camera/UI/pacing**. No state requires bespoke geometry or textures beyond what the destruction and building systems already produce.
+
+### 2.1 Colony Mode — Settled / Peacetime
+
+- **Emotional target**: The specific pride of watching a home you built keep working without you standing in it — unhurried domestic contentment, quietly proud rather than merely "cozy," with an undertone of watchfulness since you know it won't stay quiet forever.
+- **Lighting character**: Warm-dominant. Many small local warm sources (hearths, lamps, candles) placed by the player, each with soft falloff, pooling light room-to-room rather than one flat wash. Ambient fill stays low and cool-neutral so the warm pools read as the eye's destination. Low-to-moderate contrast overall — nothing crushed to black, nothing blown out.
+- **Atmospheric descriptors**: lived-in, industrious, unhurried, intimate, steady.
+- **Energy level**: Low-moderate, continuous — colonists moving on their own idle loops, no player-driven urgency.
+- **Visual element that carries the mood**: A hearth or oven with a slow steam/smoke curl, colonists' small idle-task animations visible in the pixel-art silhouette nearby (stirring, hauling, sitting) — motion that reads as a home functioning, not a stage set.
+
+### 2.2 Colony Mode — Wilds / Frontier
+
+- **Emotional target**: The held breath before a decision — vast and indifferent rather than hostile, the specific thrill of standing at a cave mouth with one lantern, more expectant than foreboding.
+- **Lighting character**: Cool-dominant, blue-grey ambient with no local warm sources (nothing built there yet). Higher contrast right at the frontier edge, where the last built room's warm spill meets raw dark — that boundary is the single most beautiful frame in this state. Deep in unexcavated rock, light is directionless and ambient-occlusion-heavy; optional cool bioluminescent mineral-vein accents add color variety without carrying any meaning.
+- **Atmospheric descriptors**: vast, hushed, mineral, indifferent, expectant.
+- **Energy level**: Low, slow — minimal motion beyond dust/particle drift and the player's own excavation cursor.
+- **Visual element that carries the mood**: The literal seam where a cut stone wall meets unexcavated rock — pixel-textured strata bands visible in cross-section, the clearest "this is the edge of what you've made" image in the game.
+
+### 2.3 Tactics Mode — Combat Event
+
+- **Emotional target**: Coiled clarity — the sharpened, controlled adrenaline of aiming down a hallway you built yourself, because the hard thinking already happened in prep; tense focus, not horror or panic.
+- **Lighting character**: **Unchanged from whatever the physical space already is.** This state does not relight the scene or recolor materials — same lights, same rooms, same warm/cool balance as colony mode. All mood shift is carried by:
+  - **Camera**: tighter framing, pulled closer into the corridor/room geometry the player carved, locked or constrained angles per engagement rather than free colony-cam roam.
+  - **UI**: turn-order ribbon, action-point ghosting, high-contrast selection/reachable-tile outlines rendered as pixel-art HUD overlays on top of the unchanged scene.
+  - **Pacing**: turn-based stillness punctuated by decisive action beats — long holds, sharp payoffs.
+  - **Post-processing**: subtle vignette tightening during aiming/targeting, brief desaturation or time-dilation pulse on a resolving hit, restored to normal grading between turns.
+- **Atmospheric descriptors**: coiled, deliberate, high-stakes, procedural, focused.
+- **Energy level**: High but controlled — sharp spikes on action resolution, stillness between turns.
+- **Visual element that carries the mood**: The reachable-tile/line-of-sight overlay itself — amber-outlined tiles for clarity (not threat-coded color), drawn directly over the same lit corridor the player designed, making the tactical read entirely a function of the architecture, not the lighting.
+
+### 2.4 Post-Battle Aftermath / Rebuild
+
+- **Emotional target**: Grief-tinged competence — the particular quiet of clearing rubble at dawn; the work of putting a home back together, not despair.
+- **Lighting character**: Warm/cool balance shifts only because the physical world changed, not because a mood-system decided it should — light sources destroyed in the fight are simply out (literal consequence of destruction, not a coded signal), leaving larger dim/cool patches next to small moving warm pools from lanterns carried by repair crews. Contrast is higher than peacetime for exactly this reason: small warm work-light against bigger dark gaps.
+- **Atmospheric descriptors**: subdued, dusty, resilient, hushed, procedural.
+- **Energy level**: Low, slow, deliberate — a cleanup-montage pace, not urgent.
+- **Visual element that carries the mood**: Dust motes drifting through a breached wall, cool ambient light from the unexcavated dark spilling into a room that used to be fully warm-lit — the same frontier-edge visual language from 2.2, now happening inside a room that used to be finished.
+
+### 2.5 Menus / Blueprint Overlays
+
+- **Emotional target**: The calm authorship of leaning over a drafting table — unhurried, tactile problem-solving pleasure, not sterile software efficiency.
+- **Lighting character**: This is UI space, not world space — it doesn't use scene lighting at all. Base tone is a warm parchment/vellum neutral, evenly lit as if by a single soft desk lamp, low internal contrast so icons and text stay legible at pixel-art resolution.
+- **Atmospheric descriptors**: crafted, tactile, focused, warm-utilitarian, unhurried.
+- **Energy level**: Low, entirely player-paced — no time pressure beyond whatever alert badges the player has chosen to leave visible.
+- **Visual element that carries the mood**: The designation/blueprint overlay itself rendered as amber linework on graph-paper texture ghosted over the pixel-art world beneath it — literally a hand-drafted technical drawing, with panel-frame flourishes borrowed from the Bavarian folk-trim vocabulary (Section 1) as a UI skin choice, not a semantic color cue.
+
+### Feasibility note
+
+All five states are achievable with `WorldEnvironment`/`Environment` resource swaps for grading and glow, camera rig changes, a UI CanvasLayer overlay pass, and standard post-processing toggles — no bespoke per-state art. **Implementation non-goal to hand to `technical-artist`/`godot-specialist`**: no "combat lighting" pass may sneak in for drama — tactics mode inherits the scene lighting exactly as-is, per Section 1's lighting-is-aesthetic-only rule.
 
 ---
 
