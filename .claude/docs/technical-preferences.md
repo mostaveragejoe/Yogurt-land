@@ -56,6 +56,11 @@
 - **State-advancing World Change Event Bus handlers** — bus handlers are idempotent bookkeeping only (invalidate, mark stale, dirty); ticking is the only channel that advances simulation state (ADR-0001)
 - **Entity state in `SwitchTransitionData`** — the mode-switch envelope carries encounter framing only; any field duplicating Terrain or Colonist Entity state is state conversion creeping back in (ADR-0001)
 - **Per-entity simulation state as Nodes** — entity sim state is plain data; Nodes are views that read it for presentation (ADR-0001; detail in ADR-0003)
+- **Terrain writes outside the mutation window** — `TerrainWorld` mutations happen only inside authority-driven execution or the load window; never from UI callbacks or bus handlers (debug-asserted) (ADR-0002)
+- **Cell fields describing occupants, plans, zones, or combat state** — `TerrainCell` describes the architecture only; adjacent concerns live with their firewall-table owners (ADR-0002)
+- **Retaining a `TerrainChangeBatch` beyond `Publish`** — batches are pooled and valid only for the duration of the call; handlers copy primitives out synchronously (ADR-0002)
+- **GridMap (or any Node) as authoritative terrain state** — the model is plain C#; GridMap is at most a render backend reading from it (ADR-0002)
+- **Caller-side chunk math** — `TerrainWorld.ChunkOf()`/`ChunkSize` are the only sanctioned CellCoord→chunk mapping; hardcoded shift/mask constants outside the facade will break when the spike tunes chunk size (ADR-0002)
 
 ## Allowed Libraries / Addons
 
@@ -66,7 +71,8 @@
 
 <!-- Quick reference linking to full ADRs in docs/architecture/ -->
 - **ADR-0001** (Proposed, 2026-07-24): Time Authority / Mode-Switch Architecture — strategy pattern over one shared world; plain-C# core (`TimeAuthorityManager`, `ITickable`, `TimeContext`); fixed-dt sub-stepping for speed control; full colony pause in combat; authority-swap with zero state conversion; `PostEncounterReconcile` on return to real time. Owns `{Mode, TurnIndex, TickSequence}`. See `docs/architecture/adr-0001-time-authority-mode-switch.md`. Validated by the Tier 0 mode-switch spike before promotion to Accepted.
-- **Next**: ADR-0002 terrain data model and rendering approach (GridMap+MeshLibrary vs. custom instanced rendering); ADR-0003 entity data ownership; Seeded RNG ADR (constrained by ADR-0001's draws-only-inside-Tick rule).
+- **ADR-0002** (Proposed, 2026-07-24): Terrain Data Model — chunked dense grid of packed 8-byte `TerrainCell` structs (AoS, per-layer 32×32 chunks) behind a single `TerrainWorld` write facade; batched change events with previous-state capture (CD-1); `ApplyWallRepair` (CD-7); material manifest + schema version for stable-ID saves; writer set per time authority; mutation-window assertion; God-object firewall table. Plain C#, zero Godot dependency; GridMap is a candidate render backend only. Chunk size/layout numbers gated on the terrain spike before promotion to Accepted. See `docs/architecture/adr-0002-terrain-data-model.md`.
+- **Next**: ADR-0003 entity data ownership (write-ownership table, door boundary, occupancy index, item/stack reservations); Seeded RNG ADR (constrained by ADR-0001's draws-only-inside-Tick rule).
 
 ## Engine Specialists
 

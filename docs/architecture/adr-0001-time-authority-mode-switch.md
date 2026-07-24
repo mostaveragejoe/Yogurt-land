@@ -23,7 +23,7 @@ Proposed
 
 | Field | Value |
 |-------|-------|
-| **Depends On** | None (first ADR, Foundation layer) |
+| **Depends On** | None (first ADR, Foundation layer). Primitive types this ADR references (`CellCoord`, `EntityId`) live in the shared foundation-primitives namespace (`Hollowdeep.Core.Primitives`, defined jointly with ADR-0002) — this ADR does not depend on the terrain assembly. *(Corrected 2026-07-24 with ADR-0002 to remove a circular type-ownership implication.)* |
 | **Enables** | ADR-0002 (Terrain Data Model), ADR-0003 (Entity Data Ownership), the Seeded RNG ADR (constrained by this ADR: draws only inside authority-driven execution), Save/Load contract (mode invariant defined here) |
 | **Blocks** | All simulation-bearing GDDs/quick-specs (their mandatory "Behavior under each time authority" sections are written against this contract); the Tier 0 mode-switch spike implements this ADR |
 | **Ordering Note** | Written as Proposed BEFORE the Tier 0 spikes by design; the spike validates rather than precedes it. Physics-body specifics (Jolt default since 4.6, `HingeJoint3D.damp` GodotPhysics-only) are NOT relevant to this ADR but become relevant in ADR-0002/0003 territory — re-check `breaking-changes.md` there. |
@@ -177,6 +177,7 @@ Paused systems still receive events; ALL handlers are idempotent bookkeeping onl
 | Pathfinding | RealTime + TurnBased | Service colony path requests | Service combat reachability queries (Δ irrelevant — query-driven) | Invalidate cached paths/regions on terrain change |
 | Raid Trigger | RealTime only | Accumulate threat over `DeltaSeconds`; on trigger: `RequestSwitch(TurnBased, …)` and gate on the returned `SwitchResult` | — | none |
 | Combat: Turn Order | TurnBased only | — | Advance activation order on each discrete tick | none |
+| Terrain Data Model | **neither** — passive store (ADR-0002) | — | — | None — it is the bus's sole publisher; only its legal writer set changes per authority (ADR-0002 writer table) |
 | Terrain Rendering & Cutaway | **neither** — it is a view | — | — | Dirty chunks on terrain change; rebuilds happen in its own `_Process` |
 | Squad Preparation | RealTime only (its output rides `SwitchTransitionData.ParticipantIds`) | Maintain roster/draft assignments | — | none |
 

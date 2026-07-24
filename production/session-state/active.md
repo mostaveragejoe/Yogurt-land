@@ -3,11 +3,11 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: Foundation ADRs
-Task: ADR-0002 Terrain Data Model (ADR-0001 written as Proposed)
+Task: ADR-0003 Entity Data Ownership (ADR-0001 + ADR-0002 written as Proposed)
 <!-- /STATUS -->
 
 ## Current Task
-Foundation ADRs — ADR-0001 written (Proposed); next is ADR-0002 Terrain Data Model.
+Foundation ADRs — ADR-0001 and ADR-0002 written (Proposed); next is ADR-0003 Entity Data Ownership.
 
 ## Progress
 - [x] Game concept (design/gdd/game-concept.md) — brainstorm complete, 3 gates passed
@@ -16,7 +16,8 @@ Foundation ADRs — ADR-0001 written (Proposed); next is ADR-0002 Terrain Data M
 - [x] Systems index (design/gdd/systems-index.md) — 35 entries, 25 MVP; TD-SYSTEM-BOUNDARY + PR-SCOPE gates addressed
 - [x] CD-SYSTEMS gate — CONCERNS, 9 notes recorded in index; 4 user decisions made
 - [x] ADR-0001 Time Authority (Proposed) — docs/architecture/adr-0001-time-authority-mode-switch.md; forbidden patterns + ADR log added to technical-preferences.md
-- [ ] ADR-0002 Terrain Data Model, ADR-0003 Entity Data Ownership (as Proposed)
+- [x] ADR-0002 Terrain Data Model (Proposed) — docs/architecture/adr-0002-terrain-data-model.md; 5 forbidden patterns + ADR log entry added to technical-preferences.md; companion edits applied to ADR-0001 (shared-primitives correction, passive-store worked-example row)
+- [ ] ADR-0003 Entity Data Ownership (as Proposed)
 - [ ] Cross-cutting contracts annex (one page)
 - [ ] Debug console (Tier 0)
 - [ ] Tier 0 spikes: fun spike FIRST, then terrain, mode-switch, pathfinding, save/load
@@ -29,9 +30,11 @@ Foundation ADRs — ADR-0001 written (Proposed); next is ADR-0002 Terrain Data M
 - Combat split into 5 index entries
 - Lighting is aesthetic-only (no gameplay semantics) — art bible Section 1 is authoritative
 - ADR-0001 locked: full colony pause in combat; single encounter at a time; push-based ticks; authority-swap only (zero state conversion); fixed-dt sub-steps for speed (delta-scaling banned); CD-9 means no combat serialization in MVP
+- ADR-0002 locked: chunked dense grid, packed 8-byte TerrainCell (AoS), per-layer 32×32 chunks (spike-tunable); single TerrainWorld write facade; batched change events with previous-state capture (CD-1); ApplyWallRepair (CD-7); material manifest + schema version for stable-ID saves; mutation-window debug assertion; God-object firewall table; plain C# with zero Godot deps — GridMap is render-backend candidate only
 
 ## Files Being Worked On
-- design/gdd/systems-index.md (written, gates recorded)
+- docs/architecture/adr-0002-terrain-data-model.md (written, Proposed)
+- .claude/docs/technical-preferences.md (forbidden patterns + ADR log updated)
 - production/session-state/active.md (this file)
 
 ## Open Questions
