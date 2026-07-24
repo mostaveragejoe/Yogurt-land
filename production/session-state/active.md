@@ -2,12 +2,12 @@
 
 <!-- STATUS -->
 Epic: Pre-Production
-Feature: Systems Decomposition
-Task: CD-SYSTEMS gate, then ADRs 001-003
+Feature: Foundation ADRs
+Task: ADR-0002 Terrain Data Model (ADR-0001 written as Proposed)
 <!-- /STATUS -->
 
 ## Current Task
-Systems decomposition (/map-systems) — index written and gate-reviewed.
+Foundation ADRs — ADR-0001 written (Proposed); next is ADR-0002 Terrain Data Model.
 
 ## Progress
 - [x] Game concept (design/gdd/game-concept.md) — brainstorm complete, 3 gates passed
@@ -15,7 +15,8 @@ Systems decomposition (/map-systems) — index written and gate-reviewed.
 - [x] Art bible sections 1-4 (design/art/art-bible.md) — AD-ART-BIBLE gate REVISED/complete
 - [x] Systems index (design/gdd/systems-index.md) — 35 entries, 25 MVP; TD-SYSTEM-BOUNDARY + PR-SCOPE gates addressed
 - [x] CD-SYSTEMS gate — CONCERNS, 9 notes recorded in index; 4 user decisions made
-- [ ] ADR-001 Time Authority, ADR-002 Terrain Data Model, ADR-003 Entity Data Ownership (as Proposed)
+- [x] ADR-0001 Time Authority (Proposed) — docs/architecture/adr-0001-time-authority-mode-switch.md; forbidden patterns + ADR log added to technical-preferences.md
+- [ ] ADR-0002 Terrain Data Model, ADR-0003 Entity Data Ownership (as Proposed)
 - [ ] Cross-cutting contracts annex (one page)
 - [ ] Debug console (Tier 0)
 - [ ] Tier 0 spikes: fun spike FIRST, then terrain, mode-switch, pathfinding, save/load
@@ -27,11 +28,12 @@ Systems decomposition (/map-systems) — index written and gate-reviewed.
 - Spike-gated sequencing: ADRs + contracts + debug console -> spikes -> GDDs
 - Combat split into 5 index entries
 - Lighting is aesthetic-only (no gameplay semantics) — art bible Section 1 is authoritative
+- ADR-0001 locked: full colony pause in combat; single encounter at a time; push-based ticks; authority-swap only (zero state conversion); fixed-dt sub-steps for speed (delta-scaling banned); CD-9 means no combat serialization in MVP
 
 ## Files Being Worked On
 - design/gdd/systems-index.md (written, gates recorded)
 - production/session-state/active.md (this file)
 
 ## Open Questions
-- Mid-battle save: yes/no — route to creative-director BEFORE Combat GDD set
+- Post-battle time: resume as zero-elapsed vs. advance by battle duration — route to creative-director BEFORE Needs & Simulation GDD (both stay possible under ADR-0001's fixed-dt sub-stepping)
 - Working-hours assumption (full-time vs evenings) — timeline bands double if part-time
