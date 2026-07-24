@@ -49,7 +49,13 @@
 ## Forbidden Patterns
 
 <!-- Add patterns that should never appear in this project's codebase -->
-- [None configured yet — add as architectural decisions are made]
+- **`SceneTree.paused` in the simulation path** — gameplay pause is RealTimeAuthority at zero sub-steps; engine pause is reserved for a future UI-pause layer only (ADR-0001)
+- **Simulation logic in `_Process`/`_PhysicsProcess`** — `ITickable.Tick()` is the only sanctioned simulation-update path; `_Process` is presentation-only (ADR-0001)
+- **Delta-scaling for game speed** — speed multiplies the fixed-dt sub-step count, never scales dt; delta-scaling breaks determinism and closes off post-battle time catch-up (ADR-0001)
+- **RNG draws outside authority-driven execution** — random draws only inside `Tick()` or authority-driven resolution; never in `_Process`, UI callbacks, or event handlers (ADR-0001)
+- **State-advancing World Change Event Bus handlers** — bus handlers are idempotent bookkeeping only (invalidate, mark stale, dirty); ticking is the only channel that advances simulation state (ADR-0001)
+- **Entity state in `SwitchTransitionData`** — the mode-switch envelope carries encounter framing only; any field duplicating Terrain or Colonist Entity state is state conversion creeping back in (ADR-0001)
+- **Per-entity simulation state as Nodes** — entity sim state is plain data; Nodes are views that read it for presentation (ADR-0001; detail in ADR-0003)
 
 ## Allowed Libraries / Addons
 
@@ -59,7 +65,8 @@
 ## Architecture Decisions Log
 
 <!-- Quick reference linking to full ADRs in docs/architecture/ -->
-- [No ADRs yet — use /architecture-decision to create one. First recommended ADR: mode-switch architecture ("one world, swappable time authority") per TD-FEASIBILITY guidance in `design/gdd/game-concept.md`. Second recommended ADR: terrain data model and rendering approach (GridMap+MeshLibrary vs. custom instanced rendering) for the layered floor+wall tile grid.]
+- **ADR-0001** (Proposed, 2026-07-24): Time Authority / Mode-Switch Architecture — strategy pattern over one shared world; plain-C# core (`TimeAuthorityManager`, `ITickable`, `TimeContext`); fixed-dt sub-stepping for speed control; full colony pause in combat; authority-swap with zero state conversion; `PostEncounterReconcile` on return to real time. Owns `{Mode, TurnIndex, TickSequence}`. See `docs/architecture/adr-0001-time-authority-mode-switch.md`. Validated by the Tier 0 mode-switch spike before promotion to Accepted.
+- **Next**: ADR-0002 terrain data model and rendering approach (GridMap+MeshLibrary vs. custom instanced rendering); ADR-0003 entity data ownership; Seeded RNG ADR (constrained by ADR-0001's draws-only-inside-Tick rule).
 
 ## Engine Specialists
 
