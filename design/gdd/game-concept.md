@@ -173,17 +173,21 @@ Progression means going deeper — richer materials and worse threats scale down
 
 **Direction: Warm Hearth, Cold Dark**
 
-**One-line visual rule**: *Light is claimed territory — what you've carved and lit is yours; what you haven't is the enemy's.*
+*(Revised 2026-07-24 during `/art-bible`: the original brainstorm framing of "light is claimed territory" gave lighting gameplay-signal weight the design does not want. Lighting is aesthetic, not mechanic. The authoritative, expanded version of this section lives in `design/art/art-bible.md`, Section 1.)*
+
+**One-line visual rule**: *Light sets the mood. Shape tells your story.*
 
 **Supporting principles**:
 
-1. **Binary light-claim readability.** Every tile is either lit/claimed (warm) or unlit/unclaimed (cool), regardless of material — frontier edges and breach points are instantly legible without a minimap. *Design test*: a well-designed colony visibly looks "held," with warm light following its chokepoints; a badly designed one leaks light at its weak points.
-2. **Scars as extinguished light, repair as relit light.** A destroyed room goes cold and blue immediately and stays cold until rebuilt and relit. *Design test*: a relit repaired room must read visibly warmer or more secure than before the damage — rebuilding is progress, not restoration.
-3. **Autonomy legible through light behavior.** Colonists carry small warm light auras; the player reads "the colony is alive" from ambient light motion alone. *Design test*: the player can tell the colony is functioning or in crisis from the light pattern at a glance, without opening a list.
+1. **The Palette Is the Player's Voice.** Every construction style, ornament set, and finish is available everywhere from day one — the world generates as untouched natural landscape only, and everything built is a player choice. Style is never gated by depth, biome, or progression; only resource, time, or skill cost may restrict it.
+2. **Legibility Before Beauty.** Ornament must never obscure the read of a corridor, chokepoint, or breach point — the floor plan is the primary content of every screen.
+3. **The Wild Deepens, the Built Doesn't.** Depth and danger are communicated through natural terrain (rock strata, mineral veins, hazard density), never by gating or reskinning player architecture.
 
-**Color philosophy**: A two-temperature palette — warm amber/orange for claimed space, cool blue-grey for unclaimed or enemy space — with red reserved exclusively for active threat (breach edges, raider auras, alarms). Material tiers (dirt / granite / reinforced) read through geometry and texture roughness, not hue, because hue is spent on the light-claim signal. Colonist role color-coding may be layered on characters without conflicting with the environmental rule.
+**Aesthetic mood**: The Warm Hearth, Cold Dark palette survives as the game's *mood* — warm, lived-in hearth-glow in the colony against the cool dark of unexcavated wilds — but it carries no gameplay semantics: combat, threat state, and repair logic never read or react to lighting, and the player's lighting choices are purely expressive/aesthetic.
 
-**Feasibility note**: This direction is dominated by lighting and post-processing rather than asset variety — a single neutral modular block kit reused everywhere, with color from light. It is the cheapest direction for a solo developer to iterate on.
+**Style vocabularies**: 3D pixel art (low-poly kit-of-parts meshes, chunky nearest-filtered textures at fixed texel density — Gnomoria's pixel-art heritage carried into 3D). Two ornament vocabularies in the building palette, both player-selectable anywhere: Bavarian/German folk construction (fachwerk timber framing, painted folk trim) and stylized classical Roman stonework (arches, pilasters, vaults). Materials look like what they are; warmly lit Roman stone reads warm, exactly like a lit Bavarian plaster wall.
+
+**Feasibility note**: One shared grid-based kit-of-parts with swappable style dressing keeps authoring cost near-linear; pixel textures on simple meshes avoid a PBR sculpting/baking pipeline entirely. Cheapest viable direction for a solo developer.
 
 ---
 
@@ -294,7 +298,7 @@ The MVP answers ONE question: **"Is the core loop fun?"**
 
 - Structural collapse/cascade simulation (Tier 2)
 - Procedural mountain generation — MVP mountain is hand-authored (Tier 2)
-- Flood-fill light-claim system — simple dynamic lights suffice (Tier 2)
+- Flood-fill/propagated lighting (aesthetic ambiance at scale) — simple dynamic lights suffice (Tier 2)
 - Multiple raider factions, veteran progression systems (Tier 2)
 - Controller support, ports, additional platforms (Tier 3)
 - Dwarf-Fortress-depth simulation — three needs and ~5 job types is the MVP cap
@@ -305,7 +309,7 @@ The MVP answers ONE question: **"Is the core loop fun?"**
 | ---- | ---- | ---- | ---- |
 | **Tier 0 — Foundation spikes** | Throwaway/foundation greyboxes | (1) Layered tile-grid dig + cutaway/Z-level rendering with instanced floor+wall prefabs — game question first, optimize only when measured; (2) mode-switch architecture (one world, swappable time authority); (3) pathfinding on a diggable grid; (4) job AI with ~10 colonists; (5) save/load round-trip; (6) **fun spike** — greybox turn-based skirmish in a hand-placed destructible room, no sim underneath | 6–12 months (honest band for a first-time dev) |
 | **Tier 1 — MVP** (*ships-if-time-runs-out floor*) | Hand-made small mountain, 3 strata, ~10 colonists, 1 raider type | Full core loop: blueprint carving, needs sim, material-tier wall HP, breach-triggered mode switch, rebuild loop | 12–24 months after Tier 0 |
-| **Tier 2 — Vertical Slice / Early Access shape** | Procgen mountains, multiple raider factions | Veteran colonist progression, flood-fill light-claim system (full art identity), structural collapse simulation | 12+ months after Tier 1 |
+| **Tier 2 — Vertical Slice / Early Access shape** | Procgen mountains, multiple raider factions | Veteran colonist progression, flood-fill/propagated lighting for rich ambiance at scale (aesthetic only), structural collapse simulation | 12+ months after Tier 1 |
 | **Tier 3 — Full Vision** | 6–8 strata with unique materials/threats, 4–6 factions, ~15–20 room types | Deep simulation, additional platforms/ports | Open-ended |
 
 *Gate record: CD-PILLARS — CONCERNS, resolved (Pillars 2 and 4 reworded). TD-FEASIBILITY — CONCERNS, resolved (spike-first re-sequencing, trimmed MVP). PR-SCOPE — OPTIMISTIC, adjustments folded in (fun spike added, voxel spike split, honest timeline bands).*
