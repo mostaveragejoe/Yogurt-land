@@ -88,6 +88,9 @@ public enum SwitchResult { Accepted, RejectedAlreadyInMode, RejectedEncounterAct
 public sealed class TimeAuthorityManager
 {
     public TimeAuthorityMode CurrentMode { get; }
+    public bool SwitchPending { get; }                     // true from switch acceptance (DeferredMidDispatch) until the swap
+    public TimeAuthorityMode PendingSwitchTarget { get; }  // valid only while SwitchPending — read-only trigger for ADR-0003's
+                                                           // pre-switch placement normalization (a property, not a new pass)
     public void Register(ITickable system, TimeAuthorityMode authority, TickPhase phase, int priority = 0);
     public void Unregister(ITickable system, TimeAuthorityMode authority);
     public SwitchResult RequestSwitch(TimeAuthorityMode target, SwitchTransitionData transition);
@@ -128,7 +131,7 @@ public interface IPresentationGate      // plain C#; view layer satisfies it, te
 - The active authority dispatches `Tick()` to its registered systems in **deterministic order**: sorted by `(TickPhase, priority, registration sequence)`; a debug assertion rejects two systems sharing an exact phase+priority. Scene-tree `_Ready` order must never control simulation order.
 - The **inactive** authority's systems receive **zero Tick calls** — true pause.
 - **Events are orthogonal to ticks**: paused systems still receive World Change Event Bus events, but ALL bus handlers (paused or not) are restricted to **idempotent bookkeeping** — invalidate a cached path, mark a reservation stale, dirty a chunk. Handlers never advance simulation state; ticking is the only channel that advances state.
-- **Re-entrancy**: `RequestSwitch` from inside any Tick or transition handler is deferred to end-of-dispatch (`DeferredMidDispatch`). The manager enforces the single-encounter invariant itself — it rejects, never queues.
+- **Re-entrancy**: `RequestSwitch` from inside any Tick or transition handler is deferred to end-of-dispatch (`DeferredMidDispatch`). The manager enforces the single-encounter invariant itself — it rejects, never queues. While deferred, `SwitchPending`/`PendingSwitchTarget` expose the accepted-but-pending switch so Reaction-phase systems can run pre-switch work inside that same dispatch — the ordinary mutation window; ADR-0003's placement normalization is the defined consumer.
 - **RNG rule (constraint on the Seeded RNG ADR)**: random draws occur only inside `Tick()` or authority-driven resolution — never in `_Process`, UI callbacks, or event handlers. Otherwise `TickSequence` guarantees nothing.
 - **DeltaSeconds=0 rule**: systems that integrate `rate * DeltaSeconds` must not register with the TurnBased authority — a debug assertion flags any TurnBased-registered system reading DeltaSeconds. Silent no-op integration is a bug class that presents as "the game is subtly wrong."
 
@@ -136,7 +139,7 @@ public interface IPresentationGate      // plain C#; view layer satisfies it, te
 1. Current dispatch completes (mid-dispatch requests deferred).
 2. Manager fires `ModeTransitioned` — a **direct manager event, not a bus event** (different publisher, ordering requirements). Handler order is explicitly declared at subscription (same phase/priority scheme); Combat UI receives encounter context before the camera reframes.
 3. `ActiveAuthority` swaps. No state is converted, copied, or rebuilt.
-4. **Switching back to RealTime runs a named `PostEncounterReconcile` step** (its own TickPhase.Reaction pass, first real-time dispatch): release reservations held by dead colonists, cancel jobs targeting destroyed cells, invalidate paths crossing destroyed geometry, re-run reachability. "No state conversion" does NOT mean the switch is free — no *representation* changes, but reconciliation duties are real, named, and integration-tested.
+4. **Switching back to RealTime runs a named `PostEncounterReconcile` step** (its own TickPhase.Reaction pass, first real-time dispatch): drain the `EncounterOutcomeInbox` and dispatch the `EncounterOutcomeReport` to its registered consumers under the existing phase/priority ordering (ADR-0003); release reservations held by dead colonists (`ReleaseAllHeldBy` on the stack-reservation table, ADR-0003); cancel jobs targeting destroyed cells; invalidate paths crossing destroyed geometry; re-run reachability; reap `IsDead` colonists, `IsBroken` doors, and dead/withdrawn raiders (ADR-0003 lifecycle rows — combat marks, RealTime reaps). "No state conversion" does NOT mean the switch is free — no *representation* changes, but reconciliation duties are real, named, and integration-tested.
 
 ### Godot integration (the only engine-touching layer)
 - A thin **Autoload** node `TimeAuthorityRoot : Node` (`ProcessMode = Always`) owns the plain-C# `TimeAuthorityManager` and calls `Manager.Advance(delta)` from `_PhysicsProcess` (fixed-step; pairs with `TickSequence` for determinism). Register it in CLAUDE.md's autoload documentation when created.
@@ -179,7 +182,9 @@ Paused systems still receive events; ALL handlers are idempotent bookkeeping onl
 | Combat: Turn Order | TurnBased only | — | Advance activation order on each discrete tick | none |
 | Terrain Data Model | **neither** — passive store (ADR-0002) | — | — | None — it is the bus's sole publisher; only its legal writer set changes per authority (ADR-0002 writer table) |
 | Terrain Rendering & Cutaway | **neither** — it is a view | — | — | Dirty chunks on terrain change; rebuilds happen in its own `_Process` |
-| Squad Preparation | RealTime only (its output rides `SwitchTransitionData.ParticipantIds`) | Maintain roster/draft assignments | — | none |
+| Entity stores (ADR-0003) | **neither** — passive stores | — | — | None — only the legal writer set changes per authority (ADR-0003 ownership table) |
+| UnitOccupancyIndex / EntityDirectory | **neither** — derived bookkeeping (ADR-0003) | — | — | None — rebuilt on load, never serialized |
+| Squad Preparation | RealTime only (its output rides `SwitchTransitionData.ParticipantIds`) | Maintain roster/draft assignments; on an accepted pending switch (`SwitchPending`), decide pre-switch placements and submit them to Colonist Movement (Reaction phase, ADR-0003) | — | none |
 
 ### Key Interfaces
 `ITickable.Tick(TimeContext)` · `TimeAuthorityManager.Register/Unregister(system, authority, phase, priority)` · `RequestSwitch(mode, SwitchTransitionData) → SwitchResult` · `ModeTransitioned` (direct, ordered) · `Snapshot()/Restore()` · `IPresentationGate` · `PostEncounterReconcile` (named reconciliation pass)

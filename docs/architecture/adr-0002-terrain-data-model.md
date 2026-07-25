@@ -75,6 +75,11 @@ public readonly record struct ChunkCoord(int X, int Y, int Z);
 // Chunk identity is PUBLIC (subscribers dirty-track by chunk); chunk SIZE is a
 // queryable tunable (TerrainWorld.ChunkSize), never a caller-side constant.
 // The only sanctioned CellCoord→ChunkCoord mapping is TerrainWorld.ChunkOf().
+
+public readonly record struct EntityId(long Value);
+// Defined in ADR-0003 (0 = None; long, monotonic per world via a serialized
+// EntityIdSource, NEVER reused). Listed here because it lives in this shared
+// namespace and this block declares changing shared primitives an ADR-level event.
 ```
 
 ### Cell record — packed 8-byte struct

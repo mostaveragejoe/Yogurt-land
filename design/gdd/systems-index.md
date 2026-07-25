@@ -59,6 +59,8 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 
 **Demotions/reorganizations recorded** (PR-SCOPE, user-approved): Strata/Depth Progression is **data, not a system** (material distribution in Material Catalog + threat scaling in Raid Trigger). Notifications & Alerts is a **shared UI component** specified once across the three UX specs. Squad equipment defers to Vertical Slice (MVP uses fixed role loadouts). Stockpile & Hauling **stays MVP by explicit user decision** overriding the producer's recommendation.
 
+**Doors are an MVP entity kind** (user decision 2026-07-24, recorded in ADR-0003 — chokepoint play and breach tactics are the game's identity): not a new numbered system but a note across existing entries — built/deconstructed by Construction (#16), damaged by Combat: Targeting & Resolution (#22) exactly like walls (provisional destructibility rule), opened as part of combat movement (#21), composed into walkability by Pathfinding (#8), LOS-blocking read by Spatial Query (#12). Entity state and write ownership defined in ADR-0003 (`DoorStore`).
+
 ---
 
 ## Priority Tiers
@@ -86,7 +88,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 ### Core Layer
 7. Terrain Rendering & Cutaway — deps: Terrain Data Model, Event Bus. Owns meshing/instancing, Z-level slicing, chunk rebuild, draw-call budget, cutaway focus treatment (presentation-layer channel per art bible §1).
 8. Pathfinding & Navigation — deps: Terrain Data Model, Event Bus (path invalidation on mid-route dig). Includes region/connectivity flood-fill, reachability caching.
-9. Colonist Entity & Attributes — deps: Terrain Data Model. Data store with **write-ownership table** (ADR-003): each field group has exactly one writer. Health write-arbitration (Combat vs Needs) resolved in ADR-003.
+9. Colonist Entity & Attributes — deps: Terrain Data Model. Data store with **write-ownership table** (ADR-003): each field group has exactly one writer. Health write-arbitration (Combat vs Needs) resolved in ADR-003. Identity Bookkeeping — the MVP writer of `BattlesSurvived` (CD-4) — is a small entity-layer module defined in ADR-0003, not a new system.
 10. Job Assignment & Priority — deps: Colonist Entity, Event Bus. Owns the task queue, arbitration, claiming, cancellation, and **job invalidation on world mutation**. Starts concrete (dig/build/haul); generalizes to the task-producer interface only when the third producer exists.
 11. Stockpile & Hauling — deps: Terrain, Material Catalog, Job Assignment. Reservation logic is a first-class design problem (top genre bug class).
 12. Spatial Query / LOS & Cover — deps: Terrain Data Model. Serves combat LOS/cover and raider AI without exposing combat internals.
@@ -146,7 +148,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 
 ## Circular Dependencies
 
-- **Combat ↔ Skill & Veterancy** — resolved via ADR-003: Colonist Entity owns skill/veterancy data with Veterancy as sole writer; Combat reads data, emits the combat-outcome event; Veterancy and Identity & Memory both consume that event (multi-consumer schema, not ad-hoc callback).
+- **Combat ↔ Skill & Veterancy** — resolved via ADR-003: Colonist Entity owns skill/veterancy data with Veterancy as sole writer; Combat reads data, emits the combat-outcome event; Veterancy and Identity & Memory both consume that event (multi-consumer schema, not ad-hoc callback). *Realized in ADR-0003 as the `EncounterOutcomeReport` (one-slot `EncounterOutcomeInbox`, drained by `PostEncounterReconcile` under ADR-0001 ordering): MVP consumers Identity Bookkeeping + Notifications; VS consumers Veterancy + Identity & Memory.*
 - **Job Assignment ↔ Needs** — resolved: Needs is a *task producer* submitting scored candidates into the queue Job Assignment owns; designed as a coupled pair in one session set. Generalization to more producers happens at the third concrete producer, not before.
 
 ## High-Risk Systems
