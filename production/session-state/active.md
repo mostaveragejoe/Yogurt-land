@@ -2,12 +2,12 @@
 
 <!-- STATUS -->
 Epic: Pre-Production
-Feature: Foundation ADRs
-Task: All 3 Foundation ADRs written (Proposed) — next: contracts annex + debug console
+Feature: Foundation
+Task: ADRs + contracts annex + debug console DONE — next: Tier 0 spike gate (fun spike first)
 <!-- /STATUS -->
 
 ## Current Task
-Foundation ADRs complete — ADR-0001, ADR-0002, ADR-0003 all written as Proposed. Next per the design order: cross-cutting contracts annex (one page), then debug console (Tier 0), then spikes. ADR-0003 changeset written but NOT committed (awaiting user instruction).
+Foundation phase complete: 3 ADRs (Proposed), cross-cutting contracts annex, and the Tier 0 debug console are written, committed, and pushed. Next per the design order: run `/prototype` — fun spike FIRST, then terrain, mode-switch, pathfinding, save/load spikes. Spike results promote the ADRs to Accepted (or force revision).
 
 ## Progress
 - [x] Game concept (design/gdd/game-concept.md) — brainstorm complete, 3 gates passed
@@ -18,8 +18,8 @@ Foundation ADRs complete — ADR-0001, ADR-0002, ADR-0003 all written as Propose
 - [x] ADR-0001 Time Authority (Proposed) — docs/architecture/adr-0001-time-authority-mode-switch.md; forbidden patterns + ADR log added to technical-preferences.md
 - [x] ADR-0002 Terrain Data Model (Proposed) — docs/architecture/adr-0002-terrain-data-model.md; 5 forbidden patterns + ADR log entry added to technical-preferences.md; companion edits applied to ADR-0001 (shared-primitives correction, passive-store worked-example row)
 - [x] ADR-0003 Entity Data Ownership (Proposed) — docs/architecture/adr-0003-entity-data-ownership.md; gates: godot-specialist PASS, TD-ADR two passes (21 findings closed per pre-approved resolutions). Companion edits applied: ADR-0001 (SwitchPending/PendingSwitchTarget property, reconcile duties, worked-example rows), ADR-0002 (EntityId in shared primitives), technical-preferences.md (5 forbidden patterns + log entry), systems-index.md (doors note, outcome-report pointer, Identity Bookkeeping note)
-- [ ] Cross-cutting contracts annex (one page)
-- [ ] Debug console (Tier 0)
+- [x] Cross-cutting contracts annex — docs/architecture/cross-cutting-contracts.md (one page, three contracts, no fourth; CD-9 recorded as resolved)
+- [x] Debug console (Tier 0) — Godot 4.7.1 C# project scaffolded at repo root (project.godot + Hollowdeep.csproj); plain-C# core assembly src/core/Hollowdeep.Core.csproj (Primitives: CellCoord/ChunkCoord/EntityId per ADRs; Diagnostics: DebugConsole core with command + sweep registries, Revision polling); Godot overlay src/tools/DebugConsole/DebugConsoleRoot.cs (autoload "DebugConsole", F12 toggle, history, presentation-only). `dotnet build` green (0 warn/0 err, Godot.NET.Sdk 4.7.1 from NuGet); core zero-Godot grep clean. NOT yet runtime-verified in the Godot editor (no engine binary in this environment) — first editor open should confirm autoload + toggle. .gitignore fixed (Unity leftovers were ignoring *.csproj/*.sln)
 - [ ] Tier 0 spikes: fun spike FIRST, then terrain, mode-switch, pathfinding, save/load
 
 ## Key Decisions This Session
@@ -34,11 +34,11 @@ Foundation ADRs complete — ADR-0001, ADR-0002, ADR-0003 all written as Propose
 - ADR-0003 locked (3 user decisions): health writer-per-authority (Needs in RealTime, Combat in TurnBased); occupancy exclusive-in-combat-only (advisory in RealTime); doors ARE MVP with the entity boundary contract + provisional destructibility (doors carry Hp, damaged like walls, IsBroken unblocks immediately, reaped at reconcile). Typed stores + writer interfaces at composition root; EntityId (long, monotonic, never reused); combat-transient state in side tables (CD-9 structural); EncounterOutcomeReport via one-slot inbox breaks Combat↔Veterancy; Revision polling, no entity event bus; pre-switch normalization: Squad Prep decides, Colonist Movement executes, deterministic nudge rule
 
 ## Files Being Worked On
-- docs/architecture/adr-0003-entity-data-ownership.md (written, Proposed — NOT yet committed)
-- docs/architecture/adr-0001-time-authority-mode-switch.md (companion edits applied)
-- docs/architecture/adr-0002-terrain-data-model.md (companion edit applied)
-- .claude/docs/technical-preferences.md (5 forbidden patterns + ADR-0003 log entry)
-- design/gdd/systems-index.md (3 ADR-0003 companion notes)
+- docs/architecture/cross-cutting-contracts.md (new — the annex)
+- project.godot, Hollowdeep.csproj, src/core/** , src/tools/DebugConsole/** (new — project scaffold + debug console)
+- .claude/docs/technical-preferences.md (Project Layout & Autoloads section added)
+- design/gdd/systems-index.md (annex pointer; tracker 3/3; next-steps checkboxes)
+- .gitignore (removed Unity-era *.csproj/*.sln ignores)
 - production/session-state/active.md (this file)
 
 ## Open Questions

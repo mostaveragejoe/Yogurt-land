@@ -72,6 +72,13 @@
 <!-- Add approved third-party dependencies here -->
 - [None configured yet — add as dependencies are approved]
 
+## Project Layout & Autoloads
+
+- **Godot project root**: repository root (`project.godot` + `Hollowdeep.csproj`). Simulation code lives in the separate plain-C# assembly `src/core/Hollowdeep.Core.csproj` (zero Godot references — CI-grep gate per ADR-0001/0002/0003); the root project holds Godot-facing views/tools and excludes `src/core`, `tests`, `tools`, `prototypes` from its compile glob.
+- **Autoloads** (register new ones here, per ADR-0001):
+  - `DebugConsole` → `src/tools/DebugConsole/DebugConsoleRoot.cs` — Tier 0 debug console overlay (systems index #29). Toggle: `debug_console_toggle` action (default F12, runtime-registered only if the project defines no binding). Core API: `GetNode<DebugConsoleRoot>("/root/DebugConsole").Core` for command/sweep registration until the composition root owns wiring.
+  - `TimeAuthorityRoot` — NOT yet created (arrives with the mode-switch spike, ADR-0001).
+
 ## Architecture Decisions Log
 
 <!-- Quick reference linking to full ADRs in docs/architecture/ -->

@@ -1,0 +1,24 @@
+<Project Sdk="Godot.NET.Sdk/4.7.1">
+
+  <!-- The Godot-facing game project. Simulation code lives in the referenced
+       Hollowdeep.Core assembly (plain C#, zero Godot) — the Compile Remove
+       below keeps the SDK's recursive glob from double-compiling it here. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Hollowdeep</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="src\core\**\*.cs" />
+    <Compile Remove="tests\**\*.cs" />
+    <Compile Remove="tools\**\*.cs" />
+    <Compile Remove="prototypes\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="src\core\Hollowdeep.Core.csproj" />
+  </ItemGroup>
+
+</Project>

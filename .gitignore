@@ -53,9 +53,9 @@ export_presets.cfg
 [Bb]uilds/
 [Ll]ogs/
 [Uu]ser[Ss]ettings/
-*.csproj
+# NOTE: *.csproj / *.sln are NOT ignored — this is a Godot C# project and they
+# are source-controlled build files (the ignores below are Unity leftovers).
 *.unityproj
-*.sln
 *.suo
 *.tmp
 *.user
