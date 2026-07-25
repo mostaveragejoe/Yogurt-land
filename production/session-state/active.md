@@ -7,7 +7,16 @@ Task: ADRs + contracts annex + debug console DONE — next: Tier 0 spike gate (f
 <!-- /STATUS -->
 
 ## Current Task
-Foundation phase complete: 3 ADRs (Proposed), cross-cutting contracts annex, and the Tier 0 debug console are written, committed, and pushed. Next per the design order: run `/prototype` — fun spike FIRST, then terrain, mode-switch, pathfinding, save/load spikes. Spike results promote the ADRs to Accepted (or force revision).
+`/prototype` — Tier 0 FUN SPIKE in progress (Phase 5 — Implement).
+- **Concept**: Hollowdeep core hook — tactics-in-your-own-base ("greybox turn-based skirmish in a hand-placed destructible room, no sim underneath")
+- **Hypothesis**: if the player fights a turn-based raider defense inside a layout they authored, architectural choices visibly decide the battle — confirmed if (a) two different layouts vs. the same raid produce traceably different outcomes/costs and (b) the player voluntarily redesigns and retries unprompted
+- **Riskiest assumption (tested first)**: ONE enemy type + zero sim: the architecture alone generates interesting tactical decisions
+- **Path**: HTML (user-approved 2026-07-25); review mode: full (CD-PLAYTEST gate applies at Phase 8)
+- **Scope**: one Z-level grid; build mode with material budget (dirt/granite/reinforced walls + doors, squad placement); raiders path-to-hoard breaching weakest architecture; turn-based squad combat (AP, LOS, destructible everything); scar readout → rebuild → retry. CUT: needs/jobs/hauling sim, veterancy, saves, art, sound, menus
+- **Output**: prototypes/hollowdeep-fun-spike-concept/prototype.html
+- Next: Phase 6 playtest debrief (user plays), Phase 7 REPORT.md, Phase 8 CD-PLAYTEST (full mode), Phase 9 verdict → remaining Tier 0 spikes
+
+Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debug console — committed and pushed.
 
 ## Progress
 - [x] Game concept (design/gdd/game-concept.md) — brainstorm complete, 3 gates passed
