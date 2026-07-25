@@ -7,14 +7,11 @@ Task: ADRs + contracts annex + debug console DONE — next: Tier 0 spike gate (f
 <!-- /STATUS -->
 
 ## Current Task
-`/prototype` — Tier 0 FUN SPIKE in progress (Phase 5 — Implement).
-- **Concept**: Hollowdeep core hook — tactics-in-your-own-base ("greybox turn-based skirmish in a hand-placed destructible room, no sim underneath")
-- **Hypothesis**: if the player fights a turn-based raider defense inside a layout they authored, architectural choices visibly decide the battle — confirmed if (a) two different layouts vs. the same raid produce traceably different outcomes/costs and (b) the player voluntarily redesigns and retries unprompted
-- **Riskiest assumption (tested first)**: ONE enemy type + zero sim: the architecture alone generates interesting tactical decisions
-- **Path**: HTML (user-approved 2026-07-25); review mode: full (CD-PLAYTEST gate applies at Phase 8)
-- **Scope**: one Z-level grid; build mode with material budget (dirt/granite/reinforced walls + doors, squad placement); raiders path-to-hoard breaching weakest architecture; turn-based squad combat (AP, LOS, destructible everything); scar readout → rebuild → retry. CUT: needs/jobs/hauling sim, veterancy, saves, art, sound, menus
-- **Output**: prototypes/hollowdeep-fun-spike-concept/prototype.html
-- Next: Phase 6 playtest debrief (user plays), Phase 7 REPORT.md, Phase 8 CD-PLAYTEST (full mode), Phase 9 verdict → remaining Tier 0 spikes
+Tier 0 FUN SPIKE: **COMPLETE — PROCEED, CD-PLAYTEST CONFIRM (2026-07-25)**.
+- Hypothesis CONFIRMED (user debrief); report at prototypes/hollowdeep-fun-spike-concept/REPORT.md (incl. gate verdict + 7 caveats)
+- CD notes **CD-10–CD-18** recorded in systems-index (binding on Combat set, Construction, Blueprint UI, Squad Prep, Raider Decision-Making, Raid Trigger, Colonist Entity, Repair & Rebuild, Job Assignment, Notifications)
+- Headline decisions: combat changes world state, never authors it (CD-10); player-activated pre-built objects > autonomous traps (CD-11); deployables = prep expressed spatially, VS-era (CD-12); downed→stabilize, no free revives (CD-13); raider reactivity = MVP acceptance criterion in #23 (CD-14); threat-info floor/ceiling + cross-raid intel (CD-15); prep phase must present a real decision (CD-16); Discovery has an MVP-testable enemy-knowledge vector (CD-17, applied to concept doc + index); lesson-to-answer latency budget on #25 (CD-18)
+- **Next: remaining Tier 0 spikes in order — terrain → mode-switch → pathfinding → save/load** (technical spikes; use /prototype spike mode or direct engine builds against the ADR contracts; results promote ADR-0001/0002/0003 to Accepted)
 
 Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debug console — committed and pushed.
 

@@ -106,5 +106,25 @@ N/A — verdict is PROCEED.
 
 ---
 
+## CD-PLAYTEST Gate (2026-07-25, full review mode)
+
+**Verdict: CONFIRM PROCEED** — recommendation stands unchanged, including the three routed findings. Nine binding CD notes issued (**CD-10–CD-18**, recorded in `design/gdd/systems-index.md` → Creative Director Notes (CD-PLAYTEST)): the combat/construction boundary rule ("combat may change world state, never author it"), player-activated pre-built objects over autonomous traps, the four-part deployable legitimacy test (MVP guard: positioning/doors/destruction only), downed→stabilize instead of free revives, raider reactivity promoted to an MVP acceptance criterion in #23 (behavioral depth, not archetype count; preserve emergent cost-based breach pathing exactly), threat-information floor/ceiling + cross-raid intel accrual, the pre-contact moment as a designed moment (#24 watch flag), Discovery's second vector (enemy-knowledge — MVP-testable), and the lesson-to-answer latency budget on Repair & Rebuild #25.
+
+**Pillar read**: Pillar 1 CONFIRMED on bias-immune mechanical evidence; Pillar 2 HALF confirmed — the in-battle-skill half is untested and is the same finding as "raiders unreactive"; Pillar 3 confirmed in its cheapest form (see caveat 3); Pillar 4 — the no-construction-in-combat decision is the correct reading of the pillar, endorsed as CD-10; Pillar 5 untested by design.
+
+**Caveats recorded by the gate:**
+1. n=1 and the playtester is the concept's author — confirmation-direction evidence is weak (falsification would have been strong). Read "CONFIRMED" as *not falsified by the cheapest available test*.
+2. One evidence class is bias-immune and weighs more than the rest: emergent weakest-material breaching + the traceable scar report — the strongest single result in this spike; it substantially de-risks Pillar 1.
+3. Hypothesis criterion (b) was partially bought by prototype shortcuts (full-refund demolish, instant construction, free revives). The real game removes all three — see CD-18; the sharpest limitation in this report.
+4. The spike validated the hook, not the product: the colony-sim→tactics bridge (cost, latency, emotional investment of building through autonomous colonists) is entirely untested, and it is where the two-genre-hybrid market risk actually lives.
+5. Novelty decay is untested and the one negative finding is a decay function — predictability compounds with exposure; "no surprises reported" is not evidence of durability.
+6. Feel, pacing, and battle length carry zero signal (correctly — HTML path). CD-9's 8–15 min target / 20 min ceiling remains unvalidated.
+7. Next fun-relevant checkpoint: the vertical slice with real construction latency, criterion *"does the player still voluntarily redesign when redesign costs real colony time?"* — plus the report's own suggestions (one reactive AI behavior; an external playtester who hasn't read the concept doc).
+
+**Creative assessment (quoted):**
+> The fun spike did the one job a fun spike exists to do: it proved the hook carries the game before we spend years building the game around it. The most valuable result is not the player's verdict but the mechanism behind it — raiders emergently besieging the cheapest material, and a scar report that named the choice that failed, with one enemy type and no simulation underneath. [...] The spike also did something better than confirm: it found the real boundary of the design. Construction is a colony verb; combat gets its agency from colonists and from objects the player pre-authored in peacetime. That boundary is not a constraint on the fantasy, it is the fantasy — the home you already built is the weapon, and architecture is a record of judgment rather than a real-time resource. [...] Proceed — and treat raider behavior, not raider variety, as the next thing that has to be proven.
+
+---
+
 > *Prototype code location: `prototypes/hollowdeep-fun-spike-concept/`*
 > *This code is throwaway. Never refactor into production.*

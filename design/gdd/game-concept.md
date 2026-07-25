@@ -50,7 +50,7 @@ The hook is explainable in one sentence, affects gameplay directly, and no shipp
 | ---- | ---- | ---- |
 | **Expression** (self-expression, creativity) | 1 | Blueprint-driven architecture with visible tactical consequences; defensive engineering as a creative medium |
 | **Challenge** (obstacle course, mastery) | 2 | Combat events judge colony readiness; in-battle tactics decide the cost |
-| **Discovery** (exploration, secrets) | 3 | Descending strata reveal richer materials and worse threats |
+| **Discovery** (exploration, secrets) | 3 | Two vectors (CD-17, 2026-07-25): descending strata reveal richer materials and worse threats (geographic — not MVP-validatable on a hand-authored mountain); learning enemy behavior across raids and turning it into counter-play (enemy-knowledge — MVP-testable, measure in MVP playtests) |
 | **Fantasy** (make-believe, role-playing) | 4 | The mountain-home commander; named colonists with histories |
 | **Narrative** (drama, story arc) | 5 | Emergent stories from battles, scars, and veteran colonists — never authored |
 | **Sensation** (sensory pleasure) | 6 | Warm Hearth, Cold Dark lighting; watching plans come alive |
