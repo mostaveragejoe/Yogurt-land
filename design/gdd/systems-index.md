@@ -107,6 +107,8 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 
 ## Cross-Cutting Contracts (annex — hard cap: one page, these three, no fourth)
 
+> **Authored 2026-07-25**: the binding one-page annex now lives at `docs/architecture/cross-cutting-contracts.md`, written against ADR-0001/0002/0003. The mid-battle-save question below is resolved: **NO** (CD-9). The summaries below are the original index-level sketch; the annex page is authoritative.
+
 1. **Time Authority tick contract (ADR-001)**: every simulation system implements the tick interface; every sim spec includes a "Behavior under each time authority" section. Named seam risks: Squad Prep at the mode-switch boundary (who is drafted, where they stand at transition); Notifications queueing across modes.
 2. **Serialization contract (with ADR set)**: authoritative state is plain data separable from Godot nodes; cross-object references by stable ID only; derived/cached state reconstructible, never serialized; every state-holding system exposes `Snapshot()`/`Restore()`; per-system seeded RNG streams. Round-trip test is a CI gate from the first state-holding system. **Open design question routed to creative-director before the Combat GDD: can the player save mid-battle?** ("No" is dramatically cheaper.)
 3. **World Change Events**: Terrain publishes; Pathfinding, Job Assignment, Rendering, Combat LOS, Repair, and the Notifications component subscribe. Dumb synchronous dispatcher by ADR.
@@ -169,7 +171,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 |--------|-------|
 | Total index entries | 35 |
 | Design docs started | 0 |
-| ADRs written | 0/3 (+contracts annex) |
+| ADRs written | 3/3 (all Proposed, spike-gated) + contracts annex |
 | Tier 0 spikes complete | 0/6 |
 | MVP systems designed | 0/25 |
 | Vertical Slice systems designed | 0/4 |
@@ -196,10 +198,10 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 
 ## Next Steps
 
-- [ ] CD-SYSTEMS gate (creative-director review of the system set vs pillars)
-- [ ] Write ADR-001, ADR-002, ADR-003 as Proposed (`/architecture-decision`)
-- [ ] Write the cross-cutting contracts annex (one page)
-- [ ] Build the debug console (Tier 0)
+- [x] CD-SYSTEMS gate (creative-director review of the system set vs pillars) — CONCERNS, 9 notes recorded above, 2026-07-24
+- [x] Write ADR-001, ADR-002, ADR-003 as Proposed (`/architecture-decision`) — done 2026-07-24
+- [x] Write the cross-cutting contracts annex (one page) — `docs/architecture/cross-cutting-contracts.md`, 2026-07-25
+- [x] Build the debug console (Tier 0) — `src/core/Diagnostics/` (plain-C# core) + `src/tools/DebugConsole/` (Godot overlay), 2026-07-25
 - [ ] Run `/prototype` — fun spike first, then terrain, mode-switch, pathfinding, save/load spikes
 - [ ] After spikes report: begin GDD authoring per the design order (`/design-system terrain-data-model`)
-- [ ] Route the mid-battle-save question to creative-director before the Combat GDD set
+- [x] Route the mid-battle-save question to creative-director before the Combat GDD set — resolved NO (CD-9, 2026-07-24)
