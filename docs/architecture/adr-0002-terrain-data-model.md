@@ -1,9 +1,9 @@
 # ADR-0002: Terrain Data Model
 
 ## Status
-Proposed
+Proposed — **spike-validated 2026-07-25 on 5 of 6 criteria; one gate open (see Spike Results)**
 
-*(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the terrain spike validates chunk size, memory footprint, allocation behavior, and render-extraction cost. Final numbers in this ADR are explicitly spike-pending and marked as such.)*
+*(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the terrain spike validates chunk size, memory footprint, allocation behavior, and render-extraction cost. The Tier 0 terrain spike has now run — see **Spike Results (2026-07-25)** below. Every measurable criterion passed and three tuning items are fixed; promotion to Accepted awaits only the frame-rate clause of validation criterion 5, which requires target hardware.)*
 
 ## Date
 2026-07-24
@@ -339,6 +339,45 @@ The growth firewall: **the cell struct only ever describes the architecture itse
 
 ## Migration Plan
 None — greenfield. The Tier 0 terrain spike implements this contract; if it falsifies chunk size, AoS, or extraction strategy, internals change behind the facade and this ADR is revised before promotion to Accepted. The Terrain Data Model GDD (gameplay rules: what is diggable, buildable adjacency, dig-time formulas) is authored after the spike, against this contract plus measured numbers. **Companion edits at adoption** (same changeset as this ADR): ADR-0001's dependency note gains the shared-primitives correction (`CellCoord`/`EntityId` live in `Hollowdeep.Core.Primitives`, not owned by either ADR), and ADR-0001's worked-example table gains the row *Terrain Data Model | neither — passive store | — | — | publishes only; never subscribes*.
+
+## Spike Results (2026-07-25)
+
+Tier 0 terrain spike: `prototypes/terrain-spike/` (data model, plain .NET 8) and
+`prototypes/terrain-spike/render/` (Godot 4.7.1 mono, Forward+). Full detail and method:
+`prototypes/terrain-spike/SPIKE-NOTE.md`. **38/38 contract correctness checks pass** (criteria 1–4).
+
+**Measured, MVP 128×128×16 unless noted:**
+
+| Measure | Measured | This ADR predicted | |
+|---|---|---|---|
+| `sizeof(TerrainCell)` | 8 bytes | 8 bytes | ✅ |
+| Cell memory, MVP / full-vision | 2.00 MB / 16.00 MB | "~2 MB" / "16 MB" | ✅ exact |
+| Chunk on LOH | No (2/8/32 KB at chunk 16/32/64) | off-LOH by construction | ✅ |
+| Steady-state allocation, dig-heavy | **0.17 B/mutation, 0 Gen0** over 60k mutations | zero steady-state | ✅ |
+| Mutation + publish | 0.338 µs; realistic frame (10 diggers) 0.0101 ms = **0.06%** of budget | — | ✅ |
+| Full-map walkability sweep (chunk 32) | **0.290 ms = 1.7%** of a 16.6 ms frame | the falsification risk | ✅ not falsified |
+| Chunk extraction | 1 chunk 1.10 µs; full layer 0.049 ms = 0.3% frame | — | ✅ |
+| Bulk `Apply` | 2→0.67 µs · 16→7.78 · 64→32.0 · 256→69.9 µs | — | ✅ |
+| Snapshot / Restore, MVP | 0.61 ms (2.01 MB one-shot) / 0.99 ms | strategy deferred to spike | ✅ answered |
+
+**Three decisions this ADR deferred, now fixed:**
+
+1. **Chunk size = 32×32×1, confirmed.** Sweep gains plateau after 32 (16: 0.411 ms, 32: 0.290, 64: 0.282) while rebuild cost grows with chunk area (0.31 / 1.10 / 4.79 µs). 32 is the balance point. `ChunkSize`/`ChunkOf` remain the only sanctioned mapping regardless.
+2. **The AoS concession is retired — measurement falsified it in the good direction.** This ADR conceded that a hot/cold SoA split "would roughly double cache density" for sweeps. It does not: chunked AoS measured **21–46% faster** than a flat two-plane SoA sweep, because each 8 KB chunk is one L1/L2-resident sequential stream. *(Caveat: the SoA arm was a straightforward two-array scan, not a vectorised SoA; a tuned SoA could narrow the gap. Immaterial to the decision at 1.7% of a frame.)* **The hot/cold-split fallback is removed from the risk list**; the Negative-consequences bullet conceding sweep cache density no longer applies.
+3. **Snapshot buffer strategy = one-shot allocation.** 0.61 ms / 2.01 MB at MVP (8.90 ms / 16.06 MB at full-vision) at the CD-9 mode-switch autosave — a non-gameplay moment. No buffer-reuse machinery is warranted.
+
+**Render backend (the routed open question) — GridMap, `cell_octant_size = 32`.** 3-layer cutaway, 589,824 primitives, 14.25 MB video memory (identical across backends — geometry sets it, not backend):
+
+| Backend | Draw calls | Build | Per-dig update |
+|---|---|---|---|
+| MultiMesh (per-instance / bulk `Buffer` / pooled+bulk) | 82 | 521 / 70 / 49 ms | 502 / 524 / **452 µs** |
+| GridMap octant 4 / 8 / 16 / **32** | 1233 / 343 / 108 / **32** | ~33 ms | 1.32 / 1.94 / 1.80 / **1.85 µs** |
+
+GridMap at octant 32 wins **both** axes: 2.6× fewer draw calls and ~240× cheaper incremental update. MultiMesh's cost is structural — a one-cell change rewrites the chunk's ~2000-instance buffer; bulk upload and pooling only improved initial build. At 10 concurrent diggers MultiMesh costs ~4.5 ms/frame (27% of budget) vs GridMap's ~0.02 ms. **This does not alter the forbidden pattern**: `TerrainWorld` remained the single source of truth and GridMap was a pure write target — the "render backend reading from the model" role this ADR already permits.
+
+**New constraint discovered — routed to the Terrain Rendering & Cutaway quick-spec:** GridMap stores **one item id per cell**, so it cannot represent floor *and* wall in the same cell. Resolve with two stacked GridMaps (floor layer + wall layer) or a MeshLibrary item per (floor, wall) pair. The spike rendered wall-or-floor — the common case, not the complete one.
+
+**Open before promotion to Accepted:** validation criterion 5's **frame-rate clause**. The spike ran on software Vulkan (lavapipe, 3–4 fps) — meaningless as a frame-rate signal. Draw calls, memory, primitive counts, and CPU-side costs above *are* hardware-independent. Re-run `prototypes/terrain-spike/render/` on target hardware to close it. Also unmeasured: GridMap collision/physics cost (shapes disabled; the grid is not physics-driven) and procgen-era sparse chunk storage (out of MVP scope).
 
 ## Validation Criteria
 1. Terrain assembly has **zero Godot references** (CI grep) and its full unit suite runs headless: mutation→event pairing with correct `Previous`, damage clamp/destroy-at-zero, repair clamp-at-max, bulk `Apply` rule-3 semantics (reject-on-invalid, duplicate-cell rejection, no-op dropping, order preservation), passability, bounds, mutation-window assertion firing on out-of-window writes.

@@ -215,6 +215,6 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 - [x] Write ADR-001, ADR-002, ADR-003 as Proposed (`/architecture-decision`) — done 2026-07-24
 - [x] Write the cross-cutting contracts annex (one page) — `docs/architecture/cross-cutting-contracts.md`, 2026-07-25
 - [x] Build the debug console (Tier 0) — `src/core/Diagnostics/` (plain-C# core) + `src/tools/DebugConsole/` (Godot overlay), 2026-07-25
-- [ ] Run `/prototype` — Tier 0 spikes. **Fun spike: DONE 2026-07-25 — PROCEED, CD-PLAYTEST CONFIRM (notes CD-10–CD-18 above)**. Remaining: terrain → mode-switch → pathfinding → save/load
+- [ ] Run `/prototype` — Tier 0 spikes. **Fun spike: DONE 2026-07-25 — PROCEED, CD-PLAYTEST CONFIRM (notes CD-10–CD-18 above)**. **Terrain spike: DONE 2026-07-25 — YES; ADR-0002 validated 5/6 criteria, chunk 32 confirmed, AoS concession retired, GridMap @ octant 32 adopted as render backend; frame-rate clause needs target hardware.** Remaining: mode-switch → pathfinding → save/load
 - [ ] After spikes report: begin GDD authoring per the design order (`/design-system terrain-data-model`)
 - [x] Route the mid-battle-save question to creative-director before the Combat GDD set — resolved NO (CD-9, 2026-07-24)

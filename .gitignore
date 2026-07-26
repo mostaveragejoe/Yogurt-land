@@ -142,3 +142,9 @@ $RECYCLE.BIN/
 *.msm
 *.msp
 *.lnk
+
+# === Prototype build output (throwaway spikes) ===
+prototypes/**/bin/
+prototypes/**/obj/
+prototypes/**/.godot/
+prototypes/**/.mono/

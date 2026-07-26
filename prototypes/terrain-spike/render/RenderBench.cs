@@ -1,0 +1,279 @@
+// PROTOTYPE - NOT FOR PRODUCTION
+// Question: MultiMesh vs GridMap as the render backend reading ADR-0002's model —
+//   draw calls, video memory, build cost, and per-dig chunk rebuild cost at MVP
+//   cutaway scale. (ADR-0002 open question: "render backend".)
+// Date: 2026-07-25
+
+using System.Diagnostics;
+using Godot;
+using TerrainSpike;
+
+namespace TerrainSpikeRender;
+
+public partial class RenderBench : Node3D
+{
+    // MVP mountain; the cutaway shows the active layer plus two below it.
+    private const int SizeX = 128, SizeY = 128, Layers = 16, ChunkSize = 32;
+    private const int VisibleLayers = 3, TopLayer = 6;
+
+    private TerrainWorld _world;
+    private MutationWindow _window;
+    private ushort _dirt, _granite, _reinforced, _floor;
+    private string _backend = "multimesh";
+    private int _octant = 8;                                  // GridMap batching granularity (default 8)
+    private int _frame;
+    private long _buildMs;
+    private int _nodeCount;
+
+    // MultiMesh backend bookkeeping: one MultiMesh per (chunk, material).
+    private readonly Dictionary<(ChunkCoord chunk, ushort mat), MultiMeshInstance3D> _mmi = new();
+    private GridMap _gridMap;
+    private readonly Dictionary<ushort, Material> _materials = new();
+    private BoxMesh _cubeMesh;
+
+    public override void _Ready()
+    {
+        foreach (string a in OS.GetCmdlineUserArgs())
+        {
+            if (a.StartsWith("backend=")) _backend = a["backend=".Length..];
+            if (a.StartsWith("octant=")) _octant = int.Parse(a["octant=".Length..]);
+        }
+
+        GD.Print($"=== RENDER BACKEND BENCH: {_backend} ===");
+        BuildWorld();
+        BuildSceneRig();
+
+        var sw = Stopwatch.StartNew();
+        if (_backend == "gridmap") BuildGridMap();
+        else BuildMultiMesh();
+        sw.Stop();
+        _buildMs = sw.ElapsedMilliseconds;
+        GD.Print($"initial build: {_buildMs} ms, {_nodeCount} render nodes");
+    }
+
+    private void BuildWorld()
+    {
+        var cat = new MaterialCatalog();
+        _dirt = cat.Register("dirt", 1, 30);
+        _granite = cat.Register("granite", 2, 120);
+        _reinforced = cat.Register("reinforced", 3, 400);
+        _floor = cat.Register("rock_floor", 1, 0);
+        _window = new MutationWindow();
+        _world = new TerrainWorld(new WorldBounds(SizeX, SizeY, Layers), cat,
+                                  new NullSink(), _window, ChunkSize);
+
+        // Solid mountain with strata by depth, then carve a colony (deterministic seed).
+        _world.PopulateForLoad(w =>
+        {
+            for (int z = 0; z < Layers; z++)
+            {
+                ushort mat = z < 4 ? _dirt : z < 10 ? _granite : _reinforced;
+                for (int y = 0; y < SizeY; y++)
+                    for (int x = 0; x < SizeX; x++)
+                        w.LoadSetCell(new CellCoord(x, y, z),
+                            new TerrainCell { FloorTypeId = _floor, WallTypeId = mat, WallHp = 30 });
+            }
+        });
+
+        var rng = new Random(7);
+        using (_window.Open())
+            for (int z = 0; z < Layers; z++)
+                for (int room = 0; room < 12; room++)
+                {
+                    int rx = rng.Next(SizeX - 12), ry = rng.Next(SizeY - 12), rw = rng.Next(4, 12), rh = rng.Next(4, 12);
+                    for (int y = ry; y < Math.Min(ry + rh, SizeY); y++)
+                        for (int x = rx; x < Math.Min(rx + rw, SizeX); x++)
+                            _world.ClearWall(new CellCoord(x, y, z));
+                }
+    }
+
+    private void BuildSceneRig()
+    {
+        _cubeMesh = new BoxMesh { Size = Vector3.One };
+        foreach ((ushort id, Color c) in new[]
+                 { (_dirt, new Color(0.49f, 0.36f, 0.24f)), (_granite, new Color(0.52f, 0.52f, 0.55f)),
+                   (_reinforced, new Color(0.31f, 0.46f, 0.56f)), (_floor, new Color(0.25f, 0.22f, 0.19f)) })
+            _materials[id] = new StandardMaterial3D { AlbedoColor = c };
+
+        var cam = new Camera3D { Fov = 60 };
+        AddChild(cam);                                        // must be in-tree BEFORE LookAt
+        cam.Position = new Vector3(64, 70, 150);
+        cam.LookAt(new Vector3(64, -7, 64), Vector3.Up);      // frame the whole cutaway slice
+        var sun = new DirectionalLight3D();
+        sun.RotateX(-Mathf.Pi / 3);
+        AddChild(sun);
+    }
+
+    /// <summary>Backend A: one MultiMesh per (chunk, material) — the ADR's GetChunkCells extraction path.</summary>
+    private void BuildMultiMesh()
+    {
+        for (int z = TopLayer; z < TopLayer + VisibleLayers; z++)
+            for (int cy = 0; cy < _world.ChunksY; cy++)
+                for (int cx = 0; cx < _world.ChunksX; cx++)
+                    RebuildChunk(new ChunkCoord(cx, cy, z));
+    }
+
+    // Pooled extraction scratch — reused across rebuilds ("multimesh_pooled").
+    private readonly Dictionary<ushort, List<Transform3D>> _scratch = new();
+    private readonly Dictionary<(ChunkCoord, ushort), float[]> _bufPool = new();
+
+    private void RebuildChunk(ChunkCoord chunk)
+    {
+        ReadOnlySpan<TerrainCell> cells = _world.GetChunkCells(chunk);
+        Dictionary<ushort, List<Transform3D>> byMat;
+        if (_backend == "multimesh_pooled")
+        {
+            byMat = _scratch;
+            foreach (List<Transform3D> l in byMat.Values) l.Clear();
+        }
+        else byMat = new Dictionary<ushort, List<Transform3D>>();
+
+        for (int i = 0; i < cells.Length; i++)
+        {
+            int lx = i & (ChunkSize - 1), ly = i >> 5;
+            float wx = chunk.X * ChunkSize + lx, wy = chunk.Y * ChunkSize + ly;
+            float wz = -chunk.Z;                                  // sim Z-down -> Godot Y-up (view layer's mapping)
+
+            if (cells[i].WallTypeId != 0)
+            {
+                if (!byMat.TryGetValue(cells[i].WallTypeId, out List<Transform3D> l))
+                    byMat[cells[i].WallTypeId] = l = new List<Transform3D>();
+                l.Add(new Transform3D(Basis.Identity, new Vector3(wx, wz, wy)));
+            }
+            else if (cells[i].FloorTypeId != 0)                   // floors only visible where no wall
+            {
+                if (!byMat.TryGetValue(_floor, out List<Transform3D> l))
+                    byMat[_floor] = l = new List<Transform3D>();
+                l.Add(new Transform3D(Basis.Identity.Scaled(new Vector3(1, 0.1f, 1)), new Vector3(wx, wz - 0.45f, wy)));
+            }
+        }
+
+        foreach ((ushort mat, List<Transform3D> xforms) in byMat)
+        {
+            if (xforms.Count == 0) continue;
+            var key = (chunk, mat);
+            if (!_mmi.TryGetValue(key, out MultiMeshInstance3D inst))
+            {
+                inst = new MultiMeshInstance3D
+                {
+                    Multimesh = new MultiMesh
+                    { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, Mesh = _cubeMesh },
+                    MaterialOverride = _materials[mat],
+                };
+                AddChild(inst);
+                _mmi[key] = inst;
+                _nodeCount++;
+            }
+            inst.Multimesh.InstanceCount = xforms.Count;
+
+            if (_backend is "multimesh_buffer" or "multimesh_pooled")
+            {
+                // Bulk upload: one marshalled call for the whole chunk instead of N.
+                // Pooled variant also reuses the float[] across rebuilds.
+                float[] buf;
+                if (_backend == "multimesh_pooled")
+                {
+                    if (!_bufPool.TryGetValue(key, out buf) || buf.Length != xforms.Count * 12)
+                        _bufPool[key] = buf = new float[xforms.Count * 12];
+                }
+                else buf = new float[xforms.Count * 12];
+                for (int i = 0; i < xforms.Count; i++)
+                {
+                    Transform3D t = xforms[i];
+                    int o = i * 12;
+                    buf[o + 0] = t.Basis.X.X; buf[o + 1] = t.Basis.Y.X; buf[o + 2] = t.Basis.Z.X; buf[o + 3] = t.Origin.X;
+                    buf[o + 4] = t.Basis.X.Y; buf[o + 5] = t.Basis.Y.Y; buf[o + 6] = t.Basis.Z.Y; buf[o + 7] = t.Origin.Y;
+                    buf[o + 8] = t.Basis.X.Z; buf[o + 9] = t.Basis.Y.Z; buf[o + 10] = t.Basis.Z.Z; buf[o + 11] = t.Origin.Z;
+                }
+                inst.Multimesh.Buffer = buf;
+            }
+            else
+            {
+                for (int i = 0; i < xforms.Count; i++) inst.Multimesh.SetInstanceTransform(i, xforms[i]);
+            }
+        }
+    }
+
+    /// <summary>Backend B: GridMap + runtime MeshLibrary — Godot's native cell-based tool.</summary>
+    private void BuildGridMap()
+    {
+        var lib = new MeshLibrary();
+        foreach ((ushort id, Material m) in _materials)
+        {
+            var mesh = new BoxMesh { Size = Vector3.One, Material = m };
+            lib.CreateItem(id);
+            lib.SetItemMesh(id, mesh);
+            lib.SetItemName(id, $"mat{id}");
+        }
+        _gridMap = new GridMap { CellSize = Vector3.One, MeshLibrary = lib, CellOctantSize = _octant };
+        AddChild(_gridMap);
+        _nodeCount = 1;
+
+        for (int z = TopLayer; z < TopLayer + VisibleLayers; z++)
+            for (int y = 0; y < SizeY; y++)
+                for (int x = 0; x < SizeX; x++)
+                {
+                    TerrainCell c = _world.GetCell(new CellCoord(x, y, z));
+                    if (c.WallTypeId != 0) _gridMap.SetCellItem(new Vector3I(x, -z, y), c.WallTypeId);
+                    else if (c.FloorTypeId != 0) _gridMap.SetCellItem(new Vector3I(x, -z, y), _floor);
+                }
+    }
+
+    public override void _Process(double delta)
+    {
+        _frame++;
+        if (_frame == 60) Sample();
+        if (_frame == 61) DigRebuildBench();
+        if (_frame >= 62) GetTree().Quit();
+    }
+
+    private void Sample()
+    {
+        ulong draws = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalDrawCallsInFrame);
+        ulong prims = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame);
+        ulong objs = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalObjectsInFrame);
+        ulong vmem = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.VideoMemUsed);
+        ulong bmem = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.BufferMemUsed);
+        double fps = Performance.GetMonitor(Performance.Monitor.TimeFps);
+
+        GD.Print($"RESULT backend={_backend}");
+        GD.Print($"RESULT draw_calls={draws}");
+        GD.Print($"RESULT objects={objs}");
+        GD.Print($"RESULT primitives={prims}");
+        GD.Print($"RESULT video_mem_mb={vmem / 1024.0 / 1024.0:F2}");
+        GD.Print($"RESULT buffer_mem_mb={bmem / 1024.0 / 1024.0:F2}");
+        GD.Print($"RESULT render_nodes={_nodeCount}");
+        GD.Print($"RESULT build_ms={_buildMs}");
+        GD.Print($"RESULT fps_llvmpipe_not_representative={fps:F1}");
+
+        Image img = GetViewport().GetTexture().GetImage();
+        img.SavePng($"user://terrain-spike-{_backend}.png");
+        GD.Print($"RESULT screenshot={ProjectSettings.GlobalizePath($"user://terrain-spike-{_backend}.png")}");
+    }
+
+    /// <summary>The steady-state cost that actually matters: a colonist finishes a dig.</summary>
+    private void DigRebuildBench()
+    {
+        const int digs = 200;
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < digs; i++)
+        {
+            int x = 20 + i % 40, y = 20 + (i / 40) % 40, z = TopLayer;
+            var c = new CellCoord(x, y, z);
+            using (_window.Open()) _world.ClearWall(c);
+
+            if (_backend == "gridmap")
+                _gridMap.SetCellItem(new Vector3I(x, -z, y), _floor);      // native per-cell update
+            else
+                RebuildChunk(_world.ChunkOf(c));                            // rebuild the dirty chunk
+        }
+        sw.Stop();
+        GD.Print($"RESULT dig_rebuild_us_per_dig={sw.Elapsed.TotalMilliseconds / digs * 1000:F2}");
+    }
+
+    private sealed class NullSink : ITerrainChangeSink
+    {
+        public void Publish(in TerrainChangeBatch batch) { }
+        public void PublishWorldReloaded() { }
+    }
+}

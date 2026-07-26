@@ -7,7 +7,7 @@
 
 - **Engine**: Godot 4.7.1
 - **Language**: C# (.NET 8+, primary), C++ via GDExtension (native plugins only)
-- **Rendering**: [TO BE CONFIGURED] — evaluate Godot's Forward+ renderer against the "Warm Hearth, Cold Dark" many-local-lights visual direction; `AreaLight3D` (new in 4.7) is a strong candidate for the warm claimed-territory glow. Decide during `/art-bible` or the Tier 0 terrain spike.
+- **Rendering**: **Forward+** (terrain spike ran on it 2026-07-25 and met the draw-call budget); terrain render backend is **GridMap + MeshLibrary at `cell_octant_size = 32`**, reading from `TerrainWorld` — never authoritative (ADR-0002). Still open: the many-local-lights evaluation for "Warm Hearth, Cold Dark" and `AreaLight3D` (new in 4.7) for claimed-territory glow — decide in the art/lighting pass, not the data model.
 - **Physics**: [TO BE CONFIGURED] — likely minimal use; the layered tile-grid terrain (floor+wall per cell) is not physics-engine-driven, closer to instanced prefab placement than a physics simulation. Revisit if ragdoll/projectile physics are needed for tactics combat.
 
 ## Input & Platform
@@ -37,8 +37,9 @@
 
 - **Target Framerate**: 60 fps
 - **Frame Budget**: 16.6 ms
-- **Draw Calls**: [TO BE CONFIGURED — engine changed from Unity's SRP Batcher assumption; set a real ceiling from the Tier 0 terrain spike once a GridMap-based or custom instanced-rendering approach is prototyped]
-- **Memory Ceiling**: [TO BE CONFIGURED — set once target hardware and world-size ceiling are known]
+- **Draw Calls**: **terrain budget ≤ 150 draw calls** for the visible 3-layer cutaway at MVP map size (measured 2026-07-25, terrain spike: GridMap at `cell_octant_size = 32` renders it in **32** draw calls; octant 16 = 108; the default octant 8 = 343 and is over budget). Leaves headroom for entities, VFX, and UI within a provisional **500 draw-call whole-frame ceiling**. Re-check the whole-frame number on target hardware.
+- **Memory Ceiling**: terrain cell data is **2 MB at MVP** (128×128×16) and **16 MB at the full-vision ceiling** (256×256×32); terrain render/video memory **14.25 MB** for the 3-layer cutaway (measured 2026-07-25). Chunks are 8 KB and stay off the Large Object Heap. **Whole-process ceiling still [TO BE CONFIGURED]** — set once target hardware is fixed; terrain is demonstrably not the memory risk.
+- **Allocation**: **zero steady-state allocation** in the simulation path is a measured, enforceable standard, not an aspiration — the terrain spike recorded 0.17 B/mutation and 0 Gen0 collections across 60k mutations. Regressions here are bugs.
 
 ## Testing
 

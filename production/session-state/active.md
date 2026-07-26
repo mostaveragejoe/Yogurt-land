@@ -11,7 +11,17 @@ Tier 0 FUN SPIKE: **COMPLETE — PROCEED, CD-PLAYTEST CONFIRM (2026-07-25)**.
 - Hypothesis CONFIRMED (user debrief); report at prototypes/hollowdeep-fun-spike-concept/REPORT.md (incl. gate verdict + 7 caveats)
 - CD notes **CD-10–CD-18** recorded in systems-index (binding on Combat set, Construction, Blueprint UI, Squad Prep, Raider Decision-Making, Raid Trigger, Colonist Entity, Repair & Rebuild, Job Assignment, Notifications)
 - Headline decisions: combat changes world state, never authors it (CD-10); player-activated pre-built objects > autonomous traps (CD-11); deployables = prep expressed spatially, VS-era (CD-12); downed→stabilize, no free revives (CD-13); raider reactivity = MVP acceptance criterion in #23 (CD-14); threat-info floor/ceiling + cross-raid intel (CD-15); prep phase must present a real decision (CD-16); Discovery has an MVP-testable enemy-knowledge vector (CD-17, applied to concept doc + index); lesson-to-answer latency budget on #25 (CD-18)
-- **Next: remaining Tier 0 spikes in order — terrain → mode-switch → pathfinding → save/load** (technical spikes; use /prototype spike mode or direct engine builds against the ADR contracts; results promote ADR-0001/0002/0003 to Accepted)
+**TERRAIN SPIKE: COMPLETE 2026-07-25 — YES** (`prototypes/terrain-spike/`, SPIKE-NOTE.md).
+- 38/38 ADR-0002 contract checks pass. Memory 2 MB MVP / 16 MB full-vision (exactly as predicted); 0.17 B/mutation + 0 Gen0 over 60k mutations (zero-allocation CONFIRMED); full-map sweep 0.290 ms = 1.7% of frame; snapshot 0.61 ms one-shot.
+- **AoS falsification test did NOT falsify AoS** — chunked AoS is 21–46% FASTER than flat SoA; ADR-0002's cache-density concession + hot/cold fallback are retired.
+- **Chunk size 32 confirmed**; **snapshot = one-shot allocation** (no buffer-reuse machinery).
+- **Render backend decided: GridMap + MeshLibrary @ `cell_octant_size = 32`** — 32 draw calls and ~1.85 µs/dig vs MultiMesh's 82 draw calls and ~452 µs/dig (~240×). TerrainWorld stayed authoritative; GridMap is a pure write target (ADR-permitted role).
+- **New constraint routed to Terrain Rendering quick-spec**: GridMap holds ONE item id per cell → cannot show floor+wall in the same cell; needs two stacked GridMaps or per-(floor,wall) MeshLibrary items.
+- Budgets filled in technical-preferences (draw calls, memory, allocation, renderer + backend).
+- **OPEN**: ADR-0002 criterion 5's frame-rate clause — software Vulkan (lavapipe) ran 3–4 fps, meaningless. Re-run `prototypes/terrain-spike/render/` on target hardware to promote ADR-0002 to Accepted. Also unmeasured: GridMap collision cost, procgen sparse chunks.
+- Environment note: Godot 4.7.1 mono + .NET 8 SDK + Xvfb/lavapipe all work in this container (Godot at scratchpad `Godot_v4.7.1-stable_mono_linux_x86_64/`).
+
+- **Next: remaining Tier 0 spikes in order — mode-switch → pathfinding → save/load** (results promote ADR-0001/0003 to Accepted)
 
 Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debug console — committed and pushed.
 
