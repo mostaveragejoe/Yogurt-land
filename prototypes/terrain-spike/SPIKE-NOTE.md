@@ -92,7 +92,10 @@ backends** — geometry, not backend, sets it).
 | GridMap, octant 4 | 1233 | 36 ms | 1.32 µs | 1 |
 | GridMap, octant 8 (default) | 343 | 36 ms | 1.94 µs | 1 |
 | GridMap, octant 16 | 108 | 32 ms | 1.80 µs | 1 |
-| **GridMap, octant 32** | **32** | **33 ms** | **1.85 µs** | **1** |
+| GridMap, octant 32 | 32 | 33 ms | 1.85 µs | 1 |
+| **TWO GridMaps (floor + wall), octant 32** | **32** | **39–42 ms** | **~2 µs** (median of 5; 1.75–9.6 range) | **2** |
+| TWO GridMaps (floor + wall), octant 64 | 8 | 38 ms | ~2 µs | 2 |
+| TWO GridMaps (floor + wall), octant 16 | 128 | 124 ms | 1.65 µs | 2 |
 
 **GridMap at octant 32 beats MultiMesh on both axes at once**: 32 draw calls vs 82 (2.6×
 fewer) *and* ~1.9 µs vs ~452 µs per dig (**~240× cheaper**). MultiMesh's cost is structural,
@@ -111,15 +114,63 @@ is untouched.
 1. **Adopt GridMap as the MVP render backend**, `cell_octant_size = 32`, in the Terrain
    Rendering & Cutaway quick-spec. Retire the MultiMesh option unless a later requirement
    (per-instance custom data for per-cell shader variation) forces it back.
-2. **Design constraint for the rendering quick-spec (new, found by this spike)**: GridMap
-   stores **one item id per cell**, so it cannot represent floor *and* wall in the same cell.
-   Needs either two stacked GridMaps (floor layer + wall layer) or a MeshLibrary item per
-   (floor, wall) pair. The bench rendered wall-or-floor, which is the common case but not the
-   complete one — **resolve this before the rendering spec is final.**
+2. **Floor + wall in the same cell — RESOLVED (2026-07-26): two stacked GridMaps.**
 3. **Three ADR-0002 corrections** (recorded in the ADR's Spike Results section): retire the
    AoS/SoA concession and its risk row; fix chunk size at 32; adopt one-shot snapshot
    allocation (no buffer-reuse machinery — 0.61 ms / 2 MB at a non-gameplay moment).
 4. **Fill the `[TO BE CONFIGURED]` budgets** in technical-preferences from these numbers.
+
+## Addendum (2026-07-26): the floor+wall problem, solved
+
+The first pass flagged a blocker: a single GridMap stores **one item id per cell**, so it
+cannot show a floor *and* a wall in the same cell. Since a floor-and-wall-per-cell grid is the
+Gnomoria-style world model this whole game rests on (concept doc Core Mechanic 1), a backend
+that cannot express it is disqualified regardless of its draw-call numbers.
+
+**Important scope note: this was never a data-model defect.** `TerrainCell` has always carried
+`FloorTypeId` and `WallTypeId` as separate fields, and every correctness check passed. The
+limitation was entirely in the chosen render backend — which is exactly the separation ADR-0002's
+"GridMap is at most a render backend" rule exists to protect. The model needed no change.
+
+**Fix: two stacked GridMaps** — a wall map (full-cube items, three material tiers) and a floor
+map (thin slab items offset to the bottom of the cell via `SetItemMeshTransform`), sharing one
+coordinate system, cell size, and octant size. Both are pure write targets fed from
+`TerrainWorld`.
+
+**Measured (3-layer cutaway, 128×128, octant 32):**
+
+| | single GridMap | **two GridMaps** |
+|---|---|---|
+| Floor + wall in one cell | **impossible** | **yes** |
+| Draw calls | 32 | **32 (unchanged)** |
+| Primitives | 589,824 | 1,157,796 |
+| Video memory | 14.25 MB | 16.42 MB (+2.17) |
+| Initial build | 33 ms | 39–42 ms |
+| Per-dig update | 1.85 µs | ~2 µs |
+| Render nodes | 1 | 2 |
+
+**Direct capability proof** (asserted in-engine, not inferred): on the top visible layer,
+**15,763 cells carry both a floor and a wall in the render, and that count matches
+`TerrainWorld` exactly** (`render_matches_model=True`), alongside 621 floor-only cells (the
+carved rooms) and 0 wall-only cells. A low-angle screenshot shows the granite layer with the
+floor-slab band of the layer beneath visible in cross-section — the geological-cross-section
+read the art bible calls for, which the single-GridMap backend could not have produced.
+
+**Cost of the fix: effectively nothing.** Draw calls are identical, video memory rises 2.17 MB,
+per-dig cost is unchanged, and the dig update actually gets *simpler* — clearing a wall is one
+`SetCellItem(pos, -1)` because the floor is already present, instead of swapping a wall item for
+a floor item.
+
+**Octant recommendation: 32.** Octant 64 halves draw calls again (8) at identical per-dig cost,
+but coarsens frustum-culling granularity to 2×2 octants per layer at MVP width; octant 32 keeps
+32 draw calls (well inside the ≤150 terrain budget), matches the data-model chunk size, and
+leaves useful culling granularity at full-vision scale. Move to 64 only if draw calls ever
+become the binding constraint.
+
+**This generalises.** Any future per-cell visual layer (ore veins, floor coverings, ceiling
+detail) is another stacked GridMap at ~2 MB of video memory, not a redesign. The rejected
+alternative — one GridMap with a MeshLibrary item per (floor, wall) pair — dies on combinatorics
+once `StyleId` multiplies in.
 
 ## What this spike did NOT answer
 

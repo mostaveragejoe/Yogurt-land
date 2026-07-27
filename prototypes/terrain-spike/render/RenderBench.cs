@@ -45,6 +45,7 @@ public partial class RenderBench : Node3D
 
         var sw = Stopwatch.StartNew();
         if (_backend == "gridmap") BuildGridMap();
+        else if (_backend == "gridmap_two") BuildGridMapTwo();
         else BuildMultiMesh();
         sw.Stop();
         _buildMs = sw.ElapsedMilliseconds;
@@ -97,8 +98,10 @@ public partial class RenderBench : Node3D
 
         var cam = new Camera3D { Fov = 60 };
         AddChild(cam);                                        // must be in-tree BEFORE LookAt
-        cam.Position = new Vector3(64, 70, 150);
-        cam.LookAt(new Vector3(64, -7, 64), Vector3.Up);      // frame the whole cutaway slice
+        // Low angle at the cutaway edge: shows the layered cross-section, where a cell's
+        // floor and wall are both visible — the case the single-GridMap backend cannot express.
+        cam.Position = new Vector3(64, 4, 148);
+        cam.LookAt(new Vector3(64, -8, 100), Vector3.Up);
         var sun = new DirectionalLight3D();
         sun.RotateX(-Mathf.Pi / 3);
         AddChild(sun);
@@ -194,6 +197,46 @@ public partial class RenderBench : Node3D
         }
     }
 
+    /// <summary>
+    /// Backend C: TWO stacked GridMaps — one for floors, one for walls — so a cell can
+    /// carry BOTH, which the single-GridMap backend structurally cannot (one item id per
+    /// cell). Floors are rendered for EVERY cell that has one, including under walls.
+    /// </summary>
+    private GridMap _floorMap;
+
+    private void BuildGridMapTwo()
+    {
+        var wallLib = new MeshLibrary();
+        foreach ((ushort id, Material m) in _materials)
+        {
+            wallLib.CreateItem(id);
+            wallLib.SetItemMesh(id, new BoxMesh { Size = Vector3.One, Material = m });
+            wallLib.SetItemName(id, $"wall{id}");
+        }
+        // Floors are thin slabs sitting at the bottom of the cell.
+        var floorLib = new MeshLibrary();
+        var slab = new BoxMesh { Size = new Vector3(1, 0.1f, 1), Material = _materials[_floor] };
+        floorLib.CreateItem(_floor);
+        floorLib.SetItemMesh(_floor, slab);
+        floorLib.SetItemMeshTransform(_floor, new Transform3D(Basis.Identity, new Vector3(0, -0.45f, 0)));
+        floorLib.SetItemName(_floor, "floor");
+
+        _gridMap = new GridMap { CellSize = Vector3.One, MeshLibrary = wallLib, CellOctantSize = _octant };
+        _floorMap = new GridMap { CellSize = Vector3.One, MeshLibrary = floorLib, CellOctantSize = _octant };
+        AddChild(_gridMap); AddChild(_floorMap);
+        _nodeCount = 2;
+
+        for (int z = TopLayer; z < TopLayer + VisibleLayers; z++)
+            for (int y = 0; y < SizeY; y++)
+                for (int x = 0; x < SizeX; x++)
+                {
+                    TerrainCell c = _world.GetCell(new CellCoord(x, y, z));
+                    var pos = new Vector3I(x, -z, y);
+                    if (c.FloorTypeId != 0) _floorMap.SetCellItem(pos, _floor);   // ALWAYS, even under a wall
+                    if (c.WallTypeId != 0) _gridMap.SetCellItem(pos, c.WallTypeId);
+                }
+    }
+
     /// <summary>Backend B: GridMap + runtime MeshLibrary — Godot's native cell-based tool.</summary>
     private void BuildGridMap()
     {
@@ -246,6 +289,34 @@ public partial class RenderBench : Node3D
         GD.Print($"RESULT build_ms={_buildMs}");
         GD.Print($"RESULT fps_llvmpipe_not_representative={fps:F1}");
 
+        if (_backend == "gridmap_two")
+        {
+            // The capability under test: ONE cell carrying BOTH a floor and a wall.
+            int both = 0, wallOnly = 0, floorOnly = 0;
+            for (int y = 0; y < SizeY; y++)
+                for (int x = 0; x < SizeX; x++)
+                {
+                    var p = new Vector3I(x, -TopLayer, y);
+                    bool hasWall = _gridMap.GetCellItem(p) != GridMap.InvalidCellItem;
+                    bool hasFloor = _floorMap.GetCellItem(p) != GridMap.InvalidCellItem;
+                    if (hasWall && hasFloor) both++;
+                    else if (hasWall) wallOnly++;
+                    else if (hasFloor) floorOnly++;
+                }
+            GD.Print($"RESULT cells_with_BOTH_floor_and_wall={both}");
+            GD.Print($"RESULT cells_wall_only={wallOnly}  cells_floor_only={floorOnly}");
+
+            // And that the model agrees: same layer, counted from TerrainWorld.
+            int modelBoth = 0;
+            for (int y = 0; y < SizeY; y++)
+                for (int x = 0; x < SizeX; x++)
+                {
+                    TerrainCell c = _world.GetCell(new CellCoord(x, y, TopLayer));
+                    if (c.FloorTypeId != 0 && c.WallTypeId != 0) modelBoth++;
+                }
+            GD.Print($"RESULT model_cells_with_both={modelBoth}  render_matches_model={both == modelBoth}");
+        }
+
         Image img = GetViewport().GetTexture().GetImage();
         img.SavePng($"user://terrain-spike-{_backend}.png");
         GD.Print($"RESULT screenshot={ProjectSettings.GlobalizePath($"user://terrain-spike-{_backend}.png")}");
@@ -264,6 +335,8 @@ public partial class RenderBench : Node3D
 
             if (_backend == "gridmap")
                 _gridMap.SetCellItem(new Vector3I(x, -z, y), _floor);      // native per-cell update
+            else if (_backend == "gridmap_two")
+                _gridMap.SetCellItem(new Vector3I(x, -z, y), -1);          // clear the wall; floor already there
             else
                 RebuildChunk(_world.ChunkOf(c));                            // rebuild the dirty chunk
         }

@@ -17,8 +17,12 @@ findings, tables, and the three ADR corrections it produced.
 - The AoS falsification test did **not** falsify AoS — chunked AoS is 21–46% *faster* than
   flat SoA; the ADR's "we accept worse sweep cache density" concession was unnecessary.
 - Chunk size **32** confirmed.
-- **GridMap at `cell_octant_size = 32` wins the backend question**: 32 draw calls and ~1.9 µs
-  per dig, versus MultiMesh's 82 draw calls and ~452 µs per dig.
+- **Two stacked GridMaps at `cell_octant_size = 32` win the backend question**: 32 draw calls
+  and ~2 µs per dig, versus MultiMesh's 82 draw calls and ~452 µs per dig.
+- **Floor + wall in the same cell (2026-07-26)**: a *single* GridMap cannot express it — one
+  item id per cell. Two stacked maps (wall + floor) fix it at **0 extra draw calls** and
+  +2.17 MB video memory. Verified in-engine: 15,763 cells carry both, matching `TerrainWorld`
+  exactly. This was a render-backend limit, never a data-model defect.
 - **Not answered**: 60 fps on real hardware (software Vulkan only here).
 
 ## How to run
@@ -37,7 +41,8 @@ Prints the correctness suite followed by every benchmark table in the spike note
 ```bash
 cd prototypes/terrain-spike/render
 dotnet build
-godot --path . -- backend=gridmap octant=32      # also: multimesh | multimesh_buffer | multimesh_pooled
+godot --path . -- backend=gridmap_two octant=32   # the adopted backend (wall map + floor map)
+# also: gridmap | multimesh | multimesh_buffer | multimesh_pooled
 ```
 
 Prints `RESULT key=value` lines (draw calls, video memory, build ms, per-dig update µs) and

@@ -13,7 +13,7 @@ prototype; spike notes live beside their prototypes.
 
 | Spike | Date | Question | Result | Note |
 |---|---|---|---|---|
-| Terrain spike | 2026-07-25 | Does ADR-0002's chunked-AoS model hold, is chunk 32 right, and which render backend? | **YES** — 38/38 contract checks; AoS falsification test failed to falsify (AoS 21–46% *faster* than SoA); GridMap @ octant 32 beats MultiMesh on both draw calls and per-dig cost | [SPIKE-NOTE](terrain-spike/SPIKE-NOTE.md) |
+| Terrain spike | 2026-07-25 (addendum 07-26) | Does ADR-0002's chunked-AoS model hold, is chunk 32 right, and which render backend? | **YES** — 38/38 contract checks; AoS falsification test failed to falsify (AoS 21–46% *faster* than SoA); **two stacked GridMaps @ octant 32** beat MultiMesh on both axes and solve floor+wall-per-cell at 0 extra draw calls | [SPIKE-NOTE](terrain-spike/SPIKE-NOTE.md) |
 
 ## Pivot Chains
 

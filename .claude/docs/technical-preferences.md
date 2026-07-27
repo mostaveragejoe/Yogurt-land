@@ -7,7 +7,7 @@
 
 - **Engine**: Godot 4.7.1
 - **Language**: C# (.NET 8+, primary), C++ via GDExtension (native plugins only)
-- **Rendering**: **Forward+** (terrain spike ran on it 2026-07-25 and met the draw-call budget); terrain render backend is **GridMap + MeshLibrary at `cell_octant_size = 32`**, reading from `TerrainWorld` — never authoritative (ADR-0002). Still open: the many-local-lights evaluation for "Warm Hearth, Cold Dark" and `AreaLight3D` (new in 4.7) for claimed-territory glow — decide in the art/lighting pass, not the data model.
+- **Rendering**: **Forward+** (terrain spike ran on it 2026-07-25 and met the draw-call budget); terrain render backend is **two stacked GridMaps at `cell_octant_size = 32`** — a wall map (full-cube items) and a floor map (thin slab items offset to the cell bottom), both reading from `TerrainWorld` and never authoritative (ADR-0002). One GridMap cannot express floor+wall in the same cell; two cost 0 extra draw calls and +2.17 MB video memory (measured 2026-07-26). Additional per-cell visual layers = additional stacked maps. Still open: the many-local-lights evaluation for "Warm Hearth, Cold Dark" and `AreaLight3D` (new in 4.7) for claimed-territory glow — decide in the art/lighting pass, not the data model.
 - **Physics**: [TO BE CONFIGURED] — likely minimal use; the layered tile-grid terrain (floor+wall per cell) is not physics-engine-driven, closer to instanced prefab placement than a physics simulation. Revisit if ragdoll/projectile physics are needed for tactics combat.
 
 ## Input & Platform
