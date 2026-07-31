@@ -21,7 +21,15 @@ Tier 0 FUN SPIKE: **COMPLETE — PROCEED, CD-PLAYTEST CONFIRM (2026-07-25)**.
 - **OPEN**: ADR-0002 criterion 5's frame-rate clause — software Vulkan (lavapipe) ran 3–4 fps, meaningless. Re-run `prototypes/terrain-spike/render/` on target hardware to promote ADR-0002 to Accepted. Also unmeasured: GridMap collision cost, procgen sparse chunks.
 - Environment note: Godot 4.7.1 mono + .NET 8 SDK + Xvfb/lavapipe all work in this container (Godot at scratchpad `Godot_v4.7.1-stable_mono_linux_x86_64/`).
 
-- **Next: remaining Tier 0 spikes in order — mode-switch → pathfinding → save/load** (results promote ADR-0001/0003 to Accepted)
+**MODE-SWITCH SPIKE: COMPLETE 2026-07-26 — YES, 61/61** (`prototypes/mode-switch-spike/`, SPIKE-NOTE.md).
+- All 4 testable ADR-0001 criteria pass: headless full turn loop (stub gate, zero Godot — C2 answered); TickSequence gapless across RT→TB→RT + same-seed determinism; speed 0/1/2/3 → 0/60/120/180 sub-steps with dt constant (zero ITickable changes); destroy-terrain-mid-encounter → zero orphaned reservations/jobs/paths AND untouched job+path survive.
+- **Zero state conversion proven by identity**: same store instance, same values, unchanged Revision across the swap.
+- Cost: dispatch 0.578 µs (0.003% frame), swap 0.31 µs, reconcile 28.9 µs once per battle, **0.00 B/sub-step allocation**.
+- **3 corrections**: (1) MutationWindow.Open() must return a `readonly struct` scope — the IDisposable class version boxed 24 B/dispatch, violating the zero-allocation standard (now in technical-preferences); (2) pre-switch normalization must decide against the DECISION SET, not live occupancy — otherwise every co-located unit moves incl. the lowest id that should keep its cell (recorded in ADR-0001 + ADR-0003); (3) **ADR-0003 raider reap leaked** — "dead/withdrawn" leaves live raiders as undespawnable ghosts; corrected to reap ALL raiders at reconcile (ADR-0003 lifecycle row updated).
+- **ADR-0001 recommended for promotion to Accepted** — awaiting user decision. ADR-0003 still gated on pathfinding + save/load spikes.
+- NOT answered: presentation gating against a real Godot view (stub only); battle length (design, not architecture); post-battle time semantics (still the open CD question — spike confirms fixed-dt keeps both options open).
+
+- **Next: remaining Tier 0 spikes — pathfinding → save/load** (both gate ADR-0003)
 
 Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debug console — committed and pushed.
 

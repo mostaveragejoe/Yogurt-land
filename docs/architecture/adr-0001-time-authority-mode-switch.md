@@ -1,9 +1,9 @@
 # ADR-0001: Time Authority / Mode-Switch Architecture
 
 ## Status
-Proposed
+Proposed — **spike-validated 2026-07-26 (61/61); recommended for promotion to Accepted**
 
-*(Written per the systems-index sequencing: ADRs authored as Proposed before the Tier 0 spikes; promoted to Accepted when the mode-switch spike validates the architecture.)*
+*(Written per the systems-index sequencing: ADRs authored as Proposed before the Tier 0 spikes; promoted to Accepted when the mode-switch spike validates the architecture. **The Tier 0 mode-switch spike has now run — see Spike Results (2026-07-26) below.** All four testable validation criteria pass; criterion 5 is a six-month review item. Two corrections apply, neither structural. Awaiting the user's promotion decision.)*
 
 ## Date
 2026-07-24
@@ -244,6 +244,38 @@ Paused systems still receive events; ALL handlers are idempotent bookkeeping onl
 
 ## Migration Plan
 None — greenfield. The Tier 0 mode-switch spike is the first implementation; if the spike falsifies a property (e.g., presentation gating can't stay Godot-free), this ADR is revised BEFORE Accepted status, and downstream spec sections are re-checked against the updated worked-example table.
+
+## Spike Results (2026-07-26)
+
+Tier 0 mode-switch spike: `prototypes/mode-switch-spike/` (plain .NET 8, zero Godot types).
+Full detail and method: `prototypes/mode-switch-spike/SPIKE-NOTE.md`. **61/61 checks pass.**
+
+| Criterion | Result |
+|---|---|
+| 1 — full turn loop headless, stub gate, no Godot in core | ✅ C2 answered: the presentation gate did not become a Godot dependency magnet |
+| 2 — `TickSequence` continuity across RT→TB→RT; save/load; same-seed determinism | ✅ monotonic and gapless; identical `TickSequence`/`TurnIndex`/entity state on re-run |
+| 3 — adding 3× speed touches zero `ITickable`s | ✅ speeds 0/1/2/3 → 0/60/120/180 sub-steps per 60 frames, **dt constant**; no system changed |
+| 4 — destroy terrain mid-encounter → resume → zero orphans | ✅ zero orphaned reservations, jobs, and paths — **and the untouched job and path survived** (surgical, not a blanket flush) |
+| 5 — six months in, `SwitchTransitionData` gained no state-duplicating field | review item, not spike-testable |
+
+**Zero state conversion, proven by identity**: across the swap the store is the *same instance*, with the *same values* and an *unchanged `Revision`* — the switch performs no writes at all.
+
+Also regression-locked: inactive authority receives **zero** ticks (colony fully pauses — needs froze); dispatch follows `(phase, priority)` not registration order; duplicate phase+priority rejected; mid-`Tick` `RequestSwitch` → `DeferredMidDispatch`, applied atomically between dispatches; a second encounter is **rejected, never queued**; TurnBased publishes `DeltaSeconds = 0` while the authority still receives real delta (the deliberate asymmetry, now a test); a 1-second frame clamps at 8 sub-steps and **drops the backlog — the sim slows, no death spiral**; CD-9 refuses to snapshot inside a battle; writer-per-authority health arbitration refuses each writer in the wrong mode.
+
+**Cost** — the "permanent integration tax" is sub-microsecond:
+
+| Measure | Result |
+|---|---|
+| RealTime dispatch (7 systems, 10 colonists) | **0.578 µs/sub-step** = 0.003% of a 16.6 ms frame (0.010% at 3×) |
+| RealTime → TurnBased swap | **0.31 µs** |
+| `PostEncounterReconcile` (50 jobs, 50 paths, 20 reservations, 1 death, 3 raiders) | **28.9 µs**, once per battle |
+| Dispatch-path allocation | **0.00 B/sub-step**, 0 Gen0 over 20,000 sub-steps |
+
+**Correction 1 — the mutation window must be a struct scope.** The spike's first implementation used an `IDisposable` *class* scope, boxing 24 B on every dispatch (~4.3 KB/s at 3× speed) — harmless in isolation but a direct violation of the zero-steady-state-allocation standard this ADR and ADR-0002 both assert. A depth-counted `readonly struct` scope (`using` on a known struct type does not box) measured **0.00 B/sub-step**. The production `MutationWindow` must be a struct scope, and the allocation assertion belongs in CI.
+
+**Correction 2 — pre-switch normalization decides against the DECISION SET, not live occupancy.** Testing "is anyone else on my cell?" against the live occupancy index makes *every* co-located unit conclude it must move, including the lowest id, because a decide-only pass still sees the pre-normalization world. Each unit must test against the cells already claimed by earlier decisions **in the same pass** — that is what makes ADR-0003's "each move visible to the next" true under the Squad-Prep-decides / Colonist-Movement-executes split. An implementation trap this ADR and ADR-0003 do not warn about; the production spec must state it.
+
+*(A third correction landed in ADR-0003 — the raider reap rule; see that ADR's Spike Results.)*
 
 ## Validation Criteria
 1. Mode-switch spike runs the full turn loop **headlessly** — no Godot types in the core assembly, stub presentation gate.

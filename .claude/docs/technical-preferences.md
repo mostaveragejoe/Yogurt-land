@@ -39,7 +39,8 @@
 - **Frame Budget**: 16.6 ms
 - **Draw Calls**: **terrain budget ≤ 150 draw calls** for the visible 3-layer cutaway at MVP map size (measured 2026-07-25, terrain spike: GridMap at `cell_octant_size = 32` renders it in **32** draw calls; octant 16 = 108; the default octant 8 = 343 and is over budget). Leaves headroom for entities, VFX, and UI within a provisional **500 draw-call whole-frame ceiling**. Re-check the whole-frame number on target hardware.
 - **Memory Ceiling**: terrain cell data is **2 MB at MVP** (128×128×16) and **16 MB at the full-vision ceiling** (256×256×32); terrain render/video memory **14.25 MB** for the 3-layer cutaway (measured 2026-07-25). Chunks are 8 KB and stay off the Large Object Heap. **Whole-process ceiling still [TO BE CONFIGURED]** — set once target hardware is fixed; terrain is demonstrably not the memory risk.
-- **Allocation**: **zero steady-state allocation** in the simulation path is a measured, enforceable standard, not an aspiration — the terrain spike recorded 0.17 B/mutation and 0 Gen0 collections across 60k mutations. Regressions here are bugs.
+- **Allocation**: **zero steady-state allocation** in the simulation path is a measured, enforceable standard, not an aspiration — the terrain spike recorded 0.17 B/mutation and 0 Gen0 collections across 60k mutations; the mode-switch spike recorded 0.00 B per dispatch across 20k sub-steps. Regressions here are bugs. **`MutationWindow.Open()` must return a `readonly struct` scope, never an `IDisposable` class** — a class scope boxes 24 B on every dispatch (measured 2026-07-26); `using` on a known struct type does not box.
+- **Mode-switch cost** (measured 2026-07-26): dispatch 0.578 µs/sub-step (0.003% of frame at 1x, 0.010% at 3x); RealTime→TurnBased swap 0.31 µs; `PostEncounterReconcile` 28.9 µs once per battle. The integration tax is discipline, not wall time.
 
 ## Testing
 

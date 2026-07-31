@@ -13,6 +13,7 @@ prototype; spike notes live beside their prototypes.
 
 | Spike | Date | Question | Result | Note |
 |---|---|---|---|---|
+| Mode-switch spike | 2026-07-26 | Does ADR-0001 hold — zero state conversion, deterministic, headless, zero orphans at the seam? | **YES** — 61/61; all 4 testable criteria pass; 0.578 µs/dispatch, 0.31 µs/swap, 0.00 B allocation; 3 corrections (struct mutation-window scope, normalization decides against the decision set, reap ALL raiders) | [SPIKE-NOTE](mode-switch-spike/SPIKE-NOTE.md) |
 | Terrain spike | 2026-07-25 (addendum 07-26) | Does ADR-0002's chunked-AoS model hold, is chunk 32 right, and which render backend? | **YES** — 38/38 contract checks; AoS falsification test failed to falsify (AoS 21–46% *faster* than SoA); **two stacked GridMaps @ octant 32** beat MultiMesh on both axes and solve floor+wall-per-cell at 0 extra draw calls | [SPIKE-NOTE](terrain-spike/SPIKE-NOTE.md) |
 
 ## Pivot Chains
@@ -24,6 +25,7 @@ None.
 | Spike | Status |
 |-------|--------|
 | Fun spike | ✅ PROCEED (2026-07-25) — CD-PLAYTEST: CONFIRM |
+| Mode-switch spike | ✅ YES (2026-07-26) — ADR-0001 validated 61/61; recommended for Accepted. [SPIKE-NOTE](mode-switch-spike/SPIKE-NOTE.md) |
 | Terrain spike | ✅ YES (2026-07-25) — ADR-0002 validated 5/6; frame-rate clause needs target hardware. [SPIKE-NOTE](terrain-spike/SPIKE-NOTE.md) |
 | Mode-switch spike | Not started |
 | Pathfinding spike | Not started |
