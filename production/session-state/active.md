@@ -40,7 +40,22 @@ Tier 0 FUN SPIKE: **COMPLETE — PROCEED, CD-PLAYTEST CONFIRM (2026-07-25)**.
 - **MOVEMENT MODEL DECIDED (user, 2026-07-26)**: 8-connected, corner-cutting BANNED, integer octile costs (10 orthogonal / 14 diagonal), octile heuristic (Manhattan is INADMISSIBLE with diagonals — silently loses A* optimality). Implemented in BOTH pathfinder and region index (connectivity must match or reachability lies). Verified: 1-cell-thick diagonal wall SEALS, corner-touching rooms stay disconnected, clearing one orthogonal neighbour legalises the step. Measured cost: A* 1.6x (118.9 vs 75.4 µs), regions 1.4x. 44/44 tests pass.
 - **Still routed to quick-spec**: door step cost placeholder (+10 surcharge); TB occupancy blocks traversal vs end-of-move (Combat GDD).
 
-- **Next: last Tier 0 spike — save/load** (gates ADR-0003's remaining half; ADR-0002 snapshot already measured)
+**SAVE/LOAD SPIKE: COMPLETE 2026-07-26 — YES, 24/24** (`prototypes/saveload-spike/`, SPIKE-NOTE.md).
+- ADR-0003 criterion 3 + ADR-0001 criterion 2 + cross-cutting contract #2 all validated.
+- save→load→save **byte-identical**; **a reloaded world evolves IDENTICALLY to one that never left memory** (200 mutations, fixed input sequence — the decisive test).
+- EntityIdSource counter serialized → post-load spawns never collide; dangling ids resolve to nothing. Subtlety recorded: the counter advances across an encounter even though raiders are never serialized — correct (non-reuse holds across the boundary).
+- Derived state (occupancy, directory) rebuilt on load and **contributes 0 bytes** — proved by wiping it and re-saving byte-identically.
+- **CD-9 structural**: raiders + outcome inbox add ZERO records; save refused in TurnBased; TurnBased save rejected as corrupt on load.
+- Catalog evolution safe (id remap); corruption fails loudly (truncation, bad magic, future schema, unknown material).
+- Cost: MVP 2.01 MB → **30 KB gzipped (2%)**, write 21.9 ms (~1.2 frames), read 8.1 ms → **no async save machinery needed for MVP**. Full-vision 16 MB / 240 KB gz, ~0.4–0.7 s write — revisit async at Tier 2. **Recommend gzipping the save format from the start.**
+- NOT covered: seeded-RNG stream serialization (pending ADR), schema migration path, disk I/O + atomic replace, full compile-time writer-interface segregation (criterion 1's compile-time half asserted by design, not built).
+
+## TIER 0 SPIKE GATE: COMPLETE (5/5)
+fun ✅ PROCEED · terrain ✅ · mode-switch ✅ · pathfinding ✅ · save/load ✅
+
+**AWAITING USER DECISION**: promote ADR-0001 and ADR-0003 to Accepted (both recommended). ADR-0002 still needs the frame-rate clause re-run on target hardware (software Vulkan gave no fps signal).
+
+**Next per the design order**: begin GDD authoring — `/design-system terrain-data-model` first (it was explicitly waiting on terrain-spike numbers, which now exist), then Time Authority GDD, then the quick-specs. Fold in: CD-10–CD-18, the pathfinding region-rebuild trigger + movement model, and the measured budgets.
 
 Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debug console — committed and pushed.
 

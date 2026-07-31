@@ -1,7 +1,7 @@
 # ADR-0003: Entity Data Ownership
 
 ## Status
-Proposed
+Proposed — **spike-validated 2026-07-26 (criteria 2–5 pass; 1 partial, 6 is a review item); recommended for promotion to Accepted**
 
 *(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the pathfinding and save/load spikes validate the occupancy index under mid-route digs and the entity-store round-trip. This ADR fixes contracts and ownership; per-kind field details beyond the MVP core are GDD/quick-spec material.)*
 
@@ -321,6 +321,16 @@ None — greenfield. The Tier 0 pathfinding, save/load, and mode-switch spikes i
 The Tier 0 mode-switch spike (`prototypes/mode-switch-spike/`, SPIKE-NOTE.md) exercised this ADR's switch-facing contracts against real registered systems. **Validated**: occupancy advisory under RealTime / hard-asserted exclusive under TurnBased; the single position write path updating the index atomically; health writer-per-authority refusing each writer in the wrong mode; no-despawn-inside-an-encounter; the dead colonist's death cell surviving to the report (CD-4); `ReleaseAllHeldBy` leaving zero orphaned reservations; exactly one `EncounterOutcomeReport` drained from the one-slot inbox with `BattlesSurvived` credited to survivors only; the occupancy-vs-positions sweep clean after reconcile. Cost of a full reconcile (50 jobs, 50 paths, 20 reservations, 1 death, 3 raiders): **28.9 µs**, once per battle. The pathfinding and save/load spikes still gate the rest of this ADR.
 
 **Correction — the raider reap rule leaked (found by the spike).** The Raider Lifecycle row said reconcile despawns *"dead/withdrawn"* raiders. But raiders are **encounter-scoped**: if a battle ends while a raider is alive and has not withdrawn — a debug/scripted end today, or any future objective-complete end condition — that raider survives into colony time as an undespawnable ghost, since despawn inside an encounter is forbidden and no later pass reaps it. **Corrected rule: `PostEncounterReconcile` reaps ALL raiders**, because none may outlive the encounter. The lifecycle row above now says so.
+
+## Spike Results — save/load (2026-07-26)
+
+The Tier 0 save/load spike (`prototypes/saveload-spike/`, SPIKE-NOTE.md) validates **validation criterion 3** — 24/24. `save → load → save` is **byte-identical**; colonists, doors, item stacks (by stable material key) and stack reservations all round-trip; `TickSequence`/`TurnIndex` preserved (ADR-0001 criterion 2). The **`EntityIdSource` counter is serialized**, so post-load spawns cannot collide with pre-save ids and dangling ids resolve to nothing. `UnitOccupancyIndex` and `EntityDirectory` are **rebuilt on load and contribute zero bytes** — proved by wiping all derived state and re-saving byte-identically. **CD-9 is structural**: spawning raiders and depositing an `EncounterOutcomeReport` adds **zero records**; saving in TurnBased is refused and a TurnBased save is rejected as corrupt on load. Corruption (truncation, bad magic, future schema, unknown material key) fails loudly in every case. **The decisive test**: a saved-and-reloaded world advanced 200 mutations against a fixed input sequence produces a byte-identical result to a control world that never left memory.
+
+**Recorded subtlety**: running an encounter advances the id counter even though raiders are never serialized — correct, because non-reuse must hold across the encounter boundary too.
+
+**Cost**: MVP (128×128×16) save is 2.01 MB, **gzips to 30 KB (2%)**, writes in 21.9 ms (~1.2 frames) and reads in 8.1 ms — so the CD-9 autosave at the mode switch needs **no async save machinery** for MVP. Full-vision (256×256×32) is 16 MB / 240 KB gzipped with a ~0.4–0.7 s write, which *would* be felt — revisit async saving at Tier 2. **Recommendation: gzip the save format from the start** rather than retrofitting.
+
+**Spike coverage summary for this ADR**: criteria 2 (occupancy invariants, mode-switch spike), 3 (this spike), 4 (reconcile integration, mode-switch spike) and 5 (composite walkability, pathfinding spike) all pass. Criterion 1 is *partially* covered — the headless suites and runtime window/mode/kind assertions are exercised, but the **compile-time writer-interface segregation is asserted by design rather than built**, so that half awaits the production implementation. Criterion 6 is a six-month review item. **Recommend promotion to Accepted alongside ADR-0001**, with criterion 1's compile-time half carried as an implementation obligation.
 
 ## Spike Results — pathfinding (2026-07-26)
 
