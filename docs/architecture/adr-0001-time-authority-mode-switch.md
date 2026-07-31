@@ -1,9 +1,9 @@
 # ADR-0001: Time Authority / Mode-Switch Architecture
 
 ## Status
-Proposed — **spike-validated 2026-07-26 (61/61); recommended for promotion to Accepted**
+**Accepted** (2026-07-26, user decision) — spike-validated 61/61
 
-*(Written per the systems-index sequencing: ADRs authored as Proposed before the Tier 0 spikes; promoted to Accepted when the mode-switch spike validates the architecture. **The Tier 0 mode-switch spike has now run — see Spike Results (2026-07-26) below.** All four testable validation criteria pass; criterion 5 is a six-month review item. Two corrections apply, neither structural. Awaiting the user's promotion decision.)*
+*(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes, promoted once the mode-switch spike validated the architecture — see **Spike Results (2026-07-26)** below. All four testable validation criteria pass; criterion 5 remains a six-month review item. Two corrections were applied at promotion, neither structural: the mutation window must be a struct scope, and pre-switch normalization decides against the decision set rather than live occupancy.)*
 
 ## Date
 2026-07-24

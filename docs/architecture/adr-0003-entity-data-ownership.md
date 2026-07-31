@@ -1,7 +1,9 @@
 # ADR-0003: Entity Data Ownership
 
 ## Status
-Proposed — **spike-validated 2026-07-26 (criteria 2–5 pass; 1 partial, 6 is a review item); recommended for promotion to Accepted**
+**Accepted** (2026-07-26, user decision) — spike-validated: criteria 2–5 pass across the mode-switch, pathfinding and save/load spikes.
+
+> **Carried implementation obligation**: criterion 1 is only *partially* discharged. The runtime mutation-window / mode / kind assertions are exercised, but the **compile-time writer-interface segregation is asserted by design, not yet built** — the spikes modelled ownership with narrow methods rather than the full interface set. The production implementation must deliver the interface zoo and the composition root; until it does, the ownership table is enforced at runtime only. Criterion 6 remains a six-month review item.
 
 *(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the pathfinding and save/load spikes validate the occupancy index under mid-route digs and the entity-store round-trip. This ADR fixes contracts and ownership; per-kind field details beyond the MVP core are GDD/quick-spec material.)*
 

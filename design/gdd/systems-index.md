@@ -119,9 +119,9 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 
 | Order | Item | Type | Priority | Layer | Agent(s) | Est. |
 |-------|------|------|----------|-------|----------|------|
-| 1 | ADR-001 Time Authority | ADR (Proposed) | MVP | Foundation | technical-director, godot-specialist | S |
+| 1 | ADR-001 Time Authority | ADR (**Accepted** 2026-07-26) | MVP | Foundation | technical-director, godot-specialist | S |
 | 2 | ADR-002 Terrain Data Model | ADR (Proposed; final numbers await terrain spike) | MVP | Foundation | technical-director, godot-specialist | S |
-| 3 | ADR-003 Entity Data Ownership | ADR (Proposed) | MVP | Foundation | technical-director, lead-programmer | S |
+| 3 | ADR-003 Entity Data Ownership | ADR (**Accepted** 2026-07-26) | MVP | Foundation | technical-director, lead-programmer | S |
 | 4 | Cross-cutting contracts annex + serialization contract | Contract page | MVP | Foundation | technical-director | S |
 | 5 | Dev Tools / Debug Console | Build (Tier 0) | Tier 0 | — | gameplay-programmer | S |
 | — | **Tier 0 SPIKE GATE: fun spike → terrain spike → mode-switch spike → pathfinding spike → save/load spike** | `/prototype` | — | — | prototyper | — |
@@ -171,7 +171,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 |--------|-------|
 | Total index entries | 35 |
 | Design docs started | 0 |
-| ADRs written | 3/3 (all Proposed, spike-gated) + contracts annex |
+| ADRs written | 3/3 + contracts annex — **ADR-0001 & ADR-0003 Accepted**; ADR-0002 Proposed (frame-rate clause on target hardware) |
 | Tier 0 spikes complete | 0/6 |
 | MVP systems designed | 0/25 |
 | Vertical Slice systems designed | 0/4 |
