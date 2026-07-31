@@ -21,6 +21,7 @@ public partial class RenderBench : Node3D
     private ushort _dirt, _granite, _reinforced, _floor;
     private string _backend = "multimesh";
     private int _octant = 8;                                  // GridMap batching granularity (default 8)
+    private int _styles = 1;                                  // distinct style variants per tier
     private int _frame;
     private long _buildMs;
     private int _nodeCount;
@@ -37,6 +38,7 @@ public partial class RenderBench : Node3D
         {
             if (a.StartsWith("backend=")) _backend = a["backend=".Length..];
             if (a.StartsWith("octant=")) _octant = int.Parse(a["octant=".Length..]);
+            if (a.StartsWith("styles=")) _styles = int.Parse(a["styles=".Length..]);
         }
 
         GD.Print($"=== RENDER BACKEND BENCH: {_backend} ===");
@@ -213,6 +215,24 @@ public partial class RenderBench : Node3D
             wallLib.SetItemMesh(id, new BoxMesh { Size = Vector3.One, Material = m });
             wallLib.SetItemName(id, $"wall{id}");
         }
+
+        // STYLE-VARIETY TEST (godot-specialist finding): draw calls are driven by how many
+        // distinct mesh/material combos co-occur IN AN OCTANT, not by MeshLibrary size.
+        // Build `_styles` extra variants per tier, each with its own material, and scatter them.
+        if (_styles > 1)
+        {
+            var tiers = new[] { _dirt, _granite, _reinforced };
+            foreach (ushort tier in tiers)
+                for (int s = 0; s < _styles; s++)
+                {
+                    int id = StyleItemId(tier, s);
+                    var mat = new StandardMaterial3D
+                    { AlbedoColor = ((StandardMaterial3D)_materials[tier]).AlbedoColor * (0.5f + 0.5f * s / _styles) };
+                    wallLib.CreateItem(id);
+                    wallLib.SetItemMesh(id, new BoxMesh { Size = Vector3.One, Material = mat });
+                    wallLib.SetItemName(id, $"wall{tier}_style{s}");
+                }
+        }
         // Floors are thin slabs sitting at the bottom of the cell.
         var floorLib = new MeshLibrary();
         var slab = new BoxMesh { Size = new Vector3(1, 0.1f, 1), Material = _materials[_floor] };
@@ -233,9 +253,14 @@ public partial class RenderBench : Node3D
                     TerrainCell c = _world.GetCell(new CellCoord(x, y, z));
                     var pos = new Vector3I(x, -z, y);
                     if (c.FloorTypeId != 0) _floorMap.SetCellItem(pos, _floor);   // ALWAYS, even under a wall
-                    if (c.WallTypeId != 0) _gridMap.SetCellItem(pos, c.WallTypeId);
+                    if (c.WallTypeId != 0)
+                        _gridMap.SetCellItem(pos, _styles > 1
+                            ? StyleItemId(c.WallTypeId, (x * 7 + y * 13 + z * 3) % _styles)   // scattered variety
+                            : c.WallTypeId);
                 }
     }
+
+    private static int StyleItemId(ushort tier, int style) => 1000 + tier * 100 + style;
 
     /// <summary>Backend B: GridMap + runtime MeshLibrary — Godot's native cell-based tool.</summary>
     private void BuildGridMap()
@@ -342,6 +367,36 @@ public partial class RenderBench : Node3D
         }
         sw.Stop();
         GD.Print($"RESULT dig_rebuild_us_per_dig={sw.Elapsed.TotalMilliseconds / digs * 1000:F2}");
+        ConcentratedAoeBench();
+    }
+
+    /// <summary>
+    /// godot-specialist finding: the per-dig number was measured on SCATTERED single-cell
+    /// changes. A combat AoE is spatially CONCENTRATED — many cells inside one or two octants
+    /// in a single frame, during TurnBased where a hitch is maximally visible. Measure it
+    /// rather than extrapolate.
+    /// </summary>
+    private void ConcentratedAoeBench()
+    {
+        if (_backend is not ("gridmap" or "gridmap_two")) return;
+
+        foreach (int n in new[] { 8, 27, 64, 125 })
+        {
+            // A compact cube of cells, deliberately inside ONE octant (octant >= 32 here).
+            int side = (int)Math.Round(Math.Pow(n, 1.0 / 3.0));
+            var sw = Stopwatch.StartNew();
+            int touched = 0;
+            for (int dx = 0; dx < side; dx++)
+                for (int dy = 0; dy < side; dy++)
+                    for (int dz = 0; dz < side && dz < VisibleLayers; dz++)
+                    {
+                        _gridMap.SetCellItem(new Vector3I(40 + dx, -(TopLayer + dz), 40 + dy), -1);
+                        touched++;
+                    }
+            sw.Stop();
+            GD.Print($"RESULT aoe_cells={touched} same_octant_us={sw.Elapsed.TotalMilliseconds * 1000:F1} " +
+                     $"us_per_cell={sw.Elapsed.TotalMilliseconds * 1000 / Math.Max(1, touched):F2}");
+        }
     }
 
     private sealed class NullSink : ITerrainChangeSink

@@ -161,11 +161,44 @@ per-dig cost is unchanged, and the dig update actually gets *simpler* — cleari
 `SetCellItem(pos, -1)` because the floor is already present, instead of swapping a wall item for
 a floor item.
 
-**Octant recommendation: 32.** Octant 64 halves draw calls again (8) at identical per-dig cost,
-but coarsens frustum-culling granularity to 2×2 octants per layer at MVP width; octant 32 keeps
-32 draw calls (well inside the ≤150 terrain budget), matches the data-model chunk size, and
-leaves useful culling granularity at full-vision scale. Move to 64 only if draw calls ever
-become the binding constraint.
+**Octant recommendation: 32, and it is a LOCKED INVARIANT — not a preference.**
+`cell_octant_size` **must equal `TerrainWorld.ChunkSize`** (both 32). At that equality a dirtied
+chunk maps 1:1 to a dirtied octant. *Correction (2026-07-26, godot-specialist review): an earlier
+version of this note suggested moving to octant 64 "if draw calls ever become the binding
+constraint." That is wrong and is withdrawn* — at octant 64 one octant spans four chunks, so a
+single-chunk batch would force a rebuild covering three untouched chunks. If draw calls ever
+become binding, reduce style variety (below) or revisit chunk size and octant size **together**,
+never octant alone.
+
+### Follow-up measurements (2026-07-26) — two unknowns closed
+
+The godot-specialist review flagged two claims as unproven. Both were measured rather than left
+as recommendations.
+
+**1. Style variety, not MeshLibrary size, drives draw calls — confirmed, with a ceiling.**
+Draw calls scale with how many distinct material/style combos co-occur *in an octant*:
+
+| Style variants per tier | 1 | 2 | 4 | 8 | 16 |
+|---|---|---|---|---|---|
+| Draw calls (3-layer cutaway, octant 32) | 32 | 48 | 80 | **144** | 272 |
+
+Video memory is flat across all of these (16.42–16.43 MB) — this is a batching effect, not a
+memory one. Against the ≤150 terrain draw-call budget, the **practical ceiling is ~8 style
+variants per tier**. Record as a hard tuning constraint; the original 32-draw-call figure assumed
+a single style per tier and must not be read as headroom for unlimited visual variety.
+
+**2. Concentrated combat AoE is cheap — "one batch is free" now proven, not extrapolated.**
+The per-dig figure came from *scattered* single-cell changes; an AoE is spatially concentrated,
+lands in one or two octants in a single frame, and fires during TurnBased where a hitch is most
+visible. Measured, all cells inside one octant:
+
+| Cells changed in one frame | 8 | 27 | 48 | 75 |
+|---|---|---|---|---|
+| Total | 14.3 µs | 16.2 µs | 17.2 µs | **21.5 µs** |
+| Per cell | 1.79 µs | 0.60 µs | 0.36 µs | **0.29 µs** |
+
+Cost is **sublinear** — the octant rebuild amortises across the batch, so concentrated damage is
+cheaper per cell than scattered digging. A 75-cell AoE costs 0.13% of a frame.
 
 **This generalises.** Any future per-cell visual layer (ore veins, floor coverings, ceiling
 detail) is another stacked GridMap at ~2 MB of video memory, not a redesign. The rejected

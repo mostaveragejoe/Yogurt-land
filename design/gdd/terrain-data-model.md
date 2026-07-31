@@ -33,15 +33,71 @@ So the fantasy this system *protects* rather than delivers is: **the player's de
 
 ### Core Rules
 
-[To be designed]
+**C1 — What a cell is.** Every in-bounds cell on every Z-level independently carries a floor and a wall. Four meaningful combinations: *solid rock* (floor + wall), *open* (floor, no wall — walkable), *stair* (a Z-linking floor, no wall), and *void* (neither — impassable). Terrain owns exactly these facts and nothing else.
+
+**C2 — Diggability.** Any cell with a wall is a legal dig target for any colonist. **No skill gate, no tool gate, no per-colonist eligibility check.** Material tier changes how *long* a dig takes, never whether it is permitted. *Reasoning: gating legality would create a hard dependency on Skill & Veterancy (#30), which is Vertical Slice, not MVP — and a plan silently rejected by a hidden prerequisite violates Pillar 1.* There is no indestructible bedrock tier; the map edge is `WorldBounds`, not a fourth material.
+
+**C3 — Work positions and reachability.** To dig or build at target `T`, a colonist must stand at a work position `W` that is one of the **8 cells surrounding `T` on the same Z-level**, is passable, and is reachable via composite walkability (terrain + doors + occupancy, per Pathfinding). **The corner-cutting ban governs how the colonist travels to `W`, not which neighbours may serve as `W`.** Working a cell is reaching sideways from walkable ground, not stepping through rock — these are deliberately two different rules, stated explicitly so neither is later "fixed" into the other.
+
+**C4 — Dig progress is not terrain state.** A dig accumulates progress in a **sparse side table keyed by `CellCoord`, owned by Excavation & Construction** — never a cell field (ADR-0002's firewall: a cell describes architecture, not plans). The wall's `WallHp` is untouched while mining. When progress reaches the material's dig cost, Excavation issues `ClearWall` and the cell becomes open in one step. **Cancelling a dig discards the progress entry; the wall is left exactly as it was.**
+
+**C5 — Mining and combat damage are independent.** Combat reduces `WallHp`; mining accumulates dig progress. In MVP a combat-damaged wall does **not** dig faster — the two are orthogonal. *(Flagged as a tuning opportunity: "breached walls are quicker to clear" is a plausible later rule, deliberately not taken now.)* If combat destroys a wall that is being mined, the `WallRemoved` event invalidates the dig job and its progress entry is dropped.
+
+**C6 — Building.** A wall may be raised at any in-bounds cell with no wall, from a valid work position; floor presence at the target is irrelevant, so retaining walls on a chasm rim are legal. A floor may be laid at any void cell from a valid work position. **There is no hard support rule.** Because the work position must already be reachable, disconnected floating rooms are structurally impossible for free — while cell-by-cell cantilevered bridges over open space remain possible, which is a Pillar 1 expression feature. Unlimited unsupported spurs are accepted scope debt until Structural Collapse (#34) retrofits real support rules.
+
+**C7 — Floors are authored, not created.** Map Authoring guarantees every excavatable cell carries a floor at load time. Digging never needs to add one, and the cell becomes walkable the instant the wall clears. Consequently **voids exist only where the map author placed them** (chasms, ravines, the open sky above the mountain) — nothing at runtime turns a floored cell into a void.
+
+**C8 — Stairs.** The player designates **Dig Stairs Down** at `(x,y,z)`. Preconditions, checked at designation *and* re-checked at execution: the target is a diggable wall, reachable, unclaimed, and `(x,y,z+1)` is in-bounds and **solid**. On completion Excavation submits one atomic batch: `SetFloor(stair)` at `Z` plus `ClearWall` at `Z+1`. Because the cell below was solid immediately beforehand, **nothing can be standing in it** — opening a stair reveals only virgin rock, so there is no displacement case and no combat edge case. **Stairs are permanent in MVP** (no demolish verb) and **down-only**; every stairwell is therefore a permanent, known chokepoint. Combat cannot dig stairs — structurally guaranteed by the writer-per-authority table, independent of CD-10.
+
+**C9 — Claims.** One terrain-modifying job may claim a cell at a time. **Latest designation wins**: a new designation cancels and replaces the pending one, with no rollback — a build that never completed left the cell untouched, and a cancelled dig simply discards progress (C4).
+
+**C10 — Designation invalidation.** Each job type has exactly one precondition, and the existing change-event contract invalidates it — including mid-battle, since paused systems still receive events:
+
+| Job | Precondition | Falsified by |
+|---|---|---|
+| Dig wall / dig stairs | wall present at target | `WallRemoved` |
+| Build wall | no wall at target | `WallPlaced` |
+| Build floor | no floor at target | `FloorPlaced` |
+| Repair | wall present and below max HP | `WallRemoved` |
+
+Reachability loss is **not** terrain's concern — `IsPassableTerrain` is a per-cell fact; "the path to this cell is gone" belongs to Job Assignment and Pathfinding.
 
 ### States and Transitions
 
-[To be designed]
+| From | To | Cause | Notes |
+|---|---|---|---|
+| Solid rock | Damaged wall | `ApplyWallDamage` (Combat, TurnBased) | Floor unaffected |
+| Damaged wall | Solid rock | `ApplyWallRepair` (Repair, RealTime) | CD-7; consumes hauled materials |
+| Damaged wall | Open | `ApplyWallDamage` reaching 0 HP | Reports `WallRemoved`; `Previous` captures the failed tier for CD-1 |
+| Solid rock | Open | `ClearWall` on dig completion (Excavation, RealTime) | Dig progress entry discarded |
+| Solid rock | Stair | Atomic `SetFloor(stair)` @Z + `ClearWall` @Z+1 | One batch, one event |
+| Open | Solid rock | `SetWall` (Construction, RealTime) | HP set to catalog max for the tier |
+| Void | Open | `SetFloor` (Construction, RealTime) | The only path that removes a void |
+| Stair | — | — | Terminal in MVP: stairs are permanent |
+
+**Damage is visualised at three discrete levels** (intact / damaged / critical). The count is fixed here because it multiplies MeshLibrary size: GridMap holds one item id per cell and offers no per-instance shader channel, so the rendering spec should implement damage as a **third stacked overlay map** (~2 MB video memory, ~2 µs per threshold crossing) rather than by multiplying wall items across tier × style × damage.
 
 ### Interactions with Other Systems
 
-[To be designed]
+| System | Reads | Writes | Interface owner |
+|---|---|---|---|
+| Terrain Rendering & Cutaway (#7) | chunk cells, change batches | — | Rendering |
+| Pathfinding & Navigation (#8) | `IsPassableTerrain`, change batches | — | Pathfinding composes |
+| Spatial Query / LOS & Cover (#12) | wall presence per cell | — | Spatial Query |
+| Map Authoring / Content Load (#14) | — | full population inside the load window | Map Authoring |
+| Excavation & Construction (#15/#16) | cell state, claim bit | `ClearWall`, `SetWall`, `SetFloor`, claim bit | Excavation |
+| Material-Tier Destructibility (#17) | tier via catalog | `ApplyWallDamage` | Destructibility |
+| Repair & Rebuild (#25) | `WallHp` vs catalog max | `ApplyWallRepair` | Repair |
+| Combat: Targeting & Resolution (#22) | wall presence, tier | `ApplyWallDamage` (TurnBased only) | Combat |
+| Material Catalog (#5) | — | — | Catalog owns tier, max HP and stable keys |
+
+**Behavior under each time authority** (mandatory, cross-cutting contract #1): terrain is a **passive store — it never ticks**. It registers with no time authority and has no `Tick()`. Its behaviour is identical in both modes; only the legal writer set changes.
+
+| Authority | Legal terrain writers |
+|---|---|
+| RealTime | Excavation, Construction, Repair & Rebuild |
+| TurnBased | Combat: Targeting & Resolution **only** |
+| Outside both (load window) | Map Authoring, `Restore` |
 
 ## Formulas
 
