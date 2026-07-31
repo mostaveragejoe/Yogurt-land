@@ -13,8 +13,14 @@ public readonly record struct PathResult(PathStatus Status, int Cost, int NodesE
 /// Grid A* with generation-stamped scratch arrays: no per-query allocation, no array clearing.
 /// Neighbours are 4-connected horizontally plus stair Z-linkage (ADR-0002).
 /// </summary>
-public sealed class Pathfinder(CompositeWalkability walk, ushort stairFloorTypeId)
+public sealed class Pathfinder(CompositeWalkability walk, ushort stairFloorTypeId, bool allowDiagonals = true)
 {
+    /// <summary>Integer octile costs: a diagonal is sqrt(2) ~= 1.4 orthogonal steps.</summary>
+    public const int OrthogonalCost = 10;
+    public const int DiagonalCost = 14;
+
+    public bool AllowDiagonals => allowDiagonals;
+
     private readonly TerrainWorld _world = walk.World;
     private readonly int _sx = walk.World.Bounds.SizeX, _sy = walk.World.Bounds.SizeY, _sz = walk.World.Bounds.Layers;
 
@@ -48,6 +54,7 @@ public sealed class Pathfinder(CompositeWalkability walk, ushort stairFloorTypeI
     private bool IsStair(CellCoord c) => _world.GetCell(c).FloorTypeId == stairFloorTypeId;
 
     private static readonly (int dx, int dy)[] Horizontal = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+    private static readonly (int dx, int dy)[] Diagonal = [(1, 1), (1, -1), (-1, 1), (-1, -1)];
 
     /// <summary>Fills <paramref name="path"/> (reused by the caller) with start..goal inclusive.</summary>
     public PathResult FindPath(CellCoord start, CellCoord goal, TimeAuthorityMode mode,
@@ -83,22 +90,36 @@ public sealed class Pathfinder(CompositeWalkability walk, ushort stairFloorTypeI
 
             for (int d = 0; d < Horizontal.Length; d++)
                 Relax(cc, new CellCoord(cc.X + Horizontal[d].dx, cc.Y + Horizontal[d].dy, cc.Z),
-                      current, goal, mode, mover);
+                      current, goal, mode, mover, OrthogonalCost);
+
+            if (allowDiagonals)
+                for (int d = 0; d < Diagonal.Length; d++)
+                {
+                    (int dx, int dy) = Diagonal[d];
+                    // CORNER-CUTTING BAN: a diagonal step is legal only when BOTH orthogonal
+                    // neighbours are walkable. This is what keeps a diagonal wall genuinely
+                    // sealing — corner-touching rooms stay disconnected, which chokepoint play
+                    // depends on — while still allowing natural diagonal movement in the open.
+                    var sideA = new CellCoord(cc.X + dx, cc.Y, cc.Z);
+                    var sideB = new CellCoord(cc.X, cc.Y + dy, cc.Z);
+                    if (!walk.IsWalkable(sideA, mode, mover) || !walk.IsWalkable(sideB, mode, mover)) continue;
+                    Relax(cc, new CellCoord(cc.X + dx, cc.Y + dy, cc.Z), current, goal, mode, mover, DiagonalCost);
+                }
 
             // Stair links: descend if THIS cell is a stair; ascend if the cell above is a stair.
-            if (IsStair(cc)) Relax(cc, new CellCoord(cc.X, cc.Y, cc.Z + 1), current, goal, mode, mover);
+            if (IsStair(cc)) Relax(cc, new CellCoord(cc.X, cc.Y, cc.Z + 1), current, goal, mode, mover, OrthogonalCost);
             var above = new CellCoord(cc.X, cc.Y, cc.Z - 1);
-            if (_world.InBounds(above) && IsStair(above)) Relax(cc, above, current, goal, mode, mover);
+            if (_world.InBounds(above) && IsStair(above)) Relax(cc, above, current, goal, mode, mover, OrthogonalCost);
         }
         return new PathResult(PathStatus.NoPath, 0, expanded);
     }
 
     private void Relax(CellCoord from, CellCoord to, int currentIdx, CellCoord goal,
-                       TimeAuthorityMode mode, EntityId mover)
+                       TimeAuthorityMode mode, EntityId mover, int baseCost)
     {
         if (!_world.InBounds(to) || !walk.IsWalkable(to, mode, mover)) return;
         int ni = Index(to);
-        int tentative = _g[currentIdx] + walk.StepCost(to, mode);
+        int tentative = _g[currentIdx] + baseCost + walk.StepSurcharge(to, mode);
         if (_stamp[ni] == _generation && tentative >= _g[ni]) return;
         _stamp[ni] = _generation;
         _g[ni] = tentative;
@@ -106,8 +127,22 @@ public sealed class Pathfinder(CompositeWalkability walk, ushort stairFloorTypeI
         HeapPush(ni, tentative + Heuristic(to, goal));
     }
 
-    private static int Heuristic(CellCoord a, CellCoord b) =>
-        Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y) + Math.Abs(a.Z - b.Z);
+    /// <summary>
+    /// OCTILE distance when diagonals are enabled, Manhattan when they are not.
+    /// This is not cosmetic: scaled Manhattan OVERESTIMATES true cost on an 8-connected grid
+    /// (it charges 20 for a diagonal that costs 14), which makes the heuristic inadmissible and
+    /// silently costs A* its optimality guarantee — it would still return a path, just not
+    /// always the best one. Vertical distance is charged at the orthogonal rate because stair
+    /// moves are strictly vertical and cost OrthogonalCost each.
+    /// </summary>
+    private int Heuristic(CellCoord a, CellCoord b)
+    {
+        int dx = Math.Abs(a.X - b.X), dy = Math.Abs(a.Y - b.Y), dz = Math.Abs(a.Z - b.Z);
+        int horizontal = allowDiagonals
+            ? OrthogonalCost * (dx + dy) + (DiagonalCost - 2 * OrthogonalCost) * Math.Min(dx, dy)
+            : OrthogonalCost * (dx + dy);
+        return horizontal + OrthogonalCost * dz;
+    }
 
     // Deterministic binary min-heap; ties broken by node index so results are reproducible.
     private void HeapPush(int node, int f)
@@ -181,18 +216,31 @@ public sealed class RegionIndex(CompositeWalkability walk)
                     while (head < tail)
                     {
                         CellCoord cur = Coord(_queue[head++], b);
+                        // Connectivity MUST match the pathfinder's movement rules exactly, or the
+                        // O(1) reachability answer contradicts what A* can actually walk.
                         Span<CellCoord> nbrs =
                         [
                             new(cur.X + 1, cur.Y, cur.Z), new(cur.X - 1, cur.Y, cur.Z),
                             new(cur.X, cur.Y + 1, cur.Z), new(cur.X, cur.Y - 1, cur.Z),
+                            new(cur.X + 1, cur.Y + 1, cur.Z), new(cur.X + 1, cur.Y - 1, cur.Z),
+                            new(cur.X - 1, cur.Y + 1, cur.Z), new(cur.X - 1, cur.Y - 1, cur.Z),
                             new(cur.X, cur.Y, cur.Z + 1), new(cur.X, cur.Y, cur.Z - 1),
                         ];
                         for (int k = 0; k < nbrs.Length; k++)
                         {
                             CellCoord nb = nbrs[k];
-                            if (k >= 4)   // vertical links require a stair
+                            if (k is >= 4 and < 8)                       // diagonals
                             {
-                                CellCoord stairCell = k == 4 ? cur : nb;
+                                if (!_diagonals) continue;
+                                // same corner-cutting ban as the pathfinder
+                                var sideA = new CellCoord(nb.X, cur.Y, cur.Z);
+                                var sideB = new CellCoord(cur.X, nb.Y, cur.Z);
+                                if (!walk.IsWalkable(sideA, TimeAuthorityMode.RealTime, EntityId.None) ||
+                                    !walk.IsWalkable(sideB, TimeAuthorityMode.RealTime, EntityId.None)) continue;
+                            }
+                            else if (k >= 8)                             // vertical links require a stair
+                            {
+                                CellCoord stairCell = k == 8 ? cur : nb;
                                 if (!_world.InBounds(stairCell) ||
                                     _world.GetCell(stairCell).FloorTypeId != _stairId) continue;
                             }
@@ -207,7 +255,10 @@ public sealed class RegionIndex(CompositeWalkability walk)
     }
 
     private ushort _stairId;
+    private bool _diagonals = true;
     public void SetStairId(ushort id) => _stairId = id;
+    /// <summary>Must mirror the Pathfinder's setting — see the connectivity note in Rebuild.</summary>
+    public void SetAllowDiagonals(bool v) => _diagonals = v;
 
     private static int Index(CellCoord c, WorldBounds b) => (c.Z * b.SizeY + c.Y) * b.SizeX + c.X;
     private static CellCoord Coord(int i, WorldBounds b)

@@ -148,11 +148,15 @@ public sealed class CompositeWalkability(TerrainWorld world, DoorStore doors, Un
         return true;
     }
 
-    /// <summary>Auto-opening a door costs time in RealTime; free once open/broken.</summary>
-    public int StepCost(CellCoord c, TimeAuthorityMode mode)
+    /// <summary>
+    /// Extra cost ON TOP of the move's base cost (orthogonal 10 / diagonal 14): auto-opening a
+    /// closed door takes time in RealTime. Free once the door is open or broken.
+    /// Placeholder value — tune with the Construction/Doors spec.
+    /// </summary>
+    public int StepSurcharge(CellCoord c, TimeAuthorityMode mode)
     {
         if (mode == TimeAuthorityMode.RealTime && doors.TryGet(c, out DoorRecord d) && !d.IsOpen && !d.IsBroken)
-            return 2;                          // door-opening surcharge
-        return 1;
+            return 10;
+        return 0;
     }
 }

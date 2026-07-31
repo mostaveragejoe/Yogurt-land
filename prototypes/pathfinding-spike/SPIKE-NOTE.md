@@ -3,8 +3,9 @@
 > **Date**: 2026-07-26 · **Validates**: ADR-0003 validation criterion 5 (mode-aware composite
 > walkability) + ADR-0002's stair Z-linkage + the concept doc's open question
 > *"Can pathfinding stay correct and performant while the player digs mid-route?"*
-> **Result**: **YES on correctness (36/36). One real performance constraint found: the region
-> flood fill costs 19.9% of a frame and must never run per dig.**
+> **Result**: **YES on correctness (44/44). Movement model decided (8-connected, corner-cutting
+> banned, octile). One real performance constraint found: the region flood fill costs 25.1% of a
+> frame and must never run per dig.**
 
 ## How it was run
 
@@ -14,7 +15,7 @@ composite walkability composed from terrain + `DoorStore` + `UnitOccupancyIndex`
 ADR-0003 specifies. Benchmarks at MVP scale: 128×128×16 = 262,144 cells, a carved colony of
 rooms + trunk corridors + a stair shaft, 119 regions.
 
-## Correctness: 36/36
+## Correctness: 44/44
 
 **Mode-aware composite walkability — ADR-0003's rule, verified in both directions:**
 
@@ -53,15 +54,15 @@ world built from the same inputs produces the same path.
 | A* medium (111 cells) | 87.3 µs | 0.53% |
 | A* long, corner to corner (126 cells) | 91.4 µs | 0.55% |
 | A* descent via stairs (5 layers) | 10.0 µs | 0.06% |
-| **10 colonists ALL repathing long routes in one frame** | 0.651 ms | **3.9%** |
-| Dig + poll/revalidate 10 cached paths | 63.2 µs per dig | 0.38% |
-| **FULL region flood fill (whole world)** | **3.30 ms** | **19.9%** |
+| **10 colonists ALL repathing long routes in one frame** | 0.500 ms | **3.0%** |
+| Dig + poll/revalidate 10 cached paths | 23.8 µs per dig | 0.14% |
+| **FULL region flood fill (whole world)** | **4.16 ms** | **25.1%** |
 | A* allocation | **0.00 B/query** over 5,000 queries, 0 Gen0 | — |
 
 ## The one real constraint: region rebuild must not run per dig
 
-A full connectivity flood fill over all 262k cells costs **3.30 ms — one fifth of the entire
-frame budget**. Digging is the game's core verb and happens constantly, so a naive
+A full connectivity flood fill over all 262k cells costs **4.16 ms — a quarter of the entire
+frame budget** (it was 3.30 ms at 4-connected; diagonals made it worse). Digging is the game's core verb and happens constantly, so a naive
 "terrain changed → rebuild regions" would spend 20% of every frame recomputing reachability.
 **This is the spike's load-bearing finding.** Mitigations for the Pathfinding quick-spec, in
 order of preference:
@@ -90,14 +91,46 @@ concrete**: if colonist count, path length, or simultaneous dig rate rise by ~5�
 approaches 2% of frame per dig and the narrow change list (which would let a path skip the
 rescan entirely when the changed cell is not on it) becomes worth its complexity.
 
+## Movement model — DECIDED 2026-07-26 (user decision)
+
+**8-connected, corner-cutting BANNED, integer octile costs (orthogonal 10 / diagonal 14),
+octile heuristic.** The first pass defaulted to 4-connected, which was an unexamined
+implementation choice with real gameplay consequences; it is now replaced by the recommended
+model and implemented throughout (pathfinder *and* region index — connectivity rules must match
+or the O(1) reachability answer contradicts what A* can walk).
+
+Three parts, each load-bearing:
+
+1. **Diagonals enabled** — matches the comparables (RimWorld, XCOM both allow them) and makes
+   movement read naturally instead of as a staircase. A 16×16 offset is now **17 cells instead of
+   33**.
+2. **Corner-cutting banned** — a diagonal step is legal only when *both* orthogonal neighbours
+   are walkable. This is what preserves the property chokepoint play depends on, and it is
+   verified rather than assumed: corner-touching rooms stay disconnected; a **one-cell-thick
+   diagonal wall spanning a room holds**, with no slipping between corners; clearing a single
+   orthogonal neighbour legalises the step; breaching one wall cell opens it. The region index
+   agrees with the pathfinder in every case.
+3. **Octile heuristic — a correctness fix, not a tuning knob.** Scaled Manhattan overestimates
+   true cost on an 8-connected grid (charging 20 for a diagonal that costs 14), making the
+   heuristic inadmissible and silently costing A* its optimality guarantee. It would still return
+   *a* path — just not always the best one, and never loudly. Octile distance restores
+   admissibility. Vertical distance is charged at the orthogonal rate because stair moves are
+   strictly vertical.
+
+**Measured cost of the change** (replacing the earlier "roughly 2×" estimate):
+
+| | A* long path | Region flood fill |
+|---|---|---|
+| 8-connected (adopted) | 118.9 µs | 4.74 ms |
+| 4-connected | 75.4 µs | 3.33 ms |
+| **Delta** | **1.6×** | **1.4×** |
+
+Both remain in budget for A*; the region rebuild constraint below gets *worse*, which sharpens
+rather than changes the recommendation.
+
 ## Routed to the Pathfinding quick-spec
 
-- **Diagonal movement is NOT implemented — movement is 4-connected.** This is a real gameplay
-  decision the spike surfaced concretely: two rooms touching only corner-to-corner are *not*
-  connected, which affects level design, corridor feel, and path length (Manhattan, not
-  Euclidean). Decide diagonals — and if adopted, whether corner-cutting past wall corners is
-  legal — in the quick-spec. Cost impact is roughly 2× neighbours per expansion.
-- **Door step cost** is a placeholder (+1 over a normal step) representing open-in-transit time;
+- **Door step cost** is a placeholder (+10 surcharge on top of the base move cost) representing open-in-transit time;
   tune with the Construction/Doors spec.
 - **Whether TurnBased occupancy blocks traversal or only end-of-move** (XCOM permits move-through-ally)
   is still a Combat: Movement & Reachability decision, as ADR-0003 says. The spike implements

@@ -11,9 +11,9 @@ public static class Benchmarks
     private const int MvpX = 128, MvpY = 128, MvpLayers = 16;
 
     /// <summary>A plausible colony: rooms and corridors carved into solid rock, deterministic.</summary>
-    private static Fixture BuildColony(int seed = 7)
+    private static Fixture BuildColony(int seed = 7, bool diagonals = true)
     {
-        var f = new Fixture(MvpX, MvpY, MvpLayers);
+        var f = new Fixture(MvpX, MvpY, MvpLayers, diagonals);
         var rng = new Random(seed);
         using (f.Window.Open())
         {
@@ -42,11 +42,42 @@ public static class Benchmarks
     public static void RunAll()
     {
         Console.WriteLine("\n=== COST (MVP scale: 128x128x16 = 262,144 cells) ===");
+        DiagonalCostDelta();
         SinglePaths();
         ColonyFrame();
         RegionRebuild();
         InvalidationUnderDigging();
         Allocation();
+    }
+
+    /// <summary>Turns the "roughly 2x" estimate into a measurement.</summary>
+    private static void DiagonalCostDelta()
+    {
+        Console.WriteLine("  -- 8-connected (adopted) vs 4-connected, same colony --");
+        var path = new List<CellCoord>(512);
+        var mover = new EntityId(1);
+        var a = new CellCoord(10, 64, 0);
+        var b = new CellCoord(120, 64, 0);
+
+        foreach (bool diagonals in new[] { true, false })
+        {
+            Fixture f = BuildColony(diagonals: diagonals);
+            for (int w = 0; w < 50; w++) f.Pathfinder.FindPath(a, b, TimeAuthorityMode.RealTime, mover, path);
+            const int reps = 500;
+            var sw = Stopwatch.StartNew();
+            PathResult r = default;
+            for (int i = 0; i < reps; i++) r = f.Pathfinder.FindPath(a, b, TimeAuthorityMode.RealTime, mover, path);
+            sw.Stop();
+
+            for (int w = 0; w < 2; w++) f.Regions.Rebuild();
+            var sw2 = Stopwatch.StartNew();
+            for (int i = 0; i < 10; i++) f.Regions.Rebuild();
+            sw2.Stop();
+
+            Console.WriteLine($"  {(diagonals ? "8-connected" : "4-connected"),-14} A* {sw.Elapsed.TotalMilliseconds / reps * 1000,7:F1} us   " +
+                              $"len={path.Count,4}  expanded={r.NodesExpanded,6}  cost={r.Cost,5}   " +
+                              $"regions {sw2.Elapsed.TotalMilliseconds / 10,5:F2} ms ({f.Regions.RegionCount})");
+        }
     }
 
     private static void SinglePaths()

@@ -24,7 +24,7 @@ public sealed class Fixture
     public PathCache Cache { get; }
     public ushort Dirt, Floor, Stair;
 
-    public Fixture(int sx = 48, int sy = 48, int layers = 4)
+    public Fixture(int sx = 48, int sy = 48, int layers = 4, bool diagonals = true)
     {
         Dirt = Catalog.Register("dirt", 1, 30);
         Floor = Catalog.Register("rock_floor", 1, 0);
@@ -41,9 +41,10 @@ public sealed class Fixture
         });
         Doors = new DoorStore(Window);
         Walk = new CompositeWalkability(World, Doors, Occupancy);
-        Pathfinder = new Pathfinder(Walk, Stair);
+        Pathfinder = new Pathfinder(Walk, Stair, diagonals);
         Regions = new RegionIndex(Walk);
         Regions.SetStairId(Stair);
+        Regions.SetAllowDiagonals(diagonals);
         Cache = new PathCache(Walk, Pathfinder);
     }
 
@@ -82,6 +83,7 @@ public static class Tests
         OccupancySemantics();
         Stairs();
         MidRouteDigs();
+        ChokepointSealing();
         Reachability();
         Determinism();
         Console.WriteLine($"\n  {_pass} passed, {_fail} failed");
@@ -96,7 +98,11 @@ public static class Tests
         var b = new CellCoord(18, 18, 0);
         List<CellCoord> p = f.Path(a, b);
         Check(p.Count > 0 && p[0] == a && p[^1] == b, "A* finds a path in an open room");
-        Check(p.Count == 33, $"path length is Manhattan-optimal (33 cells for a 16+16 step, got {p.Count})");
+        Check(p.Count == 17, $"8-connected: a 16x16 offset is 16 diagonal steps = 17 cells (got {p.Count})");
+
+        var f4 = new Fixture(diagonals: false);
+        f4.Carve(1, 1, 20, 20, 0);
+        Check(f4.Path(a, b).Count == 33, "4-connected comparison: the same trip costs 33 cells (Manhattan)");
 
         var blocked = new CellCoord(30, 30, 0);           // still solid rock
         var empty = new List<CellCoord>();
@@ -226,9 +232,6 @@ public static class Tests
               "changes BEHIND the cursor do not invalidate — only the remaining route matters");
 
         // Sealing the goal makes the recompute fail gracefully rather than corrupting state.
-        // NOTE: movement is 4-connected (no diagonals), so the connecting passage must be
-        // orthogonal — a corner-to-corner "diagonal" corridor does NOT connect. (This is the
-        // routed diagonal-movement question made concrete; see spike note.)
         var g = new Fixture();
         g.Carve(1, 1, 10, 10, 0);
         g.Carve(14, 14, 18, 18, 0);
@@ -243,6 +246,50 @@ public static class Tests
         using (g.Window.Open()) foreach (CellCoord c in passage) g.World.SetWall(c, g.Dirt, 0);
         g.Cache.PollAndRevalidate(TimeAuthorityMode.RealTime);
         Check(e2.Path.Count == 0, "sealing the only passage yields an empty path, not a stale one");
+    }
+
+    /// <summary>
+    /// The property chokepoint play depends on: with diagonals ENABLED but corner-cutting
+    /// BANNED, a diagonal wall still seals and corner-touching rooms stay disconnected.
+    /// </summary>
+    private static void ChokepointSealing()
+    {
+        var f = new Fixture();
+        f.Carve(1, 1, 10, 10, 0);            // room A
+        f.Carve(11, 11, 20, 20, 0);          // room B — touches A only at the (10,10)/(11,11) corner
+        var inA = new CellCoord(5, 5, 0);
+        var inB = new CellCoord(15, 15, 0);
+
+        Check(f.Path(inA, inB).Count == 0,
+              "corner-touching rooms are NOT connected — a diagonal wall SEALS (corner-cutting banned)");
+        f.Regions.Rebuild();
+        Check(!f.Regions.AreConnected(inA, inB),
+              "the region index AGREES with the pathfinder (connectivity rules match)");
+
+        // Open one orthogonal side of the corner: now the diagonal step is legal.
+        using (f.Window.Open()) f.World.ClearWall(new CellCoord(11, 10, 0));
+        Check(f.Path(inA, inB).Count > 0, "clearing one orthogonal neighbour legalises the diagonal step");
+        f.Regions.Rebuild();
+        Check(f.Regions.AreConnected(inA, inB), "region index tracks the newly legal diagonal");
+
+        // A ONE-CELL-THICK diagonal wall spanning the room corner to corner must not leak:
+        // crossing it would require a diagonal step between two wall cells, which the
+        // corner-cutting ban forbids. This is the fortress-builder's expectation.
+        var h = new Fixture();
+        h.Carve(1, 1, 20, 20, 0);
+        using (h.Window.Open())
+            for (int i = 1; i <= 20; i++) h.World.SetWall(new CellCoord(i, i, 0), h.Dirt, 0);
+
+        var belowDiagonal = new CellCoord(8, 3, 0);      // x > y
+        var aboveDiagonal = new CellCoord(3, 8, 0);      // y > x
+        Check(h.Path(belowDiagonal, aboveDiagonal).Count == 0,
+              "a 1-cell-thick diagonal wall HOLDS — no slipping between corners");
+        h.Regions.Rebuild();
+        Check(!h.Regions.AreConnected(belowDiagonal, aboveDiagonal),
+              "region index agrees the diagonal wall separates the two halves");
+
+        using (h.Window.Open()) h.World.ClearWall(new CellCoord(10, 10, 0));
+        Check(h.Path(belowDiagonal, aboveDiagonal).Count > 0, "breaching one cell of the diagonal wall opens it");
     }
 
     private static void Reachability()
