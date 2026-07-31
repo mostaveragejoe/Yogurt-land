@@ -322,6 +322,14 @@ The Tier 0 mode-switch spike (`prototypes/mode-switch-spike/`, SPIKE-NOTE.md) ex
 
 **Correction — the raider reap rule leaked (found by the spike).** The Raider Lifecycle row said reconcile despawns *"dead/withdrawn"* raiders. But raiders are **encounter-scoped**: if a battle ends while a raider is alive and has not withdrawn — a debug/scripted end today, or any future objective-complete end condition — that raider survives into colony time as an undespawnable ghost, since despawn inside an encounter is forbidden and no later pass reaps it. **Corrected rule: `PostEncounterReconcile` reaps ALL raiders**, because none may outlive the encounter. The lifecycle row above now says so.
 
+## Spike Results — pathfinding (2026-07-26)
+
+The Tier 0 pathfinding spike (`prototypes/pathfinding-spike/`, SPIKE-NOTE.md) validates **validation criterion 5** — 36/36 checks. Mode-aware composite walkability behaves exactly as specified in both directions: under RealTime colonists path *through* closed doors (auto-open in transit) and occupancy does **not** block (advisory — no colony traffic deadlock); under TurnBased closed doors and cells occupied by another unit both block (tactics legality), and a unit is never blocked by itself. A **broken door unblocks movement and LOS immediately** — combat gets its breach the same turn, as the provisional destructibility rule promises. Door state changes bump `DoorStore.Revision` and cached paths re-validate correctly.
+
+**Revision polling was not falsified**: 63.2 µs per real dig with 10 cached ~126-cell paths (0.38% of a frame). The honest cost shape is **O(cached paths × remaining path length) per terrain mutation**, since polling knows only *that* the world changed, never *which* cell. At MVP caps this is comfortable; **the pre-planned narrow change-list upgrade triggers if colonist count, path length, or simultaneous dig rate rise ~5×**. No contract change needed now.
+
+Also validated here: ADR-0002's stair Z-linkage; A* is allocation-free (0.00 B/query) and deterministic. **One constraint found, routed to the Pathfinding quick-spec, not an ADR change**: a full region flood fill costs 3.30 ms (19.9% of a frame) and must never run per dig — it needs an incremental, deferred, or per-layer rebuild trigger.
+
 **Implementation trap for the pre-switch normalization spec (shared with ADR-0001):** the nudge rule must evaluate each unit against the cells already claimed by earlier decisions *in the same pass*, not against the live occupancy index — a decide-only pass still sees the pre-normalization world, so testing live occupancy makes every co-located unit move, including the lowest id that should keep its cell.
 
 ## Validation Criteria

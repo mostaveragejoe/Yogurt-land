@@ -29,7 +29,17 @@ Tier 0 FUN SPIKE: **COMPLETE — PROCEED, CD-PLAYTEST CONFIRM (2026-07-25)**.
 - **ADR-0001 recommended for promotion to Accepted** — awaiting user decision. ADR-0003 still gated on pathfinding + save/load spikes.
 - NOT answered: presentation gating against a real Godot view (stub only); battle length (design, not architecture); post-battle time semantics (still the open CD question — spike confirms fixed-dt keeps both options open).
 
-- **Next: remaining Tier 0 spikes — pathfinding → save/load** (both gate ADR-0003)
+**PATHFINDING SPIKE: COMPLETE 2026-07-26 — YES, 36/36** (`prototypes/pathfinding-spike/`, SPIKE-NOTE.md).
+- ADR-0003 criterion 5 PASSES. Mode-aware composite walkability verified both directions: RT = auto-open doors + occupancy advisory (no traffic deadlock); TB = closed doors and occupied cells block (tactics legality); self never blocks; **broken door unblocks movement AND LOS immediately** (breach lands same turn).
+- ADR-0002 stair Z-linkage validated (layers disconnected without stairs; stair links Z↔Z+1 both ways).
+- Mid-route digs (the concept doc's open question) answered YES: off-route dig = 1 revalidation/0 recomputes; build on remaining route = exactly 1 recompute routing around; changes behind the cursor don't invalidate; sealed goal = empty path, not stale.
+- A* allocation-free (0.00 B/query), deterministic (index-tiebroken heap).
+- Cost: A* 8.1–91.4 µs; 10 colonists all repathing in one frame 0.651 ms (3.9%); dig+poll/revalidate 63.2 µs (0.38%).
+- **CONSTRAINT FOUND (biggest result)**: full region flood fill = **3.30 ms = 19.9% of a frame** — must NEVER run per dig. Options for Pathfinding quick-spec (#8): incremental updates / deferred-amortized rebuild / per-layer regions (~0.2 ms). Index is already Revision-staleness-aware; only the TRIGGER needs design. Not on the A* path — pathfinding alone is comfortably in budget.
+- **Revision polling NOT falsified** (63.2 µs/dig) but cost is O(paths × remaining length) per mutation; ADR-0003's change-list upgrade trigger stated: ~5× growth in colonists/path length/dig rate.
+- **Routed to quick-spec**: diagonal movement (currently 4-connected — corner-touching rooms are NOT connected, affects level design + path length); door step cost placeholder; TB occupancy blocks traversal vs end-of-move (Combat GDD).
+
+- **Next: last Tier 0 spike — save/load** (gates ADR-0003's remaining half; ADR-0002 snapshot already measured)
 
 Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debug console — committed and pushed.
 
