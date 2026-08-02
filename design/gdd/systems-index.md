@@ -22,7 +22,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 | # | System Name | Category | Priority | Status | Doc Type | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|----------|------------|------------|
 | 1 | Terrain Data Model | Core | MVP | **Approved** (/design-review re-review 2026-08-02: APPROVED, conditional edits applied same day) | Full GDD + ADR-002 | [terrain-data-model.md](terrain-data-model.md) | (none — Foundation) |
-| 2 | Time Authority / Mode-Switch (inferred, elaborated) | Core | MVP | **Designed** (CD-GDD-ALIGN 2026-08-02: CONCERNS → REVISED; pending /design-review) | Full GDD + ADR-001 | [time-authority-mode-switch.md](time-authority-mode-switch.md) | (none — Foundation) |
+| 2 | Time Authority / Mode-Switch (inferred, elaborated) | Core | MVP | **Designed** (/design-review 2026-08-02: NEEDS REVISION → revised same day, 5 blocking + 9 recommended applied; pending re-review — see reviews/time-authority-mode-switch-review-log.md) | Full GDD + ADR-001 | [time-authority-mode-switch.md](time-authority-mode-switch.md) | (none — Foundation) |
 | 3 | World Change Event Bus (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
 | 4 | Seeded RNG / Determinism (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
 | 5 | Material Catalog (inferred) | Economy | MVP | Not Started | Quick-spec | — | (none — Foundation) |
