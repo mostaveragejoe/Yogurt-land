@@ -2,8 +2,8 @@
 
 <!-- STATUS -->
 Epic: Pre-Production
-Feature: Foundation
-Task: ADRs + contracts annex + debug console DONE — next: Tier 0 spike gate (fun spike first)
+Feature: GDD Authoring
+Task: Designing time-authority-mode-switch GDD — Overview, Player Fantasy, Detailed Design written; Formulas in progress (systems-designer consulted)
 <!-- /STATUS -->
 
 ## Current Task
