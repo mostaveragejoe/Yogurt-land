@@ -21,7 +21,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 
 | # | System Name | Category | Priority | Status | Doc Type | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|----------|------------|------------|
-| 1 | Terrain Data Model | Core | MVP | Not Started | Full GDD (after terrain spike) + ADR-002 | — | (none — Foundation) |
+| 1 | Terrain Data Model | Core | MVP | **Designed** (CD-GDD-ALIGN: REVISED) | Full GDD + ADR-002 | [terrain-data-model.md](terrain-data-model.md) | (none — Foundation) |
 | 2 | Time Authority / Mode-Switch (inferred, elaborated) | Core | MVP | Not Started | Full GDD + ADR-001 | — | (none — Foundation) |
 | 3 | World Change Event Bus (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
 | 4 | Seeded RNG / Determinism (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
@@ -170,7 +170,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 | Metric | Count |
 |--------|-------|
 | Total index entries | 35 |
-| Design docs started | 0 |
+| Design docs started | 1 (Terrain Data Model — Designed, pending independent /design-review) |
 | ADRs written | 3/3 + contracts annex — **ADR-0001 & ADR-0003 Accepted**; ADR-0002 Proposed (frame-rate clause on target hardware) |
 | Tier 0 spikes complete | 0/6 |
 | MVP systems designed | 0/25 |
@@ -181,6 +181,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 - **TD-SYSTEM-BOUNDARY** (2026-07-24): CONCERNS — all addressed: terrain data/render split, Resource split into Material Catalog + Stockpile & Hauling, write-ownership table (ADR-003), serialization contract hoisted, Time Authority cross-cutting annex, 6 systems added, edges fixed.
 - **PR-SCOPE #2** (2026-07-24): OPTIMISTIC — adjustments applied: tiered documentation policy, just-in-time authoring, spike gate before GDDs, combat split, 3 demotions accepted; Stockpile & Hauling kept in MVP by explicit user decision. Working-hours assumption behind the 12–24mo Tier 1 band: **[TO CONFIRM: full-time vs evenings/weekends — double the bands if part-time]**.
 - **CD-SYSTEMS** (2026-07-24): CONCERNS — 9 notes recorded below; mid-battle-save resolved (NO); Pillar 4 reframed in concept doc; Identity minimum surface landed in MVP; one style vocabulary in MVP with picker in VS.
+- **CD-GDD-ALIGN — Terrain Data Model** (2026-07-26): **CONCERNS → REVISED**. Two must-fix items, both resolved. (1) The stair rules contradicted themselves — C8 declared stairs permanent and Edge Cases forbade walling a stair cell, but C6 already permitted walling the landing below. Resolved by **deleting** the prohibition rather than adding a rule: the stair floor is permanent, the passage through it is not. The CD's supporting anti-pillar argument (stranding colonists) was **rejected by the user as a stretch** — the anti-pillar governs unrecoverable full-colony loss the game imposes, not a recoverable mistake the player makes. (2) The GDD's CD-1 compliance claim overreached: `TerrainChange.Previous` is valid only at publish, the bus has no replay, and no subscriber kept a breach log — so CD-1's "what breached first" had no owner. **Combat: Targeting & Resolution (#22) now owns the encounter-era breach log**, routed to Combat UI (#27) via the `EncounterOutcomeReport` (flagged to technical-director as a schema change to an Accepted ADR). Carried items applied: three Pillar 1/3 promises named in Player Fantasy; tier-ordering invariant assigned a cross-check owner; up-stairs split into a hard Map Authoring constraint (#14, before first map) and a deferred mechanic; OQ#8 closed by CD-11 (floor-drops are pre-built activated gates, not terrain mutations); OQ#9 re-framed as a Pillar 1 tension to resolve at the art bible's palette spec.
 - **CD-PLAYTEST** (2026-07-25): **CONFIRM PROCEED** on the fun spike (hypothesis CONFIRMED; report: `prototypes/hollowdeep-fun-spike-concept/REPORT.md`). Pillar 1 confirmed by bias-immune mechanical evidence (emergent weakest-material breaching + traceable scars); Pillar 2 HALF confirmed (prep sets the ceiling — the in-battle-skill half is untested and is the same finding as "raiders unreactive"); Pillar 3 confirmed in its cheapest form (free/instant rebuild — see CD-18). 9 binding notes CD-10–CD-18 recorded below; caveats appended to the report. Quote for the record: *"Proceed — and treat raider behavior, not raider variety, as the next thing that has to be proven."*
 
 ## Creative Director Notes (CD-SYSTEMS, 2026-07-24 — fold into specs as they are authored)
