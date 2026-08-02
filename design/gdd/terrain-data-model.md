@@ -223,7 +223,35 @@ This table is part of the specification. Each row is a decision this document de
 
 ## Edge Cases
 
-[To be designed]
+### Displacement rule (referenced below)
+
+When a terrain change forces a colonist or an item stack out of a cell, the destination is the **nearest free cell**, found by scanning candidate offsets in fixed ascending (Z, Y, X) order at expanding radius; first match wins. Deterministic by construction, and deliberately **the same rule ADR-0003 fixes for pre-switch placement normalization** — the game has one displacement algorithm, not two that drift apart.
+
+### Cases
+
+- **If a wall completes in a cell a colonist occupies**: the wall is placed and the colonist is displaced per the rule above. *Blocking the job instead would let a single idling colonist stall construction indefinitely; the brief visual of being moved out of rock is the cheaper cost.*
+
+- **If a wall completes in a cell holding an item stack**: the stack is displaced per the same rule. Nothing is destroyed and nothing is buried — the player never silently loses resources.
+
+- **If displacement finds no free cell within the scan radius**: the build job is cancelled and the player is notified. *Failure is explicit rather than a silent no-op or an entity trapped inside rock.*
+
+- **If the player designates a wall on a stair cell**: rejected at designation time. Stairs are permanent (C8), and permitting a seal would be a back-door partial undo of that decision. *Sealing a stairwell is a genuinely interesting defensive option and is deliberately deferred, not dismissed — reconsider it with the Combat set, where its tactical value can be judged.*
+
+- **If a save is loaded while digs are in flight**: designations, terrain-job claims, and **in-flight dig progress all persist** — a half-dug wall resumes exactly where it was. Dig progress is authoritative work state, not derived state, so it is serialized by Excavation & Construction (#15/#16) alongside its designation table and must round-trip under the serialization contract's CI gate. *This keeps the claim bit and its progress entry consistent across a save by construction, so ADR-0002's claim invariant (bit set ≡ key present in Job Assignment's table) needs no special load-time handling.*
+
+- **If combat destroys a cell that is designated or claimed**: the `WallRemoved` event invalidates the job immediately, **including mid-battle while the colony is paused** (C10, and cross-cutting contract #1 — paused systems still receive events). No post-encounter rescan of designations is required.
+
+- **If a bulk batch contains one invalid entry**: the entire batch is rejected — nothing is applied, nothing is published, and the first offending index is reported (ADR-0002 rule 3). Validate-all-then-apply means there is never a partial application to roll back.
+
+- **If a stair is designated on the bottom layer**: rejected at designation time, since C8 requires `(x, y, z+1)` to be in bounds.
+
+- **If two designations target the same cell**: the latest wins, replacing the pending one (C9). A cancelled dig discards its progress entry; a build that never completed leaves the cell exactly as it was.
+
+- **If repair is applied to a wall already at full HP, or damage to a cell with no wall**: both are no-ops that publish nothing (Formulas A and B). Neither is an error condition.
+
+- **If a cell is a void**: it is impassable, pathfinding never routes through it, and no MVP mechanic displaces an entity into one. Voids exist only where the map author placed them (C7).
+
+- **If the cutaway window's lower boundary cuts through a stair landing or a void column**: the treatment is owned by Terrain Rendering & Cutaway (#7). Recorded here as a known boundary condition, deliberately not decided in this document.
 
 ## Dependencies
 
