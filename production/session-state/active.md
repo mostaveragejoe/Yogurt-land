@@ -3,8 +3,18 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: time-authority-mode-switch GDD COMPLETE (all 12 sections; CD-GDD-ALIGN REVISED) — next: /design-review in a FRESH session, then #8 Colonist Entity quick-spec
+Task: time-authority-mode-switch GDD — /design-review RE-REVIEW done 2026-08-02 (NEEDS REVISION → revised same session; BATTLE PERSISTENCE user ruling) — next: /propagate-design-change for ADR-0001/0003 + contracts + index, then #8 Colonist Entity quick-spec
 <!-- /STATUS -->
+
+## RE-REVIEW SESSION 2026-08-02 (second /design-review pass)
+
+- Verdict: NEEDS REVISION (light) → all revisions applied same session. 6 specialists + CD synthesis; all prior fixes (B1–B5, R1–R9) verified held. 5 new blocking (B6–B10) + 6 recommended sweeps applied; 5 nice-to-haves deliberately skipped (logged in review log).
+- **BATTLE PERSISTENCE (user ruling, supersedes B6 and overturns CD-9's save half)**: battle autosaves continuously — one rolling non-selectable checkpoint per actor activation, written POST-resolution, tagged Mode==TurnBased, only legal combat-mode save writer. Load always resumes latest → mid-battle relaunch resumes mid-battle at next activation. No pre-battle rewind exists; EC-8 quit-rewind, reload seed question (old OQ #3a), and suspend-to-exit upgrade path all dissolved. Manual saves stay disabled in combat; switch-in + battle-end autosaves kept (3 total). New QuitConfirmText: "Quitting suspends the battle — it will resume exactly where you left off." New ACs 66/67/68; AC-43/45/54 rewritten. CD-9's battle-length half STANDS.
+- **PROPAGATION PENDING (user decision: route via /propagate-design-change, NOT edited this session)**: ADR-0001 (TurnBased snapshot support now needed; "combat-mode save is corrupt" narrows to manual-writer saves; "CD-9 banked" consequence obsolete), ADR-0003 (combat-transient "never serialized" needs checkpoint carve-out), cross-cutting-contracts.md (CD-9), systems-index.md (CD-9 note), technical-preferences.md (CD-9 references). Seeded RNG ADR gains checkpoint RNG-stream serialization obligation. Save/Load #6 gains checkpoint scope.
+- Other blockers fixed: B7 day-length div-by-zero (multiplicative form added, divisive form marked presentation-only); B8 AC-65 for config guard 3; B9 OQ #10 (N≥5 benchmark preconditions, owner TD, gate: before AC-34/35/36 in CI); B10 survey added to accessibility cross-ref + single-confirm clearability bound.
+- Sweeps: Rule 3 honesty pass (throttle-signal obligation to HUD; "never hitches" narrowed); Tuning Knobs (SubStepCap range → …8; "one real lever" reword; speed-aware day-length note); AC hygiene (AC-30 provenance split; testable-now cores in 49/52/54/55/58; AC-60 → (d) pointer; AC-61 split telemetry vs qualitative; AC-36 raider-axis + allocation clauses); transmission gaps (drag-select exception, quit-dialog default focus, first-raid scoping, AC-16 grep scope, OQ #11 view-freeze companion note, OQ #9 widened w/ ADR-0001 "default 8" flag); Pillar 4 tableau sentence; "direct command" AC ownership named to Combat set.
+- CD adjudications of record (in review log when appended): F1 pause-cycling ruling upheld but reasoning extended ("pause is cost-free when the alternative was progress; not automatically when the alternative was nothing"); onboarding-vs-advertisement line (U1 granted vs N2 denied); P1 tracking row consistent with OQ #8 ruling.
+
 
 ## Current Task
 Tier 0 FUN SPIKE: **COMPLETE — PROCEED, CD-PLAYTEST CONFIRM (2026-07-25)**.

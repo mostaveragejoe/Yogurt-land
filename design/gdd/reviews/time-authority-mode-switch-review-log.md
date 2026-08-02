@@ -1,5 +1,26 @@
 # Review Log — Time Authority / Mode-Switch
 
+## Review — 2026-08-02 — Verdict: NEEDS REVISION (re-review, light; revised same session — pending /propagate-design-change before any third pass)
+Scope signal: XL
+Specialists: game-designer, systems-designer, qa-lead, performance-analyst, godot-specialist, ux-designer, creative-director (senior synthesis)
+Blocking items: 5 (B6–B10) | Recommended sweeps: 6 | Nice-to-haves skipped: 5 (deliberate, listed below)
+Summary: All 14 prior fixes (B1–B5, R1–R9) verified held under adversarial re-review. The round's defining event was not a defect but a **user ruling — BATTLE PERSISTENCE — which supersedes finding B6 and overturns CD-9's save half**: combat autosaves continuously as one rolling, non-selectable checkpoint per actor activation (written post-resolution, tagged Mode==TurnBased, the only legal combat-mode save writer); load always resumes the latest checkpoint, so a mid-battle relaunch resumes mid-battle at the next activation. No pre-battle rewind exists any longer — EC-8's quit-rewind, the reload-seed question (old OQ #3a), and the suspend-to-exit upgrade path all dissolved. Manual saves stay disabled in combat; the switch-in and battle-end autosaves are kept (3 autosave moments total). New `QuitConfirmText`: "Quitting suspends the battle — it will resume exactly where you left off." New ACs 66/67/68; AC-43/45/54 rewritten. CD-9's battle-length half STANDS unchanged. Remaining blockers fixed in place: B7 day-length divide-by-zero (multiplicative canonical form; divisive form marked presentation-only), B8 AC-65 for config guard 3, B9 OQ #10 (N≥5 benchmark preconditions, owner technical-director, gated before AC-34/35/36 enter CI), B10 survey added to the accessibility cross-reference with a single-confirm clearability bound.
+Prior verdict resolved: Yes — first-pass NEEDS REVISION (2026-08-02) fully resolved; all B1–B5/R1–R9 fixes held.
+
+**PROPAGATION PENDING (user decision: route via /propagate-design-change; deliberately NOT edited this session)**: ADR-0001 (TurnBased snapshot support now required; "a combat-mode save is corrupt" narrows to manual-writer saves; the "CD-9 banked" consequence is obsolete), ADR-0003 (combat-transient "never serialized" needs a checkpoint carve-out), cross-cutting-contracts.md, systems-index.md, and technical-preferences.md (CD-9 references throughout); the Seeded RNG ADR gains a checkpoint RNG-stream serialization obligation; Save/Load #6 gains checkpoint scope. **Until propagation runs, the GDD intentionally disagrees with the Accepted ADRs — do not mark Approved and do not re-review before the docs agree again.**
+
+**Recommended sweeps applied**: Rule 3 honesty pass (throttle-signal obligation to the HUD spec; "never hitches" narrowed); Tuning Knobs (SubStepCap range → …8; "one real lever" reword; speed-aware day-length note); AC hygiene (AC-30 provenance split; testable-now cores extracted in 49/52/54/55/58; AC-60 → (d) pointer; AC-61 split telemetry vs qualitative; AC-36 raider-axis + allocation clauses); transmission gaps (drag-select exception, quit-dialog default focus, first-raid scoping, AC-16 grep scope, OQ #11 view-freeze companion note, OQ #9 widened with the ADR-0001 "default 8" flag); Pillar 4 tableau sentence; "direct command" AC ownership named to the Combat set.
+
+**CD adjudications of record (re-review)**: F1 pause-cycling ruling upheld with extended reasoning ("pause is cost-free when the alternative was progress; not automatically when the alternative was nothing"); the onboarding-vs-advertisement line drawn (U1 granted vs N2 denied); P1 tracking row ruled consistent with the OQ #8 ledger ruling.
+
+**Nice-to-haves deliberately skipped (on record)**: 5 items from the re-review round, per user scope decision — see the re-review session notes in production/session-state/active.md.
+
+**Re-review checklist for the NEXT pass (after /propagate-design-change)**:
+1. Battle Persistence internally consistent end-to-end (checkpoint writer rules, 3 autosave moments, new QuitConfirmText, ACs 66/67/68, rewritten AC-43/45/54)
+2. ADR-0001/0003 + contracts + index + technical-preferences propagation landed and agrees with the GDD
+3. B7 multiplicative day-length form cited (not the divisive presentation form) by any downstream doc written since
+4. OQ #10/#11 owners and gates intact
+
 ## Review — 2026-08-02 — Verdict: NEEDS REVISION (revised same day; pending re-review)
 Scope signal: XL
 Specialists: game-designer, systems-designer, qa-lead, performance-analyst, godot-specialist, ux-designer, creative-director (senior synthesis)
