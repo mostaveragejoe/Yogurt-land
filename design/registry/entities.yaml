@@ -37,7 +37,7 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: ""
+last_updated: "2026-07-26"
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -106,7 +106,85 @@ items: []
 #   output_range[min, max], added
 # Optional: expression (the actual formula), notes
 
-formulas: []
+formulas:
+  # NOTE: none of these carry a balance NUMBER. Terrain owns the function, never the
+  # arguments — the magnitudes (tier HP, dig cost, repair rate) are registered later by
+  # Material Catalog, Excavation & Construction, and Repair & Rebuild respectively.
+  - name: wall_damage_application
+    status: active
+    source: design/gdd/terrain-data-model.md
+    referenced_by:
+      - design/gdd/terrain-data-model.md
+    variables:
+      - WallHp
+      - DamageAmount
+      - RemainingHp
+      - AppliedAmount
+    output_range: [0, 65535]          # ushort; upper bound is MaxHp(tier), owned by Material Catalog
+    expression: "RemainingHp = max(WallHp - DamageAmount, 0); AppliedAmount = WallHp - RemainingHp"
+    notes: "Floor-clamped at 0 regardless of DamageAmount. At 0 the wall is removed atomically
+      in the same call and publishes WallRemoved with Previous capturing the failed tier (CD-1).
+      No wall present = no-op, publishes nothing. AppliedAmount (not DamageAmount) is the figure
+      the after-action report cites. Will be referenced_by material-tier-destructibility.md and
+      combat-targeting-resolution.md once those exist."
+    added: 2026-07-26
+    revised: ""
+
+  - name: wall_repair_application
+    status: active
+    source: design/gdd/terrain-data-model.md
+    referenced_by:
+      - design/gdd/terrain-data-model.md
+    variables:
+      - WallHp
+      - RepairAmount
+      - MaxHp
+      - RemainingHp
+      - AppliedAmount
+    output_range: [0, 65535]          # ushort; ceiling is MaxHp(tier), owned by Material Catalog
+    expression: "RemainingHp = min(WallHp + RepairAmount, MaxHp(tier)); AppliedAmount = RemainingHp - WallHp"
+    notes: "Ceiling-clamped at the tier's catalog max — repair can never overheal or bank HP, and
+      cannot manufacture an absent wall (that is Construction's SetWall). AppliedAmount is the
+      figure CD-7's material consumption bills for. Will be referenced_by repair-rebuild.md."
+    added: 2026-07-26
+    revised: ""
+
+  - name: work_position_adjacency
+    status: active
+    source: design/gdd/terrain-data-model.md
+    referenced_by:
+      - design/gdd/terrain-data-model.md
+    variables:
+      - W
+      - T
+    output_range: [0, 1]              # boolean
+    expression: "IsAdjacentSameLayer(W,T) = (max(|Wx-Tx|, |Wy-Ty|) == 1) AND (Wz == Tz)"
+    notes: "Exactly 8 cells qualify (Moore neighbourhood minus centre, same Z). Diagonal-inclusive
+      and purely geometric: deliberately does NOT encode the corner-cutting ban (which governs
+      travel to W and belongs to Pathfinding) and does NOT encode passability or reachability.
+      Formalised so Excavation, Construction and Repair cannot each reimplement 'surrounding'
+      differently. Will be referenced_by excavation-construction.md and repair-rebuild.md."
+    added: 2026-07-26
+    revised: ""
+
+  - name: cell_state_classification
+    status: active
+    source: design/gdd/terrain-data-model.md
+    referenced_by:
+      - design/gdd/terrain-data-model.md
+    variables:
+      - FloorTypeId
+      - WallTypeId
+      - IsStairFloor
+    output_range: [0, 3]              # enum: SolidRock | Open | Stair | Void
+    expression: "IsPassableTerrain(C) = FloorTypeId != 0 AND WallTypeId == 0"
+    notes: "Four states: SolidRock (floor+wall), Open (floor, no wall), Stair (Z-linking floor,
+      no wall), Void (neither). Wall-without-floor is undefined by design — C7 guarantees every
+      excavatable cell is authored with a floor — but degrades safely to impassable. Terrain's
+      sole contribution to walkability; Pathfinding composes it with doors and occupancy. Will be
+      referenced_by pathfinding-navigation.md and terrain-rendering-cutaway.md."
+    added: 2026-07-26
+    revised: ""
 
 # Example:
 #

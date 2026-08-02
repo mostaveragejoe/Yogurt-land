@@ -101,7 +101,125 @@ Reachability loss is **not** terrain's concern — `IsPassableTerrain` is a per-
 
 ## Formulas
 
-[To be designed]
+**Ownership principle: Terrain owns the function, never the arguments.** `ApplyWallDamage(cell, amount)` — Terrain owns what happens to `amount` once it arrives (the clamp, the destroy-at-zero transition, the event), never where `amount` comes from. Consequently **this section declares no balance numbers**. Doing so would also contradict this document's own Interactions table, which assigns tier and max HP to the Material Catalog (#5). All HP figures in the worked examples below are illustrative placeholders.
+
+### Formula A — Wall Damage Application
+
+`RemainingHp = max(WallHp − DamageAmount, 0)`
+`AppliedAmount = WallHp − RemainingHp`
+
+**Variables:**
+
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Wall HP before | `WallHp` (H₀) | ushort | 0 to `MaxHp(tier)` — the max is Material Catalog's (#5) value | Current wall HP immediately before the call |
+| Damage requested | `DamageAmount` (D) | int | ≥ 0 (negative is a caller error) | Damage points requested; the *magnitude* is Destructibility's (#17) / Combat's (#22) to compute |
+| Wall HP after | `RemainingHp` (H₁) | ushort | 0 to H₀ | Stored HP after the call; 0 means the wall is removed |
+| Applied amount | `AppliedAmount` (Δ) | int | 0 to H₀ | HP actually removed after clamping |
+| Outcome | — | enum {NoWall, Damaged, Destroyed} | set | NoWall if no wall before the call; Destroyed if H₁ = 0; Damaged otherwise |
+
+**Output Range:** H₁ ∈ [0, H₀] — monotonically decreasing, floor-clamped at 0 regardless of how large D is. If no wall is present the call is a no-op and publishes nothing. At H₁ = 0 the wall is removed atomically in the same call and the batch reports `WallRemoved`, with `Previous` capturing the failed tier for CD-1.
+
+**`AppliedAmount`, not `DamageAmount`, is the figure the after-action report should cite** — a 250-damage hit on a 180 HP wall did 180 damage, not 250.
+
+**Example** (HP values illustrative):
+- Granite wall H₀ = 180, D = 60 → H₁ = 120, Δ = 60, Damaged. Publishes `WallDamaged`.
+- Granite wall H₀ = 180, D = 250 → H₁ = 0 (clamped, not −70), Δ = 180 (not 250), Destroyed. Publishes `WallRemoved`.
+- Open cell, D = 60 → NoWall, Δ = 0, no state change, publishes nothing.
+
+### Formula B — Wall Repair Application
+
+`RemainingHp = min(WallHp + RepairAmount, MaxHp(tier))`
+`AppliedAmount = RemainingHp − WallHp`
+
+**Variables:**
+
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Wall HP before | `WallHp` (H₀) | ushort | 0 to `MaxHp(tier)` | Current wall HP immediately before the call |
+| Repair requested | `RepairAmount` (R) | int | ≥ 0 (negative is a caller error) | HP points requested; the rate per colonist-hour and its hauled-material cost are Repair & Rebuild's (#25, CD-7) to compute |
+| Tier ceiling | `MaxHp(tier)` (H_max) | ushort | tier-specific, Material Catalog's (#5) | Looked up via the catalog; never stored per cell |
+| Wall HP after | `RemainingHp` (H₁) | ushort | H₀ to H_max | Stored HP after the call |
+| Applied amount | `AppliedAmount` (Δ) | int | 0 to (H_max − H₀) | HP actually restored after clamping |
+| Outcome | — | enum {NoWall, AlreadyAtMax, Repaired} | set | NoWall if no wall; AlreadyAtMax if H₀ = H_max; Repaired otherwise |
+
+**Output Range:** H₁ ∈ [H₀, H_max] — monotonically non-decreasing, ceiling-clamped at the tier's catalog max. Repair can never overheal or bank HP above the wall's own tier ceiling, and cannot manufacture a wall that is not there (that is Construction's `SetWall`, a distinct verb). If already at max the call is a no-op regardless of R.
+
+**`AppliedAmount` is the figure CD-7's material consumption should bill for** — repairing the last 20 points of a 100-point request costs 20 points' worth of material, not 100.
+
+**Example** (HP values illustrative):
+- Granite wall H₀ = 120, H_max = 300, R = 100 → H₁ = 220, Δ = 100, Repaired.
+- Granite wall H₀ = 280, R = 100 → H₁ = 300 (clamped), Δ = 20, Repaired.
+- Granite wall H₀ = 300, R = 50 → Δ = 0, AlreadyAtMax, publishes nothing.
+
+### Formula C — Work-Position Adjacency (formalises C3)
+
+`IsAdjacentSameLayer(W, T) = (max(|Wx − Tx|, |Wy − Ty|) = 1) ∧ (Wz = Tz)`
+
+**Variables:**
+
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Target cell | `T` | CellCoord | in-bounds | The dig / build / repair target |
+| Candidate work position | `W` | CellCoord | in-bounds | Cell being tested as a legal place to stand while working `T` |
+| Horizontal offsets | Δx, Δy | int | unbounded as inputs | \|Wx − Tx\|, \|Wy − Ty\| |
+| Result | — | bool | {true, false} | True iff `W` is one of the 8 cells surrounding `T` on the same layer |
+
+**Output Range:** Boolean. Exactly 8 cells satisfy it for any `T` — the full Moore neighbourhood minus the centre, all on `T`'s own Z-level.
+
+This test is **diagonal-inclusive** and purely geometric. It deliberately does **not** encode the corner-cutting ban (which governs travel *to* `W` and is Pathfinding's), and does **not** encode passability or reachability — Terrain contributes `IsPassableTerrain(W)` as a separate fact, ANDed in afterwards. Formalised because "the 8 cells surrounding T" in prose invites Excavation, Construction and Repair to reimplement "surrounding" three different ways.
+
+**Example:** T = (10, 10, 3).
+- W = (9, 9, 3) → true (diagonal; legal even if both flanking orthogonal cells are walls, since this tests only W's relation to T).
+- W = (10, 9, 3) → true.
+- W = (10, 10, 3) → false (the target itself).
+- W = (12, 10, 3) → false (two cells away).
+- W = (10, 10, 4) → false (different layer, matching X/Y).
+
+### Formula D — Cell State Classification and Passability (formalises C1)
+
+`CellState(C)` =
+- **SolidRock** if `Floor ≠ 0 ∧ Wall ≠ 0`
+- **Stair** if `Floor ≠ 0 ∧ Wall = 0 ∧ IsStairFloor(Floor)`
+- **Open** if `Floor ≠ 0 ∧ Wall = 0 ∧ ¬IsStairFloor(Floor)`
+- **Void** if `Floor = 0 ∧ Wall = 0`
+
+`IsPassableTerrain(C) = Floor(C) ≠ 0 ∧ Wall(C) = 0` — equivalently, `CellState(C) ∈ {Open, Stair}`.
+
+**Variables:**
+
+| Variable | Symbol | Type | Range | Description |
+|----------|--------|------|-------|-------------|
+| Cell | `C` | CellCoord | in-bounds | The cell being classified |
+| Floor field | `Floor(C)` | ushort | 0 (none) or a catalog floor id | Terrain's stored floor field |
+| Wall field | `Wall(C)` | ushort | 0 (none) or a catalog wall id | Terrain's stored wall field |
+| Stair-ness | `IsStairFloor` | bool (catalog-derived) | set | True iff the catalog entry for that floor declares Z-linkage; never stored per cell |
+| Classification | `CellState` | enum {SolidRock, Open, Stair, Void} | 4 states | C1's four meaningful combinations |
+| Passability | `IsPassableTerrain` | bool | {true, false} | Terrain's sole contribution to walkability; Pathfinding composes it with doors and occupancy |
+
+**Output Range:** exactly the four states named in C1. One combination is **undefined by design and should not occur in normal play**: `Wall ≠ 0 ∧ Floor = 0` (a wall with no floor beneath it), which C7 prevents by guaranteeing every excavatable cell is authored with a floor. Should debug tooling produce it anyway, the formula degrades safely — `IsPassableTerrain` still evaluates false.
+
+**Example:**
+- Floor = granite, Wall = granite → SolidRock, passable = false.
+- Floor = rock floor, Wall = 0 → Open, passable = true.
+- Floor = stair, Wall = 0 → Stair, passable = true.
+- Floor = 0, Wall = 0 → Void, passable = false.
+- Floor = 0, Wall = granite (anomalous, debug only) → outside the taxonomy; passable = false.
+
+### Formulas deliberately NOT written here
+
+This table is part of the specification. Each row is a decision this document declines to make, so that the system which owns the balance makes it with the context to do so.
+
+| Not written here | Owner | Why Terrain has no basis to write it |
+|------------------|-------|--------------------------------------|
+| Dig time per material tier | Excavation & Construction (#15/#16) | Terrain never sees dig progress (C4 — it lives in Excavation's side table) and stores no tier field |
+| Wall max HP per tier | Material Catalog (#5) | Already assigned by this document's Interactions table; Terrain derives tier by lookup, never sets it |
+| Combat damage amounts (the `D` fed into Formula A) | Destructibility (#17) / Combat: Targeting (#22) | Terrain consumes the number; it holds no weapon, armour or resolution data |
+| Repair rate and material cost (the `R` fed into Formula B) | Repair & Rebuild (#25), per CD-7 | Terrain consumes the number; hauled-material accounting is Repair's |
+| Tier ordering invariant (dirt < granite < reinforced) | Acceptance criterion in #5 (HP) and #15/#16 (dig time) | Terrain never compares tiers — it has no tier field to compare |
+| Dig-completion threshold (`progress ≥ dig cost`) | Excavation & Construction (#15/#16) | Both operands live in Excavation's side table; Terrain's only guarantee is the atomic `ClearWall` on completion (C4) |
+| Cell ↔ chunk coordinate mapping | ADR-0002 (data contract) | Pure implementation with zero gameplay content; restating it would create a second source of truth |
+| Damage-visualisation HP breakpoints | Terrain Rendering & Cutaway (#7) | The *count* (3 levels) is fixed in Detailed Design; where the breakpoints fall is an art / tech-art call |
 
 ## Edge Cases
 
