@@ -21,7 +21,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 
 | # | System Name | Category | Priority | Status | Doc Type | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|----------|------------|------------|
-| 1 | Terrain Data Model | Core | MVP | **Revised** (/design-review 2026-08-02: NEEDS REVISION, all items applied — pending re-review) | Full GDD + ADR-002 | [terrain-data-model.md](terrain-data-model.md) | (none — Foundation) |
+| 1 | Terrain Data Model | Core | MVP | **Approved** (/design-review re-review 2026-08-02: APPROVED, conditional edits applied same day) | Full GDD + ADR-002 | [terrain-data-model.md](terrain-data-model.md) | (none — Foundation) |
 | 2 | Time Authority / Mode-Switch (inferred, elaborated) | Core | MVP | Not Started | Full GDD + ADR-001 | — | (none — Foundation) |
 | 3 | World Change Event Bus (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
 | 4 | Seeded RNG / Determinism (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
@@ -170,7 +170,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 | Metric | Count |
 |--------|-------|
 | Total index entries | 35 |
-| Design docs started | 1 (Terrain Data Model — /design-review 2026-08-02 NEEDS REVISION, revision applied same day, pending re-review) |
+| Design docs started | 1 (Terrain Data Model — **Approved**, /design-review re-review 2026-08-02) |
 | ADRs written | 3/3 + contracts annex — **ADR-0001 & ADR-0003 Accepted**; ADR-0002 Proposed (frame-rate clause on target hardware) |
 | Tier 0 spikes complete | 0/6 |
 | MVP systems designed | 0/25 |

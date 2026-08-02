@@ -1,5 +1,16 @@
 # Review Log — Terrain Data Model
 
+## Review — 2026-08-02 — Verdict: APPROVED (re-review; conditional on 3 line-edits, applied same day)
+Scope signal: XL
+Specialists: game-designer, systems-designer, performance-analyst, godot-specialist, qa-lead, creative-director (senior synthesis)
+Blocking items: 3 | Recommended: 6
+Summary: All seven of the prior round's blocking fixes held under adversarial re-review, with two exceptions in the same arithmetic class as round one's headline bug: Formula B's defensive contract added only the sign guard (the addition could still wrap through int at extreme R — widened arithmetic now specified word-for-word with Formula A), and Formula D defined no return for the anomalous wall-without-floor combination (an implementation could silently report SolidRock — an explicit `Anomalous` enum value with debug assert now specified, plus an AC). The 4.7.1 verification gate was found to be advisory rather than blocking and now names an owner (technical-director), a resolution point (with OQ#1's hardware run), and a checkable precondition (/story-readiness BLOCKED for render-backend stories until modules/gridmap.md exists). Recommended edits applied: style-variant ceiling caveated pending overlay-map measurement (144/150 leaves 6 calls of headroom); chunk-size "Locked" conditioned on octant-granular rebake verification; writer-discipline + determinism ACs tagged blocked on Known Gap #2's test hooks; floor MeshLibrary stair-item constraint added (counts toward style-combo scaling, not exempt); OQ#4 records the cutaway cannot be the sole dormant-stair guarantee; stranded-colonist unreachable notification routed to #10/#8 as a named obligation; OQ#9 moved to an independent track (no longer sequenced behind OQ#1). CD verdict: "Round one found architecture-class defects. This round found two arithmetic-class defects and a governance gap. That is convergence, not stalling."
+Prior verdict resolved: Yes — NEEDS REVISION (2026-08-02) fully resolved; all 7 prior blocking fixes verified (5 held as written, 2 completed here).
+
+**Adjudications of record (re-review)**: Gen0 hard-binary gate UPHELD against performance-analyst's flake objection (harness problem, not gate problem — bytes-allocated is already separately gated; both stay hard). Multi-octant rebuild gate ruled correctly handled as an unmeasured obligation blocking render-backend acceptance, not a doc defect. OQ#9 placement upheld (art-director + technical-director), ordering conceded (independent track). SD-C2 and C6/OQ#7 ruled honest, owned scope debt — the correct terminal state for a Foundation doc with no authority over #30/#34 — not defects.
+
+**Open external tasks (unchanged from prior round, still tracked in Known Gaps)**: 60 fps target-hardware run (ADR-0002 promotion gate); 4.7.1 GridMap API verification + modules/gridmap.md authoring (now with owner + precondition); overlay-map draw-call measurement (converged finding: the single largest unquantified draw-call risk); multi-octant aggregate rebuild measurement; EncounterOutcomeReport schema change for CD-1 ordering (technical-director).
+
 ## Review — 2026-08-02 — Verdict: NEEDS REVISION
 Scope signal: XL
 Specialists: game-designer, systems-designer, performance-analyst, godot-specialist, qa-lead, creative-director (senior synthesis)
