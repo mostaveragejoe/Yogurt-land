@@ -104,15 +104,51 @@ Two formulas govern this system. Both restate ADR-0001's sub-stepping contract i
 
 ## Edge Cases
 
-[To be designed]
+- **If Raid Trigger's threshold is reached while speed is 0**: impossible by construction — threat accumulates only inside real-time steps, and speed 0 delivers none. No "check while paused" path exists. *(EC-1)*
+- **If a second breach condition is met while an encounter is active or pending**: the switch request is rejected silently — no visible transition, no queued second battle. Raid Trigger (#18) owns what becomes of the rejected threshold (reset / hold / re-arm). *(EC-2)*
+- **If a UI action is mid-authoring at the freeze** (uncommitted drag-select, unconfirmed blueprint, open zone-menu selection): dropped silently, never resumed after battle — the referenced state may no longer exist by then. **Scope**: this covers *uncommitted player input* only; a committed job (a colonist mid-haul) simply freezes with its owner and resumes correctly. *(EC-3)*
+- **If a menu overlay is open when the switch is accepted**: the switch proceeds regardless (axis independence, Rule 11); the menu is force-closed on entering combat, since CD-10-restricted colony UI has no combat equivalent. *(EC-4)*
+- **If the battle ends with zero surviving defenders**: the return path is identical — reconcile reaps all the dead with no "all vs. some" branch, autosave fires, speed forces to 0, the survey displays. The survey camera, lacking a survivor to frame, defaults to the **breach site / colony overview**. Whether total loss triggers any further failure state is the Combat set's / game concept's domain — this system's contract is satisfied identically. *(EC-5)*
+- **If the player issues a manual save in the same frame the switch is accepted** (pending, not yet applied): the save is allowed and completes normally — the mode is still real-time for the entire remainder of that dispatch; the swap is atomic between dispatches, so CD-9's invariant is never at risk. *(EC-6, regression-test candidate)*
+- **If the player changes speed in the same frame the switch is accepted**: honored for the remainder of that dispatch (harmless — the view cuts before the next rendered frame), then irrelevant: return always forces speed 0. *(EC-7)*
+- **If the player quits to desktop mid-battle**: on relaunch they load the switch-in autosave — the colony resumes at the moment combat began and the encounter restarts from its beginning. Forced by CD-9 (no mid-battle save exists to return to). A **confirmation dialog** warns before quitting: "Quitting now will lose this battle's progress." *(EC-8)*
+- **If a sub-frame time backlog (<1 sub-step) exists at the freeze**: preserved, not discarded — the inactive authority's accumulator sits inert and resumes exactly where it left off. No observable effect; stated so nobody "fixes" it by resetting the accumulator on swap. *(EC-9)*
+- **If Squad Prep drafts zero colonists when a raid fires** (all dead, incapacitated, or unreachable): **the switch proceeds anyway** — an empty-roster encounter is legal, and Combat resolves the unopposed raid inside turn-based mode (user decision 2026-08-02, chosen over a Raid-Trigger pre-check). **Obligation transmitted to the Combat set (#19–23)**: its turn loop must handle zero player-controlled units — raiders act, the player observes; the identical exit path still applies. *(EC-10)*
+- **If the player leaves speed at 0 after a battle and never resumes**: no new raid can ever trigger (same mechanism as EC-1). Stated as a deliberate design property, not an accident: resume-at-pause doubles as a safety buffer — the player is never ambushed again until they choose to restart time. *(EC-11)*
+
+**Evaluated and excluded** (tuning-knob constraints, not runtime edges): `SubStepCap` below the max speed multiplier (safe-range note in Tuning Knobs); physics tick rate changes (build-time concern; ADR-0001 requires revisiting the ADR itself).
 
 ## Dependencies
 
-[To be designed]
+**Upstream: none.** This is a Foundation system. The primitive types it references (`CellCoord`, `EntityId`) live in the shared foundation-primitives namespace defined jointly with ADR-0002 — a namespace, not a system dependency.
+
+**Downstream — every simulation-bearing system.** The systems index states it flatly: *under-declaring this dependency is forbidden; every system that advances state over time depends on it.* Named interfaces, all **hard** unless marked:
+
+| Dependent | Interface (what crosses the boundary) |
+|---|---|
+| Raid Trigger (#18) | The switch-request call and its accept/reject result; the guarantee threat freezes on entry (Rules 2, 4, 6; EC-2) |
+| Combat set (#19–23) | Turn dispatch, presentation-gated advancement, the switch-back call, the reconcile pass; the EC-10 zero-roster obligation; the CD-9 battle budget |
+| Squad Prep (#24) | The pending-switch signal and the participants/breach-cells envelope (framing only — never entity state) |
+| Needs (#13), Job Assignment (#10), Excavation/Construction (#15/#16), Stockpile & Hauling (#11) | Real-time registration, full freeze in battle, reconcile guarantees on return (Rules 1, 8, 14) |
+| Pathfinding (#8) | Registered under **both** authorities (colony paths / combat reachability) — the notable dual-registration case |
+| Save/Load (#6) | The two autosave moments and their ordering; the mode invariant — a combat-mode save is corrupt (Rule 9, EC-6, EC-8) |
+| Notifications (shared component) | The queue-across-modes rule (Rule 10) |
+| Blueprint UI (#26), Combat UI (#27), Roster UI (#28) | Dial visibility/hiding, order inertness (CD-10), survey timing, the quit-confirmation dialog (Rules 3, 5, 8; EC-8) |
+| Terrain (#1) + entity stores (ADR-0003) | *Soft/passive*: never ticked — only their legal writer set changes per authority |
+
+**Bidirectional-consistency obligation**: every dependent spec must (a) list Time Authority / Mode-Switch in its Depends On, and (b) carry the mandatory "Behavior under each time authority" section (Rule 14). The systems index currently declares this dependency explicitly only for #18, #19, and #24 — correct per its own cross-cutting-contract note (the dependency is universal by contract), but any future index revision that enumerates per-row dependencies must not read those three as the complete set.
 
 ## Tuning Knobs
 
-[To be designed]
+| Knob | Default | Safe range | What it affects / what breaks at extremes |
+|---|---|---|---|
+| Speed multiplier set | {0, 1, 2, 3} | any integers with max ≤ `SubStepCap` | The colony speed options. Adding 4× touches zero simulation systems (spike-proven) but must stay ≤ `SubStepCap` or the new speed silently never delivers its multiplier (permanent degradation, not load-dependent); each step up multiplies per-frame sim cost linearly |
+| `SubStepCap` | 8 | max speed multiplier … ~12 | Per-frame sub-step ceiling (Formula D.1). Too low: high speeds permanently degraded even on light colonies. Too high: a slow frame does more catch-up work, worsening the very frame pacing that caused it — the cap exists to make the sim slow down gracefully |
+| `SubStepDuration` (fixed dt) | 1/60 s | **do not treat as a lever** | Advances per sub-step; every rate constant in every system is calibrated against it. Changing it changes simulation-speed semantics project-wide and **requires revisiting ADR-0001** — a build-time decision, never a balance pass |
+| `EngineFrameRate` (physics tick) | 60 Hz | **do not treat as a lever** | Pinned in project settings; same warning as dt. The pair (dt, tick rate) defines Formula D.2's real-time↔game-time mapping |
+| Battle length budget | 8–15 min target, 20 min hard ceiling | ceiling 15–25 min | CD-9's single-sitting integrity. Owned here as the *boundary budget*; the Combat set owns achieving it (its pacing levers live there). Raising the ceiling weakens the no-mid-battle-save justification; lowering the target below ~8 min makes battles too small to express Pillar 2 |
+
+**Knob interactions**: Formula D.2's throughput is the product of three knobs — retune any one and every time-dependent system's *felt* pacing shifts together. Max speed and `SubStepCap` form a hard constraint pair (see safe ranges). **Anti-duplication rule**: downstream systems must not create their own real-time↔game-time conversion knobs — Needs decay, day/night, and crafting durations cite Formula D.2's `GameSecondsPerRealSecond` as the single source of truth.
 
 ## Visual/Audio Requirements
 
