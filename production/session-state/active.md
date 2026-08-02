@@ -3,7 +3,7 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: Designing time-authority-mode-switch GDD — Overview, Player Fantasy, Detailed Design written; Formulas in progress (systems-designer consulted)
+Task: time-authority-mode-switch GDD COMPLETE (all 12 sections; CD-GDD-ALIGN REVISED) — next: /design-review in a FRESH session, then #8 Colonist Entity quick-spec
 <!-- /STATUS -->
 
 ## Current Task

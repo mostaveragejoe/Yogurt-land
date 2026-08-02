@@ -37,7 +37,7 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: "2026-07-26"
+last_updated: "2026-08-02"
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -167,6 +167,27 @@ formulas:
     added: 2026-07-26
     revised: ""
 
+  - name: game_time_throughput
+    status: active
+    source: design/gdd/time-authority-mode-switch.md
+    referenced_by:
+      - design/gdd/time-authority-mode-switch.md
+    variables:
+      - SubStepsDelivered
+      - SubStepDuration
+      - EngineFrameRate
+      - GameSecondsPerRealSecond
+    output_range: [0, 8]              # game-seconds per real second; ceiling = SubStepCap x dt x tick rate at defaults
+    expression: "GameSecondsPerRealSecond = SubStepsDelivered * SubStepDuration * EngineFrameRate"
+    notes: "The canonical real-time<->game-time conversion (Formula D.2). At 3x: 3 game-s/real-s,
+      so a 24-game-hour day = 8 real minutes. ANTI-DUPLICATION RULE: downstream systems must cite
+      this formula, never invent their own conversion knob — Needs decay, day/night, and crafting
+      durations are the named consumers. SubStepDuration (1/60 s) and EngineFrameRate (60 Hz) are
+      pinned build-time values, not balance levers (changing them requires revisiting ADR-0001).
+      Will be referenced_by job-assignment-needs-simulation.md and any day/night or crafting spec."
+    added: 2026-08-02
+    revised: ""
+
   - name: cell_state_classification
     status: active
     source: design/gdd/terrain-data-model.md
@@ -217,7 +238,21 @@ formulas:
 #
 # Required fields: name, status, source, referenced_by, value, unit, added
 
-constants: []
+constants:
+  - name: battle_length_budget
+    status: active
+    source: design/gdd/time-authority-mode-switch.md
+    referenced_by:
+      - design/gdd/time-authority-mode-switch.md
+    value: "8-15 target, 20 ceiling"
+    unit: minutes
+    notes: "CD-9's single-sitting budget, measured freeze-to-dial-regained. Owned by Time Authority
+      as the boundary budget; the Combat set (#19-23) owns ACHIEVING it via its own pacing levers
+      (incl. the C3-mandated combat pacing control) and carries the primary playtest criterion.
+      Raising the ceiling weakens the no-mid-battle-save justification. Will be referenced_by the
+      combat-set GDDs."
+    added: 2026-08-02
+    revised: ""
 
 # Example:
 #
