@@ -72,7 +72,35 @@ Combat's interior turn structure (awaiting input → resolving → animating →
 
 ## Formulas
 
-[To be designed]
+Two formulas govern this system. Both restate ADR-0001's sub-stepping contract in design-consumable form; the shared values (`SubStepCap`, `SubStepDuration`, `EngineFrameRate`) are defined once in Tuning Knobs. Deliberately **not** formulas: the fixed dt (a pinned tuning knob with nothing to compute), the CD-9 battle-length budget (a threshold — see Acceptance Criteria), and the `TurnIndex`/`TickSequence` counters (fixed increment rules, ADR-0001's concern).
+
+### Formula D.1 — Delivered Sub-Steps Per Physics Frame
+
+`SubStepsDelivered = min(SubStepsRequested, SubStepCap)`
+
+| Variable | Symbol | Type | Range | Description |
+|---|---|---|---|---|
+| Requested sub-steps | SubStepsRequested | int | 0–unbounded (practically small) | Sub-steps the active speed multiplier plus any real-frame catch-up backlog ask for this dispatch |
+| Sub-step cap | SubStepCap | int | ≥1 (default 8) | Per-frame ceiling; the lower of the engine clamp and our own configured cap |
+| Delivered sub-steps | SubStepsDelivered | int | 0–SubStepCap | Sub-steps that actually run — determines how much game time really advances |
+
+**Output Range:** 0 (paused) to SubStepCap; never negative, never exceeds the cap regardless of request size — this is what makes "the sim slows down, never death-spirals" a guaranteed property rather than a hope.
+**Example (normal frame):** speed 3×, on-schedule frame: `min(3, 8) = 3` — no throttling; MVP's max speed has headroom.
+**Example (stalled frame):** the engine catches up 4 frames' worth at 3×: `min(12, 8) = 8` → the player experiences ~67% of the requested pace for that moment — a visible slowdown, not a skip or a hang. This is the mechanism behind Core Rule 3's "silently delivers less than 3×."
+
+### Formula D.2 — Colony Time Elapsed Per Real-Time Second
+
+`GameSecondsPerRealSecond = SubStepsDelivered × SubStepDuration × EngineFrameRate`
+
+| Variable | Symbol | Type | Range | Description |
+|---|---|---|---|---|
+| Delivered sub-steps | SubStepsDelivered | int | 0–SubStepCap | Output of Formula D.1 |
+| Sub-step duration | SubStepDuration | float (s) | fixed (default 1/60 s) | The fixed dt every sub-step advances by; never scaled |
+| Engine physics frame rate | EngineFrameRate | float (Hz) | fixed (default 60 Hz) | Physics dispatch rate under unstalled conditions |
+| Result | GameSecondsPerRealSecond | float | 0–8 at defaults | Simulated seconds per real second at the current speed |
+
+**Output Range:** 0 at pause; ceiling 8 game-seconds/real-second at defaults — MVP speeds (max 3×) never hit it under normal frame timing.
+**Example:** at 3×: `3 × (1/60) × 60 = 3` game-seconds per real second — a 24-game-hour day takes **8 real minutes at 3×**, 24 at 1×. This is the canonical throughput number Needs decay, day/night, and crafting durations must cite rather than re-derive (registered in the entity registry on approval of this GDD).
 
 ## Edge Cases
 
