@@ -3,8 +3,16 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: Battle Persistence propagation COMPLETE 2026-08-03 (/propagate-design-change; TD-CHANGE-IMPACT CONCERNS resolved; ADR-0001/0002/0003 amended, annex+index+prefs+GDD corrected) — next: /architecture-decision ADR-0004 Battle Checkpoint Architecture, then Seeded RNG ADR (now blocking Save/Load #6), then #8 Colonist Entity quick-spec
+Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture-decision; Proposed; godot-specialist PASS WITH NOTES + TD-ADR CONCERNS all applied) — next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec. OPEN: registry update skipped (needs user approval)
 <!-- /STATUS -->
+
+## ADR-0004 SESSION 2026-08-03 (/architecture-decision battle-checkpoint-architecture)
+
+- **ADR-0004 written**: `docs/architecture/adr-0004-battle-checkpoint-architecture.md` — **Proposed**. Owns: 8-item checkpoint content scope (from the propagation session), snapshot beat pinned at `AwaitingPresentation → NextActor` + an "activation 0" checkpoint immediately post-swap, Option A mechanism (full self-contained checkpoint, double-buffered pooled snapshot via new `SnapshotInto` caller-buffer obligations on ADR-0002/0003 stores, coalesce-newest backpressure — sim never blocks on disk, async gzip + atomic same-volume temp-file replace), writer quiesce at slot retirement, in-file monotonic save-ordering counter (never mtime), `RestoredFromCheckpoint` resume path (no `RequestSwitch`; restore is a distinct sanctioned writer inside the load window; occupancy rebuild filters dead units), AC-68 provenance via writer-id header enforced at WRITE time, quit-path flush-and-join, loud-fallback corrupt-checkpoint recovery (fall back to switch-in autosave WITH an explicit dialog, never silently).
+- Gates: **godot-specialist PASS WITH NOTES** (notes folded in — same-volume rename semantics, thread-pool vs dedicated writer thread, `OS.RequestPermissions` non-issue on PC); **TD-ADR CONCERNS → resolved** (B1–B7 blocking + A1–A10 advisory ALL applied; headline fixes: snapshot beat ambiguity, activation-0 gap, quiesce-on-retirement race, ordering-by-mtime ban, AC-68 moved write-side, gzip thread ownership, `SnapshotInto` named as a contract obligation not an aspiration).
+- Promotion gate: shares ADR-0002's re-scoped criterion 5 — checkpoint writes at combat cadence must hold frame rate on target hardware; DO NOT promote ADR-0004 (or ADR-0002) before that run.
+- Companion edits: GDD AC-66 re-authored (snapshot-capture wording + coalesce-newest convergence clause) and Rule 9(b) gains the activation-0 sentence; technical-preferences ADR log entry pending→Proposed.
+- **OPEN — registry**: `design/registry/` update for ADR-0004 entities NOT done — BLOCKING-gated on explicit user approval; approve or decline next session.
 
 ## PROPAGATION SESSION 2026-08-03 (/propagate-design-change time-authority-mode-switch)
 
