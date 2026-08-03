@@ -3,8 +3,17 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: time-authority-mode-switch GDD — /design-review RE-REVIEW done 2026-08-02 (NEEDS REVISION → revised same session; BATTLE PERSISTENCE user ruling) — next: /propagate-design-change for ADR-0001/0003 + contracts + index, then #8 Colonist Entity quick-spec
+Task: Battle Persistence propagation COMPLETE 2026-08-03 (/propagate-design-change; TD-CHANGE-IMPACT CONCERNS resolved; ADR-0001/0002/0003 amended, annex+index+prefs+GDD corrected) — next: /architecture-decision ADR-0004 Battle Checkpoint Architecture, then Seeded RNG ADR (now blocking Save/Load #6), then #8 Colonist Entity quick-spec
 <!-- /STATUS -->
+
+## PROPAGATION SESSION 2026-08-03 (/propagate-design-change time-authority-mode-switch)
+
+- Impact report: `docs/architecture/change-impact-2026-08-03-time-authority-mode-switch.md` — the record of all decisions below.
+- TD-CHANGE-IMPACT gate: **CONCERNS → resolved** (user adopted all TD corrections). Key upgrades: ADR-0001 is a contract revision (`TimeAuthoritySnapshot` can't round-trip a battle; load-into-TurnBased must NOT use `RequestSwitch` → `RestoredFromCheckpoint` reason; load-window mode-assertion exemption); ADR-0002 is a direct contradiction + costed budget breach (~150–300 checkpoints/battle × 21.9 ms sync write; terrain replay architecturally unavailable → checkpoint carries full terrain; criterion 5 re-scoped — DO NOT promote ADR-0002 on the old gate); ADR-0003 is an amendment, not superseded (wording constraint: side tables serialized ONLY into the checkpoint by their owners, never colony saves).
+- **User decisions 2026-08-03**: (1) revise assessment per TD; (2) structure = small dated Amendments in ADR-0001/0002/0003 (both Accepted ADRs KEEP status — no story auto-blocking) + new **ADR-0004 Battle Checkpoint Architecture**; (3) mechanism = **Option A** (full self-contained checkpoint, double-buffered snapshot ~0.6 ms, async gzip+write ~30 KB, atomic replace).
+- Checkpoint content scope completed (GDD's 3-item list was incomplete; 8 items now in the GDD Save/Load dependency row + impact report §3): side tables, TB authority state incl. state machine/current actor, RNG streams, encounter framing, RaiderStore entire, un-reaped IsDead/IsBroken (load never reaps; occupancy rebuild filters dead), terrain full grid, derived-state-never-checkpointed. Plus 2 invariants for ADR-0004: no checkpoint between battle-end and reconcile drain (inbox provably empty); IPresentationGate always idle at checkpoint (post-resolution cadence).
+- Cascades recorded: Seeded RNG ADR now BLOCKING for Save/Load #6 (streams resumable at arbitrary draw counts — PCG/xoshiro class); Save/Load #6 grows (rolling slot, atomic replace, latest-wins, async machinery); **design hole routed to creative-director**: colony manual saves still allow pre-raid reload (save-scum via colony save, not quit) — decide before Save/Load #6 spec.
+- Files edited: ADR-0001/0002/0003 (Amendment sections + inline retractions), cross-cutting-contracts.md (Contract #2 Battle Persistence bullet), systems-index.md (CD-9 note + annex banner + checklist), technical-preferences.md (forbidden-pattern carve-out + ADR log + ADR-0004 entry), time-authority GDD (Save/Load rows — content list completed).
 
 ## RE-REVIEW SESSION 2026-08-02 (second /design-review pass)
 

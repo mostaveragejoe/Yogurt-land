@@ -1,9 +1,20 @@
 # ADR-0001: Time Authority / Mode-Switch Architecture
 
 ## Status
-**Accepted** (2026-07-26, user decision) — spike-validated 61/61
+**Accepted** (2026-07-26, user decision) — spike-validated 61/61 · **Amended 2026-08-03** (Battle Persistence)
 
 *(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes, promoted once the mode-switch spike validated the architecture — see **Spike Results (2026-07-26)** below. All four testable validation criteria pass; criterion 5 remains a six-month review item. Two corrections were applied at promotion, neither structural: the mutation window must be a struct scope, and pre-switch normalization decides against the decision set rather than live occupancy.)*
+
+> ### Amendment 2026-08-03 — Battle Persistence (user ruling 2026-08-02; propagated via `/propagate-design-change`, see `change-impact-2026-08-03-time-authority-mode-switch.md`)
+>
+> The Time Authority GDD's **Battle Persistence ruling** overturns CD-9's no-mid-battle-save half (its battle-length half stands): the battle now writes **one rolling, non-selectable checkpoint after every resolved actor activation**, tagged `Mode == TurnBased` — the sole legal writer of a combat-mode save. Quitting suspends the battle; relaunch resumes at the next unresolved activation. This amendment retracts the falsified claims below (marked *[retracted 2026-08-03]* in place) and carries these obligations, **owned by ADR-0004 (Battle Checkpoint Architecture, pending)**:
+>
+> 1. **`TimeAuthoritySnapshot` is insufficient for a battle** — `{Mode, TurnIndex, TickSequence}` cannot round-trip a checkpoint. Resume additionally requires the `TurnBasedAuthority` state-machine position, the current/next actor, and the encounter framing (`EncounterId`, `BreachCells`, `ParticipantIds` — transient today). The snapshot contract for combat mode is ADR-0004's deliverable.
+> 2. **Load-into-TurnBased is a third entry path into combat mode and must NOT go through `RequestSwitch`** — doing so would re-fire the switch-in autosave (overwriting the checkpoint with pre-battle state) and re-run ADR-0003's pre-switch placement normalization (teleporting units mid-battle). `Restore` into TurnBased fires `ModeTransitioned` with a distinct reason (`RestoredFromCheckpoint`); Rule 2's "only the game switches modes" invariant and the `RequestSwitch` call-site grep gate survive intact.
+> 3. **The load window needs an explicit mode-assertion exemption** — restoring in `Mode == TurnBased` writes RealTime-only field groups (Needs, job state), which would trip ADR-0003's mode assertions; today this never happens because saves are always RealTime.
+> 4. `Restore(snapshot)`'s "Mode is invariantly RealTime in any valid save" comment is retracted: a **TurnBased-tagged save is valid iff authored by the battle-checkpoint writer** (GDD AC-68); from any other writer it remains corrupt.
+>
+> Checkpoint content scope, cadence, write mechanism (**Option A** — full self-contained checkpoint, double-buffered snapshot, async gzip+write; user decision 2026-08-03), and the ordering/presentation invariants are ADR-0004's to own — this ADR's core contract (strategy pattern, tick dispatch, atomic swap, reconcile) is unchanged.
 
 ## Date
 2026-07-24
@@ -37,7 +48,7 @@ Hollowdeep is one shared world — terrain grid, colonists, resources — that m
 - Solo first-time developer: minimum viable structure, no speculative framework growth
 - 16.6 ms frame budget (60 fps target) in colony mode
 - Serialization contract (systems index, cross-cutting contract #2): authoritative state is plain data, separable from Godot nodes, headlessly testable
-- CD-9 (locked): no mid-battle saves — autosave at mode-switch into tactics and at battle end only
+- CD-9 (save half **overturned by Battle Persistence, 2026-08-02** — see Amendment 2026-08-03; battle-length half stands): autosaves at mode-switch into tactics, **per resolved actor activation (rolling battle checkpoint — ADR-0004)**, and at battle end; manual saves remain disabled in combat
 - World Change Event Bus (cross-cutting contract #3) is a dumb synchronous dispatcher — one publisher (Terrain), no queueing/replay; it must not grow into a general message bus
 
 ### Requirements
@@ -96,8 +107,12 @@ public sealed class TimeAuthorityManager
     public SwitchResult RequestSwitch(TimeAuthorityMode target, SwitchTransitionData transition);
     public event Action<ModeTransition> ModeTransitioned;   // direct manager event — NOT on the World Change Event Bus
     public void Advance(double engineDeltaSeconds);          // called once per engine physics frame
-    public TimeAuthoritySnapshot Snapshot();                 // {Mode, TurnIndex, TickSequence}
-    public void Restore(TimeAuthoritySnapshot snapshot);     // Mode is invariantly RealTime in any valid save
+    public TimeAuthoritySnapshot Snapshot();                 // {Mode, TurnIndex, TickSequence} — INSUFFICIENT for a
+                                                             // battle checkpoint (see Amendment 2026-08-03 / ADR-0004)
+    public void Restore(TimeAuthoritySnapshot snapshot);     // [retracted 2026-08-03] was: "Mode is invariantly RealTime
+                                                             // in any valid save" — a TurnBased save is valid iff authored
+                                                             // by the battle-checkpoint writer (ADR-0004); restore into
+                                                             // TurnBased must NOT route through RequestSwitch
 }
 
 public readonly record struct SwitchTransitionData(
@@ -209,7 +224,7 @@ Paused systems still receive events; ALL handlers are idempotent bookkeeping onl
 - The mode-switch integration tax becomes one visible contract instead of a per-feature surprise; 25 spec sections get written against one table.
 - Plain-C# core + serialization contract reinforce each other: headless unit tests with a standard .NET runner, no Godot runtime, no GoDotTest dependency — partially answers the open Testing question in technical-preferences.md.
 - Engine-version insulation by construction: the core references no Godot API, so all of 4.4–4.7's breaking changes (Jolt, glow reorder, dual-focus, Quaternion init) are irrelevant to it.
-- **CD-9 banked**: saves occur only in RealTime mode. `TurnBasedAuthority` needs NO snapshot support in MVP. A save file whose Mode is `TurnBased` is corrupt, not a supported state. Do not build combat-state serialization "just in case."
+- ~~**CD-9 banked**: saves occur only in RealTime mode. `TurnBasedAuthority` needs NO snapshot support in MVP. A save file whose Mode is `TurnBased` is corrupt, not a supported state. Do not build combat-state serialization "just in case."~~ *[retracted 2026-08-03 — Battle Persistence]*: `TurnBasedAuthority` DOES need checkpoint-grade snapshot support (state-machine position + current actor + encounter framing); a TurnBased-tagged save is valid iff written by the battle-checkpoint system, corrupt from any other writer. Scope and mechanism: ADR-0004.
 - Fixed-dt sub-stepping gives speed control AND keeps post-battle time catch-up possible (N normal sub-steps, never one giant delta) — the CD's pending zero-elapsed-vs-battle-duration question stays open architecturally.
 - Adding 3x speed later requires zero changes to any `ITickable`.
 
@@ -234,7 +249,7 @@ Paused systems still receive events; ALL handlers are idempotent bookkeeping onl
 | systems-index.md #18 Raid Trigger | Threat timers spanning modes; triggering the switch | `DeltaSeconds` accumulation in RealTime; `RequestSwitch` result + `CurrentMode` gate; timers freeze during battle (full pause) |
 | systems-index.md #19–23 Combat set | Turn scheduling, presentation-gated resolution | `TurnBasedAuthority` state machine + `IPresentationGate`; `TurnIndex` per actor activation |
 | systems-index.md #24 Squad Prep | The mode-switch seam ("hairiest moment") | `SwitchTransitionData.ParticipantIds` is Squad Prep's envelope; framing-only guard rail bounds it |
-| Cross-Cutting Contract #2 (serialization) | Snapshot/Restore, determinism | Manager implements `Snapshot()/Restore()`; TickSequence + seeded-RNG rule + CD-9 mode invariant |
+| Cross-Cutting Contract #2 (serialization) | Snapshot/Restore, determinism | Manager implements `Snapshot()/Restore()`; TickSequence + seeded-RNG rule + the mode-tagging rule (colony saves RealTime; TurnBased saves legal from the battle-checkpoint writer only — Amendment 2026-08-03, ADR-0004) |
 
 ## Performance Implications
 - **CPU**: Dispatch overhead is one sorted-list walk per sub-step — negligible next to the ticked work itself. Sub-stepping multiplies simulation cost linearly with game speed (capped per frame; sim slows rather than hitches).
@@ -260,7 +275,7 @@ Full detail and method: `prototypes/mode-switch-spike/SPIKE-NOTE.md`. **61/61 ch
 
 **Zero state conversion, proven by identity**: across the swap the store is the *same instance*, with the *same values* and an *unchanged `Revision`* — the switch performs no writes at all.
 
-Also regression-locked: inactive authority receives **zero** ticks (colony fully pauses — needs froze); dispatch follows `(phase, priority)` not registration order; duplicate phase+priority rejected; mid-`Tick` `RequestSwitch` → `DeferredMidDispatch`, applied atomically between dispatches; a second encounter is **rejected, never queued**; TurnBased publishes `DeltaSeconds = 0` while the authority still receives real delta (the deliberate asymmetry, now a test); a 1-second frame clamps at 8 sub-steps and **drops the backlog — the sim slows, no death spiral**; CD-9 refuses to snapshot inside a battle; writer-per-authority health arbitration refuses each writer in the wrong mode.
+Also regression-locked: inactive authority receives **zero** ticks (colony fully pauses — needs froze); dispatch follows `(phase, priority)` not registration order; duplicate phase+priority rejected; mid-`Tick` `RequestSwitch` → `DeferredMidDispatch`, applied atomically between dispatches; a second encounter is **rejected, never queued**; TurnBased publishes `DeltaSeconds = 0` while the authority still receives real delta (the deliberate asymmetry, now a test); a 1-second frame clamps at 8 sub-steps and **drops the backlog — the sim slows, no death spiral**; CD-9 refuses to snapshot inside a battle *(regression lock **narrowed 2026-08-03** per GDD AC-68: the refusal now applies to manual/colony-writer saves only — the battle-checkpoint writer is the one legal combat-mode exception, ADR-0004)*; writer-per-authority health arbitration refuses each writer in the wrong mode.
 
 **Cost** — the "permanent integration tax" is sub-microsecond:
 
@@ -293,5 +308,6 @@ Also regression-locked: inactive authority receives **zero** ticks (colony fully
 - ADR-0002 Terrain Data Model (pending — single source of truth across the switch)
 - ADR-0003 Entity Data Ownership (pending — per-entity sim state as plain data; write-ownership table)
 - Seeded RNG ADR (pending — constrained by the draws-only-inside-Tick rule)
-- `design/gdd/systems-index.md` — Cross-Cutting Contracts annex; CD-9 (no mid-battle save)
+- `design/gdd/systems-index.md` — Cross-Cutting Contracts annex; CD-9 (save half overturned by Battle Persistence 2026-08-02; battle-length half stands)
+- ADR-0004 Battle Checkpoint Architecture (pending — checkpoint content scope, cadence, Option A write mechanism, the `RestoredFromCheckpoint` resume path, ordering invariants)
 - `design/gdd/game-concept.md` — mode-switch named as permanent integration tax

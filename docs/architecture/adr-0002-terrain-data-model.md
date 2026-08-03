@@ -1,9 +1,19 @@
 # ADR-0002: Terrain Data Model
 
 ## Status
-Proposed — **spike-validated 2026-07-25 on 5 of 6 criteria; one gate open (see Spike Results)**
+Proposed — **spike-validated 2026-07-25 on 5 of 6 criteria; one gate open (see Spike Results)** · **Amended 2026-08-03** (Battle Persistence)
 
-*(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the terrain spike validates chunk size, memory footprint, allocation behavior, and render-extraction cost. The Tier 0 terrain spike has now run — see **Spike Results (2026-07-25)** below. Every measurable criterion passed and three tuning items are fixed; promotion to Accepted awaits only the frame-rate clause of validation criterion 5, which requires target hardware.)*
+*(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the terrain spike validates chunk size, memory footprint, allocation behavior, and render-extraction cost. The Tier 0 terrain spike has now run — see **Spike Results (2026-07-25)** below. Every measurable criterion passed and three tuning items are fixed; promotion to Accepted awaits only the frame-rate clause of validation criterion 5, which requires target hardware — **as re-scoped by the Amendment below**.)*
+
+> ### Amendment 2026-08-03 — Battle Persistence (user ruling 2026-08-02; propagated via `/propagate-design-change`, see `change-impact-2026-08-03-time-authority-mode-switch.md`)
+>
+> The Time Authority GDD's Battle Persistence ruling adds a rolling battle checkpoint written **after every resolved actor activation** (~150–300 per battle at MVP scale). Consequences for this ADR:
+>
+> 1. **`Snapshot()` is no longer confined to non-gameplay moments** — it also runs once per activation, inside the turn loop, directly under the presentation-gated animation. The Spike Results' decision 3 ("one-shot allocation … at a non-gameplay moment; no buffer-reuse machinery is warranted") is **retracted for the checkpoint path**: the measured 21.9 ms synchronous write (~1.2 frames) and 2 MB one-shot allocation per activation are unacceptable at checkpoint cadence. **Decision (user, 2026-08-03, Option A)**: checkpoints are full self-contained saves — snapshot on the sim thread into a **double-buffered pooled buffer** (~0.61 ms measured), gzip (~30 KB at MVP) and write on a background thread with atomic replace. Mechanism detail: ADR-0004 (Battle Checkpoint Architecture, pending). Colony-mode autosaves (switch-in, battle-end) keep the one-shot stance.
+> 2. **The checkpoint must carry terrain state (full grid, standard snapshot).** "Reconstruct via mutation replay" is architecturally unavailable by this ADR's own rule 9 — the bus has no replay and terrain keeps no journal — and no player-input log exists. Combat: Targeting & Resolution is a legal TurnBased terrain writer (rule 4), so wall damage between checkpoints is exactly the state a resumed battle needs.
+> 3. **Validation criterion 5 is re-scoped**: the target-hardware re-run must additionally measure checkpoint snapshot+write at combat cadence (per-activation) with the double-buffered async path, and confirm no frame-time impact during combat. **This ADR must not be promoted to Accepted on the old criterion 5.**
+>
+> The data model, facade, event contract, and all other rules are unchanged.
 
 ## Date
 2026-07-24
@@ -214,7 +224,7 @@ public sealed class TerrainWorld
 
 ### Serialization — stable ids at the boundary
 
-`TerrainSnapshot` carries: a **schema version**; the world bounds and chunk size; the raw chunk cell arrays (byte-identical, guaranteed by the `StructLayout` contract); and a **material manifest** mapping stable string material keys (Material Catalog's canonical identifiers, e.g. `"granite"`) to the runtime `ushort` ids used in the arrays. `Restore` remaps every cell's type ids through the manifest against the current catalog — inserting or reordering materials between sessions re-targets ids instead of silently re-materializing the world. Unknown keys fail restore loudly. `Revision` and all caches are runtime-only and never serialized. Under CD-9, `Snapshot()` runs at the mode-switch autosave — its buffer strategy (reused snapshot buffer vs. accepted one-shot allocation at a non-gameplay moment) is a spike measurement, recorded at promotion.
+`TerrainSnapshot` carries: a **schema version**; the world bounds and chunk size; the raw chunk cell arrays (byte-identical, guaranteed by the `StructLayout` contract); and a **material manifest** mapping stable string material keys (Material Catalog's canonical identifiers, e.g. `"granite"`) to the runtime `ushort` ids used in the arrays. `Restore` remaps every cell's type ids through the manifest against the current catalog — inserting or reordering materials between sessions re-targets ids instead of silently re-materializing the world. Unknown keys fail restore loudly. `Revision` and all caches are runtime-only and never serialized. `Snapshot()` runs at the mode-switch autosave, at battle end, **and — since Battle Persistence (Amendment 2026-08-03) — once per resolved actor activation as the battle checkpoint**; the checkpoint path uses a double-buffered pooled buffer with async write (Option A, ADR-0004), while the two colony-mode autosaves keep the spike's one-shot allocation stance.
 
 ### Stairs and descent (decided here — it is Pillar 5's write surface)
 
@@ -364,7 +374,7 @@ Tier 0 terrain spike: `prototypes/terrain-spike/` (data model, plain .NET 8) and
 
 1. **Chunk size = 32×32×1, confirmed.** Sweep gains plateau after 32 (16: 0.411 ms, 32: 0.290, 64: 0.282) while rebuild cost grows with chunk area (0.31 / 1.10 / 4.79 µs). 32 is the balance point. `ChunkSize`/`ChunkOf` remain the only sanctioned mapping regardless.
 2. **The AoS concession is retired — measurement falsified it in the good direction.** This ADR conceded that a hot/cold SoA split "would roughly double cache density" for sweeps. It does not: chunked AoS measured **21–46% faster** than a flat two-plane SoA sweep, because each 8 KB chunk is one L1/L2-resident sequential stream. *(Caveat: the SoA arm was a straightforward two-array scan, not a vectorised SoA; a tuned SoA could narrow the gap. Immaterial to the decision at 1.7% of a frame.)* **The hot/cold-split fallback is removed from the risk list**; the Negative-consequences bullet conceding sweep cache density no longer applies.
-3. **Snapshot buffer strategy = one-shot allocation.** 0.61 ms / 2.01 MB at MVP (8.90 ms / 16.06 MB at full-vision) at the CD-9 mode-switch autosave — a non-gameplay moment. No buffer-reuse machinery is warranted.
+3. **Snapshot buffer strategy = one-shot allocation.** 0.61 ms / 2.01 MB at MVP (8.90 ms / 16.06 MB at full-vision) at the CD-9 mode-switch autosave — a non-gameplay moment. No buffer-reuse machinery is warranted. *[Narrowed 2026-08-03 — Battle Persistence]*: this holds for the two colony-mode autosaves only; the per-activation battle checkpoint uses a double-buffered pooled buffer with async write (Amendment above, ADR-0004).
 
 **Render backend (the routed open question) — TWO stacked GridMaps (wall + floor), `cell_octant_size = 32`.** 3-layer cutaway, 589,824 primitives, 14.25 MB video memory (identical across backends — geometry sets it, not backend):
 
@@ -384,7 +394,7 @@ GridMap at octant 32 wins **both** axes: 2.6× fewer draw calls and ~240× cheap
 2. `Snapshot()` → `Restore()` round-trip is byte-identical on unchanged catalogs, and correctly **remaps** ids when the catalog gains/reorders materials; identical mutation sequences yield identical event streams (CI, alongside ADR-0001's determinism gates).
 3. `Restore` and initial load publish `WorldReloaded` (no per-cell events), and a subscriber-rebuild integration test shows pathfinding/render caches valid afterward — no stale-cache-after-load.
 4. A stair excavation and a multi-cell combat effect each publish exactly **one** batch; routine single-cell digs publish one single-change batch each.
-5. Terrain spike hits 60 fps at MVP map size with dig-driven chunk rebuilds and reports: final chunk size, draw-call ceiling, render memory, Gen0-per-frame during dig-heavy play, full-map walkability sweep cost (AoS falsification check), snapshot buffer strategy at the CD-9 autosave — which fill technical-preferences' TO-BE-CONFIGURED budgets and gate promotion to Accepted.
+5. Terrain spike hits 60 fps at MVP map size with dig-driven chunk rebuilds and reports: final chunk size, draw-call ceiling, render memory, Gen0-per-frame during dig-heavy play, full-map walkability sweep cost (AoS falsification check), snapshot buffer strategy at the colony-mode autosaves, **and — re-scoped 2026-08-03 (Battle Persistence)** — checkpoint snapshot+write cost at per-activation combat cadence on the double-buffered async path (Option A), confirming zero frame-time impact during combat — which fill technical-preferences' TO-BE-CONFIGURED budgets and gate promotion to Accepted.
 6. Six months in: `TerrainCell` still describes only architecture — no occupant, plan, zone, or combat state has leaked into it; the reservation-bit debug invariant has never fired in CI.
 
 ## Open Questions (routed, not decided here)
