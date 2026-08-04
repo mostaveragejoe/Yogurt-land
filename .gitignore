@@ -1,0 +1,21 @@
+# Godot
+.godot/
+*.import
+export.cfg
+export_presets.cfg
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+TestResults/
+*.nupkg
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local artifacts
+artifacts/
+*.log

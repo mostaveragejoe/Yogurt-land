@@ -1,0 +1,18 @@
+<Project Sdk="Godot.NET.Sdk/4.7.1">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>Hollowdeep.Game</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>12</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The core simulation and tests compile in their own assemblies. -->
+    <Compile Remove="src/core/**/*.cs" />
+    <Compile Remove="src/smoke/**/*.cs" />
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="src/core/Hollowdeep.Core.csproj" />
+  </ItemGroup>
+</Project>
