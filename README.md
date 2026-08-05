@@ -10,7 +10,17 @@ layout IS the tactics map** — there is no separate battle screen.
 ![colony](docs/colony.png)
 ![combat](docs/combat.png)
 
-## Running the game
+## Download & play (no tools needed)
+
+**Windows**: grab [`dist/Hollowdeep-windows-x86_64.zip`](dist/Hollowdeep-windows-x86_64.zip)
+(GitHub shows a **Download raw** button), unzip anywhere, keep `Hollowdeep.exe` next to
+its `data_…` folder, double-click. SmartScreen may warn (unsigned build): *More info →
+Run anyway*. Controls and the game loop are in the bundled `README.txt`.
+
+A Linux build exports identically from the committed preset:
+`godot --headless --export-release "Linux/X11" build/linux/Hollowdeep.x86_64`.
+
+## Running from source
 
 Requires **Godot 4.7.1 mono** and the **.NET 8 SDK**.
 

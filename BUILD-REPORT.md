@@ -87,9 +87,14 @@ battle checkpoint — see the test list above.
 
 - **No human has played it.** Everything a machine can verify is verified; feel,
   difficulty curve, and camera comfort still need a human hour.
-- Linux-verified only; the project is stock Godot 4.7.1 mono and should open on
-  Windows/macOS, but no exported platform binaries are produced here (export
-  templates are a ~1 GB download and binaries don't belong in the repo).
+- **Playable exports shipped.** `dist/Hollowdeep-windows-x86_64.zip` is a release
+  export (Godot 4.7.1 mono templates, embedded pck, bundled .NET runtime, player
+  README). The export pipeline was verified end-to-end by exporting the Linux build
+  from the same presets and launch-checking that binary under xvfb (boots, renders
+  382 draw calls, screenshots, exits clean). The Windows .exe itself is cross-built
+  and could not be executed in this Linux environment — the engine layer is
+  identical, but a Windows double-click smoke test remains for a human. The build
+  is unsigned (SmartScreen will warn).
 - Sanctioned §9 simplifications that are design decisions, not gaps: squad prep is
   RT rally during the warning (DECISIONS #18), rout ends the battle at the threshold
   (#19), colonists sleep in place (#20).
