@@ -93,6 +93,10 @@ the repair loop.
 - The debug console's `give_material`/`heal_all` open the mutation gate directly —
   sanctioned and asserted, but they bypass the writer-interface pattern (DECISIONS #25)
 - UI is functional greybox: no tooltips beyond hints, no rebindable keys
+- Job priorities exist throughout the system (personal jobs pre-empt, haul ranks
+  below dig, deterministic priority/distance/id scoring) but the UI paints all
+  designations at the default priority — a per-designation priority adjuster did
+  not make the cut (§5.10 partially met)
 
 ## How to reproduce verification
 
