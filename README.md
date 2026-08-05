@@ -17,8 +17,16 @@ layout IS the tactics map** — there is no separate battle screen.
 its `data_…` folder, double-click. SmartScreen may warn (unsigned build): *More info →
 Run anyway*. Controls and the game loop are in the bundled `README.txt`.
 
-A Linux build exports identically from the committed preset:
-`godot --headless --export-release "Linux/X11" build/linux/Hollowdeep.x86_64`.
+**Linux**: grab [`dist/Hollowdeep-linux-x86_64.tar.gz`](dist/Hollowdeep-linux-x86_64.tar.gz),
+then:
+
+```sh
+tar xzf Hollowdeep-linux-x86_64.tar.gz
+./Hollowdeep.x86_64
+```
+
+(Needs a Vulkan-capable GPU/driver, as any Godot Forward+ game does. Saves land in
+`~/.local/share/godot/app_userdata/Hollowdeep/saves`.)
 
 ## Running from source
 
