@@ -8,4 +8,8 @@
     <AssemblyName>Hollowdeep.Core</AssemblyName>
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Tests may rig internal store state directly; game code still goes through writers. -->
+    <InternalsVisibleTo Include="Hollowdeep.Core.Tests" />
+  </ItemGroup>
 </Project>
