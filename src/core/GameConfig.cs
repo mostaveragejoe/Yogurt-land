@@ -50,6 +50,8 @@ public static class GameConfig
     public const float MoraleMax = 100f;
     public const float MoraleIdleDecayPerSecond = 0.5f;
     public const float MoraleWorkRegenPerSecond = 1.0f;
+    public const float HealHpPerSecond = 0.5f;   // standing-wound regen (full heal ≈ half a day)
+    public const float HealMinFood = 30f;        // too hungry to mend
 
     // ---- Items / stockpiles ----
     public const int StartingFood = 30;

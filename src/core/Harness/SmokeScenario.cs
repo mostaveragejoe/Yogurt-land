@@ -21,21 +21,27 @@ public static class SmokeScenario
         world.NewGame();
         Log($"world generated; hash {SaveCodec.WorldHash(world):x16}");
 
-        // Carve an entry corridor and a room into the hillside east of the clearing.
+        // Carve an entry corridor and a room into the hillside east of the clearing —
+        // a drag-rectangle over the ragged hill face, exactly as a player would paint it
+        // (non-wall cells inside the rect are rejected by designation validation).
         int z = GameConfig.SurfaceZ;
-        for (int x = 22; x <= 27; x++)
-            world.Designations.DesignateDig(new CellCoord(x, 32, z));
-        for (int y = 30; y <= 34; y++)
+        for (int y = 31; y <= 33; y++)
+        for (int x = 20; x <= 27; x++)
+            world.Designations.DesignateDig(new CellCoord(x, y, z));
+        for (int y = 29; y <= 35; y++)
         for (int x = 28; x <= 32; x++)
             world.Designations.DesignateDig(new CellCoord(x, y, z));
 
-        StepSeconds(world, 75);
+        StepSeconds(world, 90);
         Log($"after digging phase: dug {world.Stats.CellsDug} cells, {world.Items.Count} item stacks");
+        if (world.Stats.CellsDug < 10)
+            throw new InvalidOperationException($"Smoke: digging stalled at {world.Stats.CellsDug} cells.");
 
-        // Fortify: door at the corridor mouth, walls narrowing the approach.
+        // Fortify: door at the corridor mouth, walls narrowing the approach, a torch inside.
         world.Designations.DesignateBuild(new CellCoord(22, 32, z), BlueprintKind.Door, MaterialId.Dirt);
         world.Designations.DesignateBuild(new CellCoord(22, 31, z), BlueprintKind.Wall, MaterialId.Dirt);
         world.Designations.DesignateBuild(new CellCoord(22, 33, z), BlueprintKind.Wall, MaterialId.Dirt);
+        world.Designations.DesignateBuild(new CellCoord(24, 32, z), BlueprintKind.Torch, MaterialId.Dirt);
         StepSeconds(world, 45);
         Log($"after build phase: built {world.Stats.WallsBuilt} walls, doors {world.Doors.Count}");
 

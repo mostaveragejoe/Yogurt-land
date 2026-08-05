@@ -1,3 +1,4 @@
+using Hollowdeep.Core.Entities;
 using Hollowdeep.Core.Primitives;
 using Hollowdeep.Core.Terrain;
 
@@ -9,6 +10,7 @@ public enum BlueprintKind : byte
     Floor = 1,
     Stair = 2,
     Door = 3,
+    Torch = 4, // aesthetic prop: one warm point light (§8)
 }
 
 /// <summary>
@@ -30,10 +32,17 @@ public sealed class DesignationSystem
     private readonly HashSet<CellCoord> _repairCells = new();
 
     private readonly TerrainWorld _terrain;
+    private readonly DoorStore _doors;
+    private readonly PropStore _props;
 
     public Revision Revision; // UI overlay redraws poll this
 
-    public DesignationSystem(TerrainWorld terrain) => _terrain = terrain;
+    public DesignationSystem(TerrainWorld terrain, DoorStore doors, PropStore props)
+    {
+        _terrain = terrain;
+        _doors = doors;
+        _props = props;
+    }
 
     public IReadOnlyList<DigDesignation> Digs => _digs;
     public IReadOnlyList<BuildDesignation> Builds => _builds;
@@ -71,7 +80,8 @@ public sealed class DesignationSystem
             BlueprintKind.Wall => !cell.HasWall,
             BlueprintKind.Floor => !cell.HasWall && !cell.HasFloor,
             BlueprintKind.Stair => !cell.HasWall && cell.Floor != FloorKind.Stair,
-            BlueprintKind.Door => !cell.HasWall && cell.HasFloor,
+            BlueprintKind.Door => !cell.HasWall && cell.HasFloor && !_doors.TryGetAt(c, out _),
+            BlueprintKind.Torch => !cell.HasWall && cell.HasFloor && !_props.HasAt(c) && !_doors.TryGetAt(c, out _),
             _ => false,
         };
         if (!valid || material == MaterialId.None) return false;
@@ -86,7 +96,8 @@ public sealed class DesignationSystem
         if (!_terrain.InBounds(c) || _repairCells.Contains(c)) return false;
         var cell = _terrain.Get(c);
         bool damagedWall = cell.HasWall && cell.WallHp < MaterialCatalog.Get(cell.WallMaterial).MaxWallHp;
-        if (!damagedWall) return false;
+        bool damagedDoor = _doors.TryGetAt(c, out var door) && (door.IsBroken || door.Hp < GameConfig.DoorHp);
+        if (!damagedWall && !damagedDoor) return false;
         _repairs.Add(new RepairDesignation(c, priority));
         _repairCells.Add(c);
         Revision.Bump();

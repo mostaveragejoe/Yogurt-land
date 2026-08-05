@@ -16,11 +16,10 @@ public partial class UnitViewManager : Node3D
     private readonly Dictionary<EntityId, Node3D> _views = new();
     private readonly List<EntityId> _removeScratch = new();
     private ulong _colonistRev = ulong.MaxValue, _raiderRev = ulong.MaxValue;
-    private ulong _itemRev = ulong.MaxValue, _doorRev = ulong.MaxValue;
+    private ulong _itemRev = ulong.MaxValue, _doorRev = ulong.MaxValue, _propRev = ulong.MaxValue;
     private int _activeZ = GameConfig.SurfaceZ;
     private EntityId _selected;
     private MeshInstance3D? _selectionRing;
-    private Node3D? _hearth;
 
     public EntityId Selected => _selected;
 
@@ -57,12 +56,14 @@ public partial class UnitViewManager : Node3D
             _colonistRev != _world.Colonists.Revision.Value ||
             _raiderRev != _world.Raiders.Revision.Value ||
             _itemRev != _world.Items.Revision.Value ||
-            _doorRev != _world.Doors.Revision.Value;
+            _doorRev != _world.Doors.Revision.Value ||
+            _propRev != _world.Props.Revision.Value;
         if (!structural) return;
         _colonistRev = _world.Colonists.Revision.Value;
         _raiderRev = _world.Raiders.Revision.Value;
         _itemRev = _world.Items.Revision.Value;
         _doorRev = _world.Doors.Revision.Value;
+        _propRev = _world.Props.Revision.Value;
 
         var live = new HashSet<EntityId>();
         for (int i = 0; i < _world.Colonists.Count; i++)
@@ -95,6 +96,12 @@ public partial class UnitViewManager : Node3D
             if (!_views.ContainsKey(d.Id)) _views[d.Id] = MakeDoorView(d);
             StyleDoor((Node3D)_views[d.Id], d);
         }
+        for (int i = 0; i < _world.Props.Count; i++)
+        {
+            var p = _world.Props[i];
+            live.Add(p.Id);
+            if (!_views.ContainsKey(p.Id)) _views[p.Id] = MakePropView(p);
+        }
 
         _removeScratch.Clear();
         foreach (var kv in _views)
@@ -107,7 +114,6 @@ public partial class UnitViewManager : Node3D
             if (_selected == id) _selected = EntityId.None;
         }
 
-        EnsureHearth();
         RefreshVisibility();
     }
 
@@ -132,6 +138,26 @@ public partial class UnitViewManager : Node3D
             if (show && _views.TryGetValue(_selected, out var selected))
                 _selectionRing.Position = selected.Position with { Y = selected.Position.Y - 0.35f };
         }
+        AnimateDoors();
+    }
+
+    /// <summary>Presentation-only auto-open: a working door slides down while a unit is beside it.</summary>
+    private void AnimateDoors()
+    {
+        for (int i = 0; i < _world.Doors.Count; i++)
+        {
+            var d = _world.Doors[i];
+            if (!_views.TryGetValue(d.Id, out var view) || d.IsBroken) continue;
+            bool unitNear = false;
+            for (int dy = -1; dy <= 1 && !unitNear; dy++)
+            for (int dx = -1; dx <= 1 && !unitNear; dx++)
+                if (_world.Occupancy.CountAt(d.Cell.Offset(dx, dy)) > 0)
+                    unitNear = true;
+            var body = view.GetNode<MeshInstance3D>("Body");
+            var target = unitNear ? new Vector3(1f, 0.12f, 1f) : Vector3.One;
+            body.Scale = body.Scale.Lerp(target, 0.25f);
+            body.Position = body.Position with { Y = (body.Scale.Y - 1f) * 0.45f };
+        }
     }
 
     private static Vector3 LerpedPosition(CellCoord cell, CellCoord next, float progress)
@@ -144,7 +170,6 @@ public partial class UnitViewManager : Node3D
             int z = UnitZ(kv.Key);
             kv.Value.Visible = z >= 0 && z <= _activeZ;
         }
-        if (_hearth != null) _hearth.Visible = _world.Stats.HearthCell.Z <= _activeZ;
     }
 
     private int UnitZ(EntityId id) => id.Kind switch
@@ -153,6 +178,7 @@ public partial class UnitViewManager : Node3D
         EntityKind.Raider when _world.Raiders.TryGet(id, out var r) => r.Cell.Z,
         EntityKind.Item when _world.Items.TryGet(id, out var it) => it.Cell.Z,
         EntityKind.Door when _world.Doors.TryGet(id, out var d) => d.Cell.Z,
+        EntityKind.Prop when _world.Props.TryGet(id, out var p) => p.Cell.Z,
         _ => -1,
     };
 
@@ -297,27 +323,52 @@ public partial class UnitViewManager : Node3D
         view.Position = GameView.CellToWorld(d.Cell) + Vector3.Up * 0.5f;
     }
 
-    private void EnsureHearth()
+    /// <summary>
+    /// One warm point light per hearth/torch prop (§8) — purely aesthetic (§2: lighting
+    /// never feeds combat, threat, or repair logic).
+    /// </summary>
+    private Node3D MakePropView(in PropData p)
     {
-        if (_hearth != null) return;
-        var hearthCell = _world.Stats.HearthCell;
-        if (hearthCell == default) return;
-        _hearth = new Node3D();
-        _hearth.AddChild(new MeshInstance3D
+        var root = new Node3D();
+        if (p.Kind == PropKind.Hearth)
         {
-            Mesh = new CylinderMesh { TopRadius = 0.3f, BottomRadius = 0.4f, Height = 0.5f },
-            MaterialOverride = GameView.FlatMaterial(new Color(0.9f, 0.5f, 0.2f)),
-        });
-        // One warm point light per hearth (§8) — purely aesthetic (§2: lighting never
-        // feeds combat, threat, or repair logic).
-        _hearth.AddChild(new OmniLight3D
+            root.AddChild(new MeshInstance3D
+            {
+                Mesh = new CylinderMesh { TopRadius = 0.3f, BottomRadius = 0.4f, Height = 0.5f },
+                MaterialOverride = GameView.FlatMaterial(new Color(0.9f, 0.5f, 0.2f)),
+            });
+            root.AddChild(new OmniLight3D
+            {
+                LightColor = new Color(1f, 0.75f, 0.45f),
+                LightEnergy = 2.5f,
+                OmniRange = 14f,
+                Position = new Vector3(0, 1.2f, 0),
+            });
+        }
+        else // torch
         {
-            LightColor = new Color(1f, 0.75f, 0.45f),
-            LightEnergy = 2.5f,
-            OmniRange = 14f,
-            Position = new Vector3(0, 1.2f, 0),
-        });
-        _hearth.Position = GameView.CellToWorld(hearthCell) + Vector3.Up * 0.3f;
-        AddChild(_hearth);
+            root.AddChild(new MeshInstance3D
+            {
+                Mesh = new CylinderMesh { TopRadius = 0.05f, BottomRadius = 0.08f, Height = 0.7f },
+                MaterialOverride = GameView.FlatMaterial(GameView.DoorColor),
+                Position = new Vector3(0, 0.1f, 0),
+            });
+            root.AddChild(new MeshInstance3D
+            {
+                Mesh = new SphereMesh { Radius = 0.12f, Height = 0.24f },
+                MaterialOverride = GameView.FlatMaterial(GameView.TorchColor),
+                Position = new Vector3(0, 0.55f, 0),
+            });
+            root.AddChild(new OmniLight3D
+            {
+                LightColor = new Color(1f, 0.7f, 0.4f),
+                LightEnergy = 1.6f,
+                OmniRange = 8f,
+                Position = new Vector3(0, 0.9f, 0),
+            });
+        }
+        root.Position = GameView.CellToWorld(p.Cell) + Vector3.Up * 0.25f;
+        AddChild(root);
+        return root;
     }
 }

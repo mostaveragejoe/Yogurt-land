@@ -33,6 +33,10 @@ public static class GameView
     public static readonly Color BrokenDoorColor = new(0.3f, 0.22f, 0.12f);
     public static readonly Color FoodColor = new(0.55f, 0.75f, 0.35f);
     public static readonly Color DigOverlay = new(1f, 0.85f, 0.3f, 0.45f);
+    public static readonly Color DigOverlayHigh = new(1f, 0.55f, 0.15f, 0.7f);
+    public static readonly Color DigOverlayLow = new(1f, 0.9f, 0.5f, 0.22f);
+    public static readonly Color FarmOverlay = new(0.45f, 0.85f, 0.4f, 0.35f);
+    public static readonly Color TorchColor = new(0.85f, 0.65f, 0.3f);
     public static readonly Color BuildOverlay = new(0.4f, 0.7f, 1f, 0.45f);
     public static readonly Color RepairOverlay = new(0.4f, 1f, 0.6f, 0.45f);
     public static readonly Color StockpileOverlay = new(0.8f, 0.6f, 1f, 0.35f);

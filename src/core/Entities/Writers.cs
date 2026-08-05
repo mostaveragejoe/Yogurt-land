@@ -14,6 +14,7 @@ public interface ISpawnWriter
     EntityId SpawnColonist(string name, CellCoord cell, bool isMiner);
     EntityId SpawnItem(ItemKind kind, MaterialId material, int count, CellCoord cell);
     EntityId SpawnDoor(CellCoord cell, MaterialId material);
+    EntityId SpawnProp(CellCoord cell, PropKind kind, MaterialId material);
 }
 
 public interface INeedsWriter // NeedsSystem, RealTime only
@@ -21,6 +22,13 @@ public interface INeedsWriter // NeedsSystem, RealTime only
     void SetNeeds(EntityId id, float food, float sleep, float morale);
     void SetActivity(EntityId id, ColonistActivity activity);
     void TickDownedRecovery(EntityId id, float delta01);
+    /// <summary>Passive wound healing for standing colonists; Needs owns HP in RealTime.</summary>
+    void RegenHp(EntityId id, float hpDelta);
+}
+
+public interface IPropsWriter // construction, RealTime only; props are aesthetic-only
+{
+    EntityId Place(CellCoord cell, PropKind kind, MaterialId material);
 }
 
 public interface IJobsWriter // JobSystem, RealTime only
@@ -87,7 +95,7 @@ public interface IDoorsWriter // construction places; both authorities damage
 /// <summary>Single implementation behind all writer interfaces; constructed once by GameWorld.</summary>
 internal sealed class StoreWriters :
     ISpawnWriter, INeedsWriter, IJobsWriter, IColonistCombatWriter, IReconcileWriter,
-    IRaiderRtWriter, IRaiderCombatWriter, IItemsWriter, IDoorsWriter
+    IRaiderRtWriter, IRaiderCombatWriter, IItemsWriter, IDoorsWriter, IPropsWriter
 {
     private readonly MutationGate _gate;
     private readonly TimeAuthorityManager _time;
@@ -96,12 +104,13 @@ internal sealed class StoreWriters :
     private readonly RaiderStore _raiders;
     private readonly ItemStore _items;
     private readonly DoorStore _doors;
+    private readonly PropStore _props;
 
     public StoreWriters(MutationGate gate, TimeAuthorityManager time, EntityIdAllocator ids,
-        ColonistStore colonists, RaiderStore raiders, ItemStore items, DoorStore doors)
+        ColonistStore colonists, RaiderStore raiders, ItemStore items, DoorStore doors, PropStore props)
     {
         _gate = gate; _time = time; _ids = ids;
-        _colonists = colonists; _raiders = raiders; _items = items; _doors = doors;
+        _colonists = colonists; _raiders = raiders; _items = items; _doors = doors; _props = props;
     }
 
     private void AssertRt()
@@ -122,6 +131,7 @@ internal sealed class StoreWriters :
     EntityId ISpawnWriter.SpawnColonist(string name, CellCoord cell, bool isMiner) => _colonists.Add(_ids, name, cell, isMiner);
     EntityId ISpawnWriter.SpawnItem(ItemKind kind, MaterialId material, int count, CellCoord cell) => _items.Add(_ids, kind, material, count, cell);
     EntityId ISpawnWriter.SpawnDoor(CellCoord cell, MaterialId material) => _doors.Add(_ids, cell, material);
+    EntityId ISpawnWriter.SpawnProp(CellCoord cell, PropKind kind, MaterialId material) => _props.Add(_ids, cell, kind, material);
 
     // ---- INeedsWriter ----
     void INeedsWriter.SetNeeds(EntityId id, float food, float sleep, float morale)
@@ -156,6 +166,28 @@ internal sealed class StoreWriters :
             d.Activity = ColonistActivity.Idle;
         }
         _colonists.Bump();
+    }
+
+    void INeedsWriter.RegenHp(EntityId id, float hpDelta)
+    {
+        AssertRt();
+        ref var d = ref _colonists.Ref(id);
+        if (d.IsDead || d.IsDowned || d.Hp >= d.MaxHp) return;
+        d.HealProgress += hpDelta;
+        if (d.HealProgress >= 1f)
+        {
+            int whole = (int)d.HealProgress;
+            d.HealProgress -= whole;
+            d.Hp = Math.Min(d.MaxHp, d.Hp + whole);
+        }
+        _colonists.Bump();
+    }
+
+    // ---- IPropsWriter ----
+    EntityId IPropsWriter.Place(CellCoord cell, PropKind kind, MaterialId material)
+    {
+        AssertRt();
+        return _props.Add(_ids, cell, kind, material);
     }
 
     // ---- IJobsWriter ----

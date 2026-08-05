@@ -12,7 +12,8 @@ namespace Hollowdeep.Game;
 public partial class OverlayRenderer : Node3D
 {
     private GameWorld _world = null!;
-    private MultiMeshInstance3D _dig = null!, _build = null!, _repair = null!, _stockpile = null!, _moveRange = null!;
+    private MultiMeshInstance3D _digHigh = null!, _dig = null!, _digLow = null!;
+    private MultiMeshInstance3D _build = null!, _repair = null!, _stockpile = null!, _farm = null!, _moveRange = null!;
     private ulong _designationRev = ulong.MaxValue, _stockpileRev = ulong.MaxValue;
     private ulong _combatStamp = ulong.MaxValue;
     private readonly List<(CellCoord Cell, int Cost)> _rangeScratch = new();
@@ -21,10 +22,13 @@ public partial class OverlayRenderer : Node3D
     public void Attach(GameWorld world)
     {
         _world = world;
+        _digHigh = MakeLayer(GameView.DigOverlayHigh);
         _dig = MakeLayer(GameView.DigOverlay);
+        _digLow = MakeLayer(GameView.DigOverlayLow);
         _build = MakeLayer(GameView.BuildOverlay);
         _repair = MakeLayer(GameView.RepairOverlay);
         _stockpile = MakeLayer(GameView.StockpileOverlay);
+        _farm = MakeLayer(GameView.FarmOverlay);
         _moveRange = MakeLayer(GameView.MoveRangeOverlay);
     }
 
@@ -60,9 +64,14 @@ public partial class OverlayRenderer : Node3D
         if (_designationRev != _world.Designations.Revision.Value)
         {
             _designationRev = _world.Designations.Revision.Value;
-            var digCells = new List<CellCoord>();
-            foreach (var d in _world.Designations.Digs) digCells.Add(d.Cell);
-            Fill(_dig, digCells);
+            var high = new List<CellCoord>();
+            var normal = new List<CellCoord>();
+            var low = new List<CellCoord>();
+            foreach (var d in _world.Designations.Digs)
+                (d.Priority <= 2 ? high : d.Priority <= 5 ? normal : low).Add(d.Cell);
+            Fill(_digHigh, high);
+            Fill(_dig, normal);
+            Fill(_digLow, low);
             var buildCells = new List<CellCoord>();
             foreach (var b in _world.Designations.Builds) buildCells.Add(b.Cell);
             Fill(_build, buildCells);
@@ -74,9 +83,10 @@ public partial class OverlayRenderer : Node3D
         if (_stockpileRev != _world.Stockpiles.Revision.Value)
         {
             _stockpileRev = _world.Stockpiles.Revision.Value;
-            var cells = new List<CellCoord>(_world.Stockpiles.ZoneCells);
-            foreach (var plot in _world.Farms.Plots) cells.Add(plot.Cell);
-            Fill(_stockpile, cells);
+            Fill(_stockpile, new List<CellCoord>(_world.Stockpiles.ZoneCells));
+            var farmCells = new List<CellCoord>();
+            foreach (var plot in _world.Farms.Plots) farmCells.Add(plot.Cell);
+            Fill(_farm, farmCells);
         }
 
         UpdateMoveRange();

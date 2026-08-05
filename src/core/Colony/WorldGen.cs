@@ -115,6 +115,7 @@ public static class WorldGen
         }
 
         stats.HearthCell = clearing;
+        spawn.SpawnProp(clearing, PropKind.Hearth, MaterialId.Granite);
 
         // Starting stockpile zone (4×4) with food and building material.
         for (int dy = 0; dy < 4; dy++)

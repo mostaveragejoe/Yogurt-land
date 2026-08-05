@@ -36,6 +36,9 @@ public partial class Main : Node3D
     private bool _shotWantsCombat;
     private int _shotFramesLeft = -1;
 
+    /// <summary>Set by the pause menu's "New colony": the next boot skips save resume.</summary>
+    private static bool _forceNewGame;
+
     public override void _Ready()
     {
         GetTree().AutoAcceptQuit = false;
@@ -91,7 +94,14 @@ public partial class Main : Node3D
         AddChild(_quitDialog);
 
         // Boot: resume the latest save (the battle checkpoint wins if newest), else new game.
-        if (!Saves.TryLoadLatest(out string loaded))
+        string loaded;
+        if (_forceNewGame)
+        {
+            _forceNewGame = false;
+            World.NewGame();
+            loaded = "(new colony)";
+        }
+        else if (!Saves.TryLoadLatest(out loaded))
         {
             World.NewGame();
             loaded = "(new colony)";
@@ -159,6 +169,7 @@ public partial class Main : Node3D
         var img = GetViewport().GetTexture().GetImage();
         img.SavePng(_shotPath);
         GD.Print($"screenshot saved: {_shotPath}");
+        GD.Print($"draw calls this frame: {RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalDrawCallsInFrame)}");
         _shotPath = null;
         Checkpoints.Dispose();
         GetTree().Quit();
@@ -181,11 +192,16 @@ public partial class Main : Node3D
             case Key.S: _tools.SetTool(Tool.StairDown); break;
             case Key.W: _tools.SetTool(Tool.BuildWall); break;
             case Key.O: _tools.SetTool(Tool.BuildDoor); break;
+            case Key.T: _tools.SetTool(Tool.BuildTorch); break;
             case Key.R: _tools.SetTool(Tool.Repair); break;
             case Key.P: _tools.SetTool(Tool.Stockpile); break;
             case Key.C: _tools.SetTool(Tool.Cancel); break;
             case Key.M: _tools.CycleMaterial(); break;
-            case Key.Escape: _tools.SetTool(Tool.Select); break;
+            case Key.Escape:
+                if (_ui.IsPauseMenuOpen) _ui.TogglePauseMenu();
+                else if (_tools.ActiveTool != Tool.Select) _tools.SetTool(Tool.Select);
+                else _ui.TogglePauseMenu();
+                break;
             case Key.Enter or Key.KpEnter:
                 if (World.Time.Mode == SimMode.TurnBased) World.Combat.EndActivation();
                 break;
@@ -236,6 +252,51 @@ public partial class Main : Node3D
         _terrainView.SetActiveZ(z);
         _units.SetActiveZ(_terrainView.ActiveZ);
         _overlays.SetActiveZ(_terrainView.ActiveZ);
+    }
+
+    public void FocusCell(Hollowdeep.Core.Primitives.CellCoord cell)
+    {
+        SetActiveZ(cell.Z);
+        _rig.FocusOn(GameView.CellToWorldCenter(cell));
+    }
+
+    public void RequestQuit() => _Notification((int)NotificationWMCloseRequest);
+
+    public void SaveSlot(int slot)
+    {
+        string path = System.IO.Path.Combine(Saves.Directory, $"slot{slot}.save");
+        if (Saves.TrySaveColony(path, out string refusal)) _ui.Toast($"saved to slot {slot}");
+        else _ui.Toast(refusal, 4);
+    }
+
+    public void LoadSlot(int slot)
+    {
+        string path = System.IO.Path.Combine(Saves.Directory, $"slot{slot}.save");
+        if (!File.Exists(path)) { _ui.Toast($"slot {slot} is empty"); return; }
+        try
+        {
+            Saves.Load(path);
+            AfterWorldReload();
+            _ui.Toast($"loaded slot {slot}");
+        }
+        catch (Exception ex)
+        {
+            _ui.Toast($"load failed: {ex.Message}", 5);
+        }
+    }
+
+    /// <summary>Archives the current saves (never deletes) and restarts with a fresh mountain.</summary>
+    public void NewColony()
+    {
+        Checkpoints.Dispose();
+        string backup = System.IO.Path.Combine(Saves.Directory,
+            $"backup-{Time.GetTicksMsec()}");
+        Directory.CreateDirectory(backup);
+        foreach (var file in Directory.EnumerateFiles(Saves.Directory))
+            if (file.EndsWith(".save") || file.EndsWith(".checkpoint"))
+                File.Move(file, System.IO.Path.Combine(backup, System.IO.Path.GetFileName(file)));
+        _forceNewGame = true;
+        GetTree().ReloadCurrentScene();
     }
 
     public void QuickSave()

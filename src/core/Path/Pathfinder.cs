@@ -7,8 +7,14 @@ namespace Hollowdeep.Core.Path;
 public enum GoalMode : byte
 {
     Exact = 0,
-    /// <summary>Stop on any same-layer 8-neighbor of the goal (dig/attack-wall approach).</summary>
+    /// <summary>Stop on any same-layer 8-neighbor of the goal (build/repair/attack-wall approach).</summary>
     Adjacent8 = 1,
+    /// <summary>
+    /// Stop on an orthogonal neighbor only. Mining reach: digging diagonally could open
+    /// a cell sealed by the corner-cut rule — a pocket nobody can enter — so digs must
+    /// be faced head-on.
+    /// </summary>
+    Adjacent4 = 2,
 }
 
 /// <summary>
@@ -161,6 +167,8 @@ public sealed class Pathfinder
         GoalMode.Exact => c == goal,
         GoalMode.Adjacent8 => c.Z == goal.Z && c != goal &&
                               Math.Abs(c.X - goal.X) <= 1 && Math.Abs(c.Y - goal.Y) <= 1,
+        GoalMode.Adjacent4 => c.Z == goal.Z &&
+                              Math.Abs(c.X - goal.X) + Math.Abs(c.Y - goal.Y) == 1,
         _ => false,
     };
 

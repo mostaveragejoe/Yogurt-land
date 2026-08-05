@@ -7,6 +7,7 @@ public enum EntityKind : byte
     Raider = 2,
     Item = 3,
     Door = 4,
+    Prop = 5, // purely aesthetic furniture: torches, the hearth
 }
 
 /// <summary>

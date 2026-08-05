@@ -102,6 +102,7 @@ public sealed class JobSystem : ITickable
     private readonly INeedsWriter _needsWriter;
     private readonly IItemsWriter _itemsWriter;
     private readonly IDoorsWriter _doorsWriter;
+    private readonly IPropsWriter _propsWriter;
 
     private readonly Dictionary<long, Job> _jobs = new();
     private readonly List<long> _jobOrder = new();
@@ -119,12 +120,14 @@ public sealed class JobSystem : ITickable
     public JobSystem(ColonistStore colonists, ItemStore items, DoorStore doors, TerrainWorld terrain,
         UnitOccupancyIndex occupancy, Walkability walk, Pathfinder pathfinder, RegionIndex regions,
         DesignationSystem designations, StockpileSystem stockpiles, ColonyStats stats,
-        IJobsWriter writer, INeedsWriter needsWriter, IItemsWriter itemsWriter, IDoorsWriter doorsWriter)
+        IJobsWriter writer, INeedsWriter needsWriter, IItemsWriter itemsWriter, IDoorsWriter doorsWriter,
+        IPropsWriter propsWriter)
     {
         _colonists = colonists; _items = items; _doors = doors; _terrain = terrain;
         _occupancy = occupancy; _walk = walk; _pathfinder = pathfinder; _regions = regions;
         _designations = designations; _stockpiles = stockpiles; _stats = stats;
         _writer = writer; _needsWriter = needsWriter; _itemsWriter = itemsWriter; _doorsWriter = doorsWriter;
+        _propsWriter = propsWriter;
     }
 
     public IReadOnlyList<long> JobOrder => _jobOrder;
@@ -202,7 +205,9 @@ public sealed class JobSystem : ITickable
             {
                 var job = NewJob(JobType.Repair, rp.Cell, rp.Priority);
                 var cell = _terrain.Get(rp.Cell);
-                job.Material = cell.HasWall ? cell.WallMaterial : MaterialId.Dirt;
+                job.Material = cell.HasWall ? cell.WallMaterial
+                    : _doors.TryGetAt(rp.Cell, out var door) ? door.Material
+                    : MaterialId.Dirt;
             }
 
         // Player-cancelled designations kill their jobs.
@@ -404,7 +409,8 @@ public sealed class JobSystem : ITickable
         switch (job.Type)
         {
             case JobType.Dig:
-                return _regions.ReachableAdjacent(c.Cell, job.Target);
+                // Orthogonal mining reach: never open a corner-sealed pocket.
+                return _regions.ReachableAdjacent(c.Cell, job.Target, orthogonalOnly: true);
             case JobType.DigStairDown:
             case JobType.Rally:
                 return _regions.Reachable(c.Cell, job.Target);
@@ -484,9 +490,13 @@ public sealed class JobSystem : ITickable
             c = _colonists.Get(id);
         }
 
-        bool goalReached = mode == GoalMode.Exact
-            ? c.Cell == goal
-            : c.Cell.Z == goal.Z && c.Cell != goal && CellCoord.Chebyshev(c.Cell, goal) == 1;
+        bool goalReached = mode switch
+        {
+            GoalMode.Exact => c.Cell == goal,
+            GoalMode.Adjacent4 => c.Cell.Z == goal.Z &&
+                                  Math.Abs(c.Cell.X - goal.X) + Math.Abs(c.Cell.Y - goal.Y) == 1,
+            _ => c.Cell.Z == goal.Z && c.Cell != goal && CellCoord.Chebyshev(c.Cell, goal) == 1,
+        };
         if (goalReached) { mover.Clear(); return MoveResult.Arrived; }
 
         if (mover.HasPath && mover.PlannedRevision != _terrain.Revision.Value)
@@ -564,7 +574,7 @@ public sealed class JobSystem : ITickable
             return;
         }
 
-        var move = MoveToward(id, job.Target, stairDown ? GoalMode.Exact : GoalMode.Adjacent8, dt);
+        var move = MoveToward(id, job.Target, stairDown ? GoalMode.Exact : GoalMode.Adjacent4, dt);
         if (move == MoveResult.Blocked) { ReleaseJob(job, _colonists.Get(id).Cell); return; }
         if (move != MoveResult.Arrived) return;
 
@@ -649,6 +659,9 @@ public sealed class JobSystem : ITickable
                 break;
             case BlueprintKind.Door:
                 if (!_doors.TryGetAt(job.Target, out _)) _doorsWriter.Place(job.Target, job.Material);
+                break;
+            case BlueprintKind.Torch:
+                _propsWriter.Place(job.Target, PropKind.Torch, job.Material);
                 break;
         }
         _designations.RemoveBuild(job.Target);

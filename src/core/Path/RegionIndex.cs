@@ -65,8 +65,11 @@ public sealed class RegionIndex
         return Find(la) == Find(lb);
     }
 
-    /// <summary>Can a colonist standing at <paramref name="from"/> reach any same-layer 8-neighbor of <paramref name="target"/>?</summary>
-    public bool ReachableAdjacent(CellCoord from, CellCoord target)
+    /// <summary>
+    /// Can a colonist standing at <paramref name="from"/> reach a same-layer neighbor of
+    /// <paramref name="target"/>? Orthogonal-only mirrors mining reach (GoalMode.Adjacent4).
+    /// </summary>
+    public bool ReachableAdjacent(CellCoord from, CellCoord target, bool orthogonalOnly = false)
     {
         EnsureClean();
         if (!_terrain.InBounds(from)) return false;
@@ -77,6 +80,7 @@ public sealed class RegionIndex
         for (int dx = -1; dx <= 1; dx++)
         {
             if (dx == 0 && dy == 0) continue;
+            if (orthogonalOnly && dx != 0 && dy != 0) continue;
             var n = target.Offset(dx, dy);
             if (!_terrain.InBounds(n)) continue;
             int ln = _labels[Index(n)];

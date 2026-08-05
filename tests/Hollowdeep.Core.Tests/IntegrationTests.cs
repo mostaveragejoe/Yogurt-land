@@ -75,16 +75,18 @@ public class DeterminismTests
     private static void ScriptPhase1(GameWorld world)
     {
         int z = GameConfig.SurfaceZ;
-        for (int x = 22; x <= 30; x++)
-            world.Designations.DesignateDig(new CellCoord(x, 32, z));
+        for (int y = 31; y <= 33; y++)
+            for (int x = 20; x <= 30; x++)
+                world.Designations.DesignateDig(new CellCoord(x, y, z));
         SmokeScenario.StepSeconds(world, 40);
     }
 
     private static void ScriptPhase2(GameWorld world)
     {
         int z = GameConfig.SurfaceZ;
-        for (int y = 30; y <= 33; y++)
-            world.Designations.DesignateDig(new CellCoord(31, y, z));
+        for (int y = 29; y <= 35; y++)
+            for (int x = 28; x <= 32; x++)
+                world.Designations.DesignateDig(new CellCoord(x, y, z));
         SmokeScenario.StepSeconds(world, 45);
     }
 }

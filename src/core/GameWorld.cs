@@ -26,6 +26,7 @@ public sealed class GameWorld : ISwitchHooks
     public RaiderStore Raiders { get; }
     public ItemStore Items { get; }
     public DoorStore Doors { get; }
+    public PropStore Props { get; }
     public TimeAuthorityManager Time { get; }
     public Walkability Walk { get; }
     public Pathfinder Pathfinder { get; }
@@ -64,6 +65,7 @@ public sealed class GameWorld : ISwitchHooks
         Raiders = new RaiderStore(Gate, Occupancy);
         Items = new ItemStore(Gate);
         Doors = new DoorStore(Gate);
+        Props = new PropStore(Gate);
         Time = new TimeAuthorityManager(Gate);
         Walk = new Walkability(Terrain, Doors, Occupancy);
         Pathfinder = new Pathfinder(Terrain, Doors, Walk);
@@ -72,14 +74,14 @@ public sealed class GameWorld : ISwitchHooks
         Scars = new ScarLedger();
         OutcomeInbox = new EncounterOutcomeInbox();
 
-        Writers = new StoreWriters(Gate, Time, Ids, Colonists, Raiders, Items, Doors);
+        Writers = new StoreWriters(Gate, Time, Ids, Colonists, Raiders, Items, Doors, Props);
 
-        Designations = new DesignationSystem(Terrain);
+        Designations = new DesignationSystem(Terrain, Doors, Props);
         Stockpiles = new StockpileSystem(Items);
         Farms = new FarmSystem(Writers, Items);
         Needs = new NeedsSystem(Colonists, Writers);
         Jobs = new JobSystem(Colonists, Items, Doors, Terrain, Occupancy, Walk, Pathfinder, Regions,
-            Designations, Stockpiles, Stats, Writers, Writers, Writers, Writers);
+            Designations, Stockpiles, Stats, Writers, Writers, Writers, Writers, Writers);
         Raids = new RaidSystem(Terrain, Colonists, Raiders, Doors, Items, Walk, Pathfinder, Stats,
             Stockpiles, Writers, Writers, Rng.Raids, Scars, Time);
         Combat = new TurnBasedAuthority(Gate, Time, Colonists, Raiders, Doors, Terrain, Occupancy,

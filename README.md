@@ -20,17 +20,20 @@ godot --path .            # or open project.godot in the editor and press Play
 
 - First launch generates the fixed-seed mountain with 10 colonists; later launches
   resume your newest save automatically — including mid-battle checkpoints.
-- **Space** pause · **1/2/3** speed · **Q/E** Z-level cutaway · **F5/F9** quicksave/load
-  · **F12** debug console (`help` lists commands, `spawn_raid` starts the fun early).
-- Drag with the left mouse button to paint designations; right-click rallies the
-  selected colonist during a raid warning. In battle: click a tile to move, a raider
-  to attack, **Enter** to end the activation.
+- **Space** pause · **1/2/3** speed · **Q/E** Z-level cutaway · **Esc** pause menu
+  (save/load slots, new colony) · **F5/F9** quicksave/load · **F12** debug console
+  (`help` lists commands, `spawn_raid` starts the fun early, `perf` shows budgets).
+- Drag with the left mouse button to paint designations (pick High/Norm/Low priority
+  in the palette); right-click rallies the selected colonist during a raid warning.
+  In battle: click a tile to move, a raider to attack, **Enter** to end the activation;
+  the combat log narrates every roll.
 
 ## Tests & verification
 
 ```sh
-dotnet test                       # 41 tests: determinism, byte-identical saves,
-                                  # checkpoint resume, pathfinding law, mode switch
+dotnet test                       # 47 tests: determinism, byte-identical saves,
+                                  # checkpoint resume, pathfinding law, mode switch,
+                                  # a 2-sim-day endurance run, 0 B/sub-step allocation
 tools/check-core-purity.sh        # the simulation assembly has zero Godot references
 ```
 

@@ -109,6 +109,15 @@ public partial class DebugConsole : CanvasLayer
                 Print($"  {System.IO.Path.GetFileName(path)} · order {header.SaveOrder} · {header.Mode} · writer {header.WriterId}");
         });
         Register("hash", "print the world hash", _ => Print($"world hash {SaveCodec.WorldHash(_world):x16}"));
+        Register("perf", "frame + budget stats (§4f)", _ =>
+        {
+            ulong drawCalls = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalDrawCallsInFrame);
+            ulong primitives = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalPrimitivesInFrame);
+            Print($"draw calls/frame: {drawCalls} (budget {GameConfig.FrameDrawCallBudget})");
+            Print($"primitives/frame: {primitives}");
+            Print($"fps: {Engine.GetFramesPerSecond()}");
+            Print($"process memory: {OS.GetStaticMemoryUsage() / (1024 * 1024)} MB static");
+        });
         Register("smoke", "run the scripted smoke scenario in a fresh world", _ =>
         {
             var hash = SmokeScenario.Run(new GameWorld(), Print);

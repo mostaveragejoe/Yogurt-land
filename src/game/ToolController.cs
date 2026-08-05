@@ -19,6 +19,7 @@ public enum Tool
     Repair = 7,
     Stockpile = 8,
     Cancel = 9,
+    BuildTorch = 10,
 }
 
 /// <summary>
@@ -35,6 +36,7 @@ public partial class ToolController : Node
 
     public Tool ActiveTool = Tool.Select;
     public MaterialId BuildMaterial = MaterialId.Dirt;
+    public int ActivePriority = 5; // 2 = high, 5 = normal, 8 = low
     public event Action? StateChanged;
 
     private bool _dragging;
@@ -51,6 +53,12 @@ public partial class ToolController : Node
     public void SetTool(Tool tool)
     {
         ActiveTool = tool;
+        StateChanged?.Invoke();
+    }
+
+    public void SetPriority(int priority)
+    {
+        ActivePriority = priority;
         StateChanged?.Invoke();
     }
 
@@ -161,20 +169,25 @@ public partial class ToolController : Node
             return;
         }
 
+        int p = ActivePriority;
         for (int y = y0; y <= y1; y++)
         for (int x = x0; x <= x1; x++)
         {
             var c = new CellCoord(x, y, z);
             switch (ActiveTool)
             {
-                case Tool.Dig: _world.Designations.DesignateDig(c); break;
-                case Tool.StairDown: _world.Designations.DesignateDig(c, stairDown: true); break;
-                case Tool.BuildWall: _world.Designations.DesignateBuild(c, BlueprintKind.Wall, BuildMaterial); break;
-                case Tool.BuildFloor: _world.Designations.DesignateBuild(c, BlueprintKind.Floor, BuildMaterial); break;
-                case Tool.BuildStair: _world.Designations.DesignateBuild(c, BlueprintKind.Stair, BuildMaterial); break;
-                case Tool.BuildDoor: _world.Designations.DesignateBuild(c, BlueprintKind.Door, BuildMaterial); break;
-                case Tool.Repair: _world.Designations.DesignateRepair(c); break;
-                case Tool.Stockpile: _world.Stockpiles.AddZoneCell(c); break;
+                case Tool.Dig: _world.Designations.DesignateDig(c, priority: p); break;
+                case Tool.StairDown: _world.Designations.DesignateDig(c, stairDown: true, priority: p); break;
+                case Tool.BuildWall: _world.Designations.DesignateBuild(c, BlueprintKind.Wall, BuildMaterial, p); break;
+                case Tool.BuildFloor: _world.Designations.DesignateBuild(c, BlueprintKind.Floor, BuildMaterial, p); break;
+                case Tool.BuildStair: _world.Designations.DesignateBuild(c, BlueprintKind.Stair, BuildMaterial, p); break;
+                case Tool.BuildDoor: _world.Designations.DesignateBuild(c, BlueprintKind.Door, BuildMaterial, p); break;
+                case Tool.BuildTorch: _world.Designations.DesignateBuild(c, BlueprintKind.Torch, BuildMaterial, p); break;
+                case Tool.Repair: _world.Designations.DesignateRepair(c, p); break;
+                case Tool.Stockpile:
+                    // Only floor-walkable cells make sense as storage: haul targets must be standable.
+                    if (_world.Walk.TerrainWalkable(c)) _world.Stockpiles.AddZoneCell(c);
+                    break;
                 case Tool.Cancel:
                     _world.Designations.CancelAt(c);
                     _world.Stockpiles.RemoveZoneCell(c);

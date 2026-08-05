@@ -45,6 +45,7 @@ public static class SaveCodec
         world.Raiders.WriteTo(w);
         world.Items.WriteTo(w);
         world.Doors.WriteTo(w);
+        world.Props.WriteTo(w);
 
         world.Stats.WriteTo(w);
         world.Designations.WriteTo(w);
@@ -94,6 +95,7 @@ public static class SaveCodec
         world.Raiders.ReadFrom(r);
         world.Items.ReadFrom(r);
         world.Doors.ReadFrom(r);
+        world.Props.ReadFrom(r);
 
         world.Stats.ReadFrom(r);
         world.Designations.ReadFrom(r);

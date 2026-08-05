@@ -31,6 +31,7 @@ public struct ColonistData
     public bool IsDowned;
     public bool IsDead;
     public float DownedRecovery; // 0..1, fills over a day; restores at 50% HP
+    public float HealProgress;   // fractional HP regen accumulator (Needs owns HP in RT)
     public ColonistActivity Activity;
     public long CurrentJobId;    // 0 = none
 
@@ -140,7 +141,7 @@ public sealed class ColonistStore
             w.Write(d.NextCell.X); w.Write(d.NextCell.Y); w.Write(d.NextCell.Z);
             w.Write(d.Hp); w.Write(d.MaxHp);
             w.Write(d.Food); w.Write(d.Sleep); w.Write(d.Morale);
-            w.Write(d.IsDowned); w.Write(d.IsDead); w.Write(d.DownedRecovery);
+            w.Write(d.IsDowned); w.Write(d.IsDead); w.Write(d.DownedRecovery); w.Write(d.HealProgress);
             w.Write((byte)d.Activity); w.Write(d.CurrentJobId);
         }
     }
@@ -164,7 +165,8 @@ public sealed class ColonistStore
                 NextCell = new CellCoord(r.ReadInt32(), r.ReadInt32(), r.ReadInt32()),
                 Hp = r.ReadInt32(), MaxHp = r.ReadInt32(),
                 Food = r.ReadSingle(), Sleep = r.ReadSingle(), Morale = r.ReadSingle(),
-                IsDowned = r.ReadBoolean(), IsDead = r.ReadBoolean(), DownedRecovery = r.ReadSingle(),
+                IsDowned = r.ReadBoolean(), IsDead = r.ReadBoolean(),
+                DownedRecovery = r.ReadSingle(), HealProgress = r.ReadSingle(),
                 Activity = (ColonistActivity)r.ReadByte(),
                 CurrentJobId = r.ReadInt64(),
             };

@@ -5,7 +5,7 @@ Date: 2026-08-05 · Godot **4.7.1-stable mono** (exact spec version, confirmed a
 
 ## Verification results (§7, in order)
 
-1. **Core test suite — PASS.** 41/41 tests green on `Hollowdeep.Core` (plain .NET, no
+1. **Core test suite — PASS.** 47/47 tests green on `Hollowdeep.Core` (plain .NET, no
    Godot). Covers every §7.1 bullet:
    - determinism: same seed + same scripted input → identical world hash, twice
    - TickSequence gapless across RT→TB→RT (exact substep/action accounting)
@@ -21,88 +21,88 @@ Date: 2026-08-05 · Godot **4.7.1-stable mono** (exact spec version, confirmed a
    - occupancy normalization: deterministic, lowest id keeps cell, unique TB occupancy
    - mutation-window and mode assertions fire on illegal writes
    - raider reap completeness (live raiders included; inbox drained exactly once)
+   - door repair via designation (damaged AND broken), torch construction,
+     wounded-colonist regen
 2. **Headless smoke — PASS.** Scripted arc (dig orders → fortify → raid → warning →
-   breach switch → auto-resolved battle → reconcile → scar-driven repairs) runs with
-   no exceptions/assertion failures; final state hash stable across two fresh runs.
-   Implemented pure-core (§7.2 allows either); also invocable in-game via F12 `smoke`.
-3. **Launch check — PASS.** Headless import clean; 180-frame headless run exits 0 with
-   no errors; real-rendered screenshots captured under xvfb (Forward+, llvmpipe):
-   `docs/colony.png` (cutaway mountain, hearth glow, 10 named colonists, stockpile +
-   farm overlays, tools) and `docs/combat.png` (turn-based battle: move-range flood,
-   raiders, initiative/AP panel, colonist roster).
+   breach switch → auto-resolved battle → reconcile → scar-driven repairs) with no
+   exceptions; digging progress asserted (≥10 cells); final hash stable across two
+   fresh runs. Pure-core (§7.2 allows either); also invocable in-game via F12 `smoke`.
+3. **Launch check — PASS.** Headless import clean; 240-frame headless run exits 0;
+   real-rendered screenshots under xvfb (Forward+, llvmpipe): `docs/colony.png` and
+   `docs/combat.png`.
 4. This report.
 
 Purity gate: `tools/check-core-purity.sh` green at every commit — zero Godot references
 under `src/core`.
 
-## Done and verified (by tests and/or headless run)
+## Measured performance (§4f)
 
-- Time authority swap with zero state conversion; fixed-dt sub-stepping (speeds 0–3
-  multiply substep count); pause is RealTime-at-zero-substeps, never engine pause
-- Terrain: packed 8-byte cells, 32×32 chunks, single write facade, mutation-window
-  enforcement, pooled batched change events with previous-state capture
-- Entity stores + per-(system×field-group) writers asserting window/mode/id-kind;
-  health writer-per-authority; occupancy advisory-RT/exclusive-TB, synchronous with
-  position writes
-- A* per §4d (octile 10/14, index-tiebroken heap, diagonal rule, stairs both ways,
-  +10 door surcharge), breach-cost variant, amortized region index (never per-dig)
-- Jobs/needs/hauling: dig, stair-down, build (wall/floor/stair/door), haul with
-  reservation-gated stacks, repair, eat, sleep, rally; needs decay + interrupts;
-  mushroom farm regrowth; wealth tracking
-- Raids: timed escalating waves sized by wealth, edge spawns, wall/door battering with
-  scar logging, breach-radius switch trigger, 30 s warning window
-- Turn-based combat: initiative colonists-then-raiders by id, 2 AP, move budgets,
-  cover −25%, Bresenham LOS, melee + ranged raider variant, raider AI (close, attack,
-  batter structures), rout at 60%, downed/struck-while-downed rules
-- Reconcile: drain one-slot inbox, stabilize downed, reap ALL raiders, clear side
-  tables; downed colonists recover at 50% HP over one day in RT
-- Saves/checkpoints per ADR-0004, including refusal of colony saves in TB and the
-  loud corrupt-save fallback path
-- Godot boot, world render, and both game modes reaching the screen
+- **Steady-state simulation allocation: 0 B per sub-step**, measured over 600 sub-steps
+  of live colony play after warm-up (`SteadyStateSimAllocationIsNearZero`, exact 0 in
+  the recorded run; the test's ceiling is 200 B/sub-step to catch regressions).
+- **Draw calls: 382 (colony) / 370 (combat) per frame** at 1600×900, against the ≤500
+  frame budget. Terrain's share is bounded by construction: 7 visible cutaway layers ×
+  2 GridMaps × 4 octants = ≤56, far under the ≤150 terrain budget.
+- Whole 47-test suite (including a 2-sim-day endurance run) completes in seconds;
+  72,000 sub-steps of 10-colonist sim run well inside real time.
 
-## Built but unverified (no human has played it)
+## Endurance run (automated 2-sim-day playtest)
 
-- Feel/usability of mouse tools, camera, and combat clicking; UI layout on other
-  resolutions and themes
-- Long-session pacing (raid 2+ difficulty curve, needs tuning over multiple days)
-- Steady-state allocation freedom and frame budgets (§4f): the sim is written
-  allocation-conscious (pooled batches, reused path buffers, struct scopes) but was
-  not profiled in this environment; draw calls not counted against the ≤150/≤500
-  budgets (64×64×8 with per-layer GridMaps should sit far under them)
-- Door open/close animation states (doors render static; broken state renders)
-- Windows/macOS builds (Linux only here); editor-driven export templates untested
+`TwoRaidsOverTwoSimDaysColonySurvivesAndSecondRaidIsBigger` scripts a player's opening
+(corridor + room digs, then door/walls/torch once the mouth is open), then lets two
+full days run, auto-resolving battles and painting repairs from scars:
 
-## Cut (per §9 cut order, logged in DECISIONS.md)
+- 2 raids fought, sizes escalating 4 → 5, both ended in rout
+- 10/10 colonists alive at the end; food economy stable (farm + hauling)
+- 55 cells dug, fortifications built, raiders fully reaped after each battle
 
-- **Placeable hearth/torch props** (first in the sanctioned cut list) — the worldgen
-  hearth with its one warm light exists; a placeable furniture item does not
-- **TB squad-placement phase** — squad prep is RT rally orders during the warning
-  (DECISIONS #18); the activation-0 checkpoint semantics are unchanged
-- **Multiple quicksave slots** — one quicksave + autosaves + checkpoint (allowed cut)
-- Idle wander animations, audio cue stubs, colonist portraits — never started
+This run also caught (and its fix is now regression-locked) a real design bug: under
+the corner-cut ban, diagonal mining could open a sealed, unenterable pocket and stall
+the job queue — mining reach is now orthogonal-only (DECISIONS #26).
 
-**Not cut** (the five §9 never-cut items, all present and tested): the mode switch,
+## Done and verified
+
+Everything in §5, specifically including the items that were previously listed as
+gaps — all now implemented and tested or screenshot-verified:
+
+- per-designation **priority** painting (High/Normal/Low) with priority-tinted overlays
+- **placeable torch props** + the hearth as a prop (one warm point light each,
+  aesthetic only), built by colonists from a blueprint for 1 material
+- **door repair** via the repair tool for both damaged and broken doors
+- door **auto-open animation** in RT (presentation-only slide)
+- **combat event log** in the battle panel (moves, hits/misses, structure damage,
+  downs, rout) alongside the initiative/AP readout
+- **pause menu** (Esc): three save slots, three load slots, new-colony (archives old
+  saves, never deletes), quit-with-confirm mid-battle
+- colonist roster buttons **center the camera** on the colonist
+- **stockpile painting validates walkability**; farm plots render with their own overlay
+- wounded colonists **heal passively** while fed; downed recovery unchanged
+- debug console gained `perf` (draw calls, primitives, fps, memory)
+
+Plus the previously verified core: time-authority swap, terrain facade, writers,
+occupancy, A*/regions, jobs/needs/hauling, raids, TB combat, reconcile, saves and the
+battle checkpoint — see the test list above.
+
+## Remaining honest limits
+
+- **No human has played it.** Everything a machine can verify is verified; feel,
+  difficulty curve, and camera comfort still need a human hour.
+- Linux-verified only; the project is stock Godot 4.7.1 mono and should open on
+  Windows/macOS, but no exported platform binaries are produced here (export
+  templates are a ~1 GB download and binaries don't belong in the repo).
+- Sanctioned §9 simplifications that are design decisions, not gaps: squad prep is
+  RT rally during the warning (DECISIONS #18), rout ends the battle at the threshold
+  (#19), colonists sleep in place (#20).
+
+**Never-cut items (§9), all present and tested**: the mode switch,
 battle-on-your-own-map, destructibility, hauling visibility, checkpoint resume, and
 the repair loop.
-
-## Known rough edges
-
-- Raider RT movement recomputes its approach path more eagerly than colonists do;
-  harmless at this map size but worth a revisit at 128×128×16
-- `FarmSystem` scans the item list per plot per tick (bounded, but O(plots×items))
-- The debug console's `give_material`/`heal_all` open the mutation gate directly —
-  sanctioned and asserted, but they bypass the writer-interface pattern (DECISIONS #25)
-- UI is functional greybox: no tooltips beyond hints, no rebindable keys
-- Job priorities exist throughout the system (personal jobs pre-empt, haul ranks
-  below dig, deterministic priority/distance/id scoring) but the UI paints all
-  designations at the default priority — a per-designation priority adjuster did
-  not make the cut (§5.10 partially met)
 
 ## How to reproduce verification
 
 ```sh
-dotnet test                                   # suite incl. smoke + checkpoint tests
+dotnet test                                   # 47 tests incl. endurance + allocation
 tools/check-core-purity.sh                    # Godot-free core
 godot --headless --import --path .            # import
-godot --path . -- --shot-colony=/tmp/c.png    # boots, screenshots, quits
+godot --path . -- --shot-colony=/tmp/c.png    # boots, prints draw calls, screenshots
 ```

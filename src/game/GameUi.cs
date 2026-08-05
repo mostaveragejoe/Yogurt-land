@@ -30,6 +30,10 @@ public partial class GameUi : CanvasLayer
     private Label _toast = null!;
     private double _toastUntil;
     private readonly List<Button> _toolButtons = new();
+    private readonly List<Button> _priorityButtons = new();
+    private RichTextLabel _combatLog = null!;
+    private int _combatEventCursor;
+    private PanelContainer _pauseMenu = null!;
 
     public void Attach(Main main, GameWorld world, ToolController tools, TerrainRenderer terrainView, UnitViewManager units)
     {
@@ -82,20 +86,30 @@ public partial class GameUi : CanvasLayer
         // ---- tool palette (left) ----
         var toolPanel = new PanelContainer();
         toolPanel.SetAnchorsPreset(Control.LayoutPreset.CenterLeft);
+        toolPanel.GrowHorizontal = Control.GrowDirection.End;
+        toolPanel.GrowVertical = Control.GrowDirection.Both; // tall palette stays fully on-screen
         root.AddChild(toolPanel);
         var toolBox = new VBoxContainer();
         toolPanel.AddChild(toolBox);
         toolBox.AddChild(new Label { Text = "Tools" });
-        AddToolButton(toolBox, "Select", Tool.Select);
-        AddToolButton(toolBox, "Dig (D)", Tool.Dig);
-        AddToolButton(toolBox, "Stair down (S)", Tool.StairDown);
-        AddToolButton(toolBox, "Build wall (W)", Tool.BuildWall);
-        AddToolButton(toolBox, "Build floor", Tool.BuildFloor);
-        AddToolButton(toolBox, "Build stair", Tool.BuildStair);
-        AddToolButton(toolBox, "Door (O)", Tool.BuildDoor);
-        AddToolButton(toolBox, "Repair (R)", Tool.Repair);
-        AddToolButton(toolBox, "Stockpile (P)", Tool.Stockpile);
-        AddToolButton(toolBox, "Cancel (C)", Tool.Cancel);
+        AddToolButton(toolBox, "Select", Tool.Select, "Click a colonist or raider to inspect it.");
+        AddToolButton(toolBox, "Dig (D)", Tool.Dig, "Drag over walls to order mining. Yields materials.");
+        AddToolButton(toolBox, "Stair down (S)", Tool.StairDown, "On open ground: carve a stair into the layer below.");
+        AddToolButton(toolBox, "Build wall (W)", Tool.BuildWall, "Costs 1 material. Dirt 50 HP · granite 200 · reinforced 600.");
+        AddToolButton(toolBox, "Build floor", Tool.BuildFloor, "Costs 1 material. Floors make dug-out space walkable.");
+        AddToolButton(toolBox, "Build stair", Tool.BuildStair, "Costs 1 material. Links this layer to the one above.");
+        AddToolButton(toolBox, "Door (O)", Tool.BuildDoor, "Costs 1 material, 100 HP. Colonists pass; raiders must break it.");
+        AddToolButton(toolBox, "Torch (T)", Tool.BuildTorch, "Costs 1 material. Warm light — purely aesthetic.");
+        AddToolButton(toolBox, "Repair (R)", Tool.Repair, "Drag over damaged walls/doors. Costs matching material.");
+        AddToolButton(toolBox, "Stockpile (P)", Tool.Stockpile, "Paint storage; colonists haul loose stacks here.");
+        AddToolButton(toolBox, "Cancel (C)", Tool.Cancel, "Remove designations and stockpile cells.");
+
+        toolBox.AddChild(new Label { Text = "Priority" });
+        var prioRow = new HBoxContainer();
+        toolBox.AddChild(prioRow);
+        AddPriorityButton(prioRow, "High", 2);
+        AddPriorityButton(prioRow, "Norm", 5);
+        AddPriorityButton(prioRow, "Low", 8);
         var matButton = new Button { Text = "Material: dirt (M)" };
         matButton.Pressed += () =>
         {
@@ -137,10 +151,40 @@ public partial class GameUi : CanvasLayer
             Text = "LMB raider: attack · LMB tile: move · LMB colonist: inspect",
             HorizontalAlignment = HorizontalAlignment.Center,
         });
+        _combatLog = new RichTextLabel
+        {
+            CustomMinimumSize = new Vector2(480, 96),
+            ScrollFollowing = true,
+            BbcodeEnabled = true,
+        };
+        combatBox.AddChild(_combatLog);
 
         // ---- scar summary ----
         _scarDialog = new AcceptDialog { Title = "After the battle" };
         root.AddChild(_scarDialog);
+
+        // ---- pause menu (Esc) ----
+        _pauseMenu = new PanelContainer { Visible = false };
+        _pauseMenu.SetAnchorsPreset(Control.LayoutPreset.Center);
+        _pauseMenu.GrowHorizontal = Control.GrowDirection.Both;
+        _pauseMenu.GrowVertical = Control.GrowDirection.Both;
+        root.AddChild(_pauseMenu);
+        var menuBox = new VBoxContainer { CustomMinimumSize = new Vector2(260, 0) };
+        _pauseMenu.AddChild(menuBox);
+        menuBox.AddChild(new Label { Text = "HOLLOWDEEP", HorizontalAlignment = HorizontalAlignment.Center });
+        AddButton(menuBox, "Continue", () => TogglePauseMenu());
+        menuBox.AddChild(new HSeparator());
+        for (int slot = 1; slot <= 3; slot++)
+        {
+            int s = slot;
+            var row = new HBoxContainer();
+            menuBox.AddChild(row);
+            AddButton(row, $"Save slot {s}", () => { _main.SaveSlot(s); TogglePauseMenu(); });
+            AddButton(row, $"Load slot {s}", () => { _main.LoadSlot(s); TogglePauseMenu(); });
+        }
+        menuBox.AddChild(new HSeparator());
+        AddButton(menuBox, "New colony (archives saves)", () => _main.NewColony());
+        AddButton(menuBox, "Quit", () => _main.RequestQuit());
 
         // ---- toast ----
         _toast = new Label { Text = "", HorizontalAlignment = HorizontalAlignment.Center };
@@ -158,25 +202,45 @@ public partial class GameUi : CanvasLayer
         parent.AddChild(b);
     }
 
-    private void AddToolButton(Container parent, string text, Tool tool)
+    private void AddToolButton(Container parent, string text, Tool tool, string tooltip = "")
     {
-        var b = new Button { Text = text, ToggleMode = true };
+        var b = new Button { Text = text, ToggleMode = true, TooltipText = tooltip };
         b.Pressed += () => _tools.SetTool(tool);
         b.SetMeta("tool", (int)tool);
         parent.AddChild(b);
         _toolButtons.Add(b);
     }
 
+    private void AddPriorityButton(Container parent, string text, int priority)
+    {
+        var b = new Button { Text = text, ToggleMode = true, TooltipText = "Priority for newly painted designations" };
+        b.Pressed += () => _tools.SetPriority(priority);
+        b.SetMeta("prio", priority);
+        parent.AddChild(b);
+        _priorityButtons.Add(b);
+    }
+
     private void RefreshToolButtons()
     {
         foreach (var b in _toolButtons)
             b.ButtonPressed = (int)b.GetMeta("tool") == (int)_tools.ActiveTool;
+        foreach (var b in _priorityButtons)
+            b.ButtonPressed = (int)b.GetMeta("prio") == _tools.ActivePriority;
     }
 
     public void Toast(string message, double seconds = 3)
     {
         _toast.Text = message;
         _toastUntil = Time.GetTicksMsec() / 1000.0 + seconds;
+    }
+
+    public bool IsPauseMenuOpen => _pauseMenu.Visible;
+
+    public void TogglePauseMenu()
+    {
+        _pauseMenu.Visible = !_pauseMenu.Visible;
+        if (_pauseMenu.Visible && _world.Time.Mode == SimMode.RealTime)
+            _main.SetSpeed(0); // opening the menu pauses; player resumes with 1/2/3
     }
 
     public override void _Process(double delta)
@@ -214,11 +278,15 @@ public partial class GameUi : CanvasLayer
             row.AddChild(sleep);
             row.AddChild(activity);
             int index = _rows.Count;
-            var button = new Button { Text = "◎", TooltipText = "select" };
+            var button = new Button { Text = "◎", TooltipText = "select and center camera" };
             button.Pressed += () =>
             {
                 if (index < _world.Colonists.Count)
-                    _units.Select(_world.Colonists[index].Id);
+                {
+                    var data = _world.Colonists[index];
+                    _units.Select(data.Id);
+                    _main.FocusCell(data.Cell);
+                }
             };
             row.AddChild(button);
             _colonistRows.AddChild(row);
@@ -244,12 +312,43 @@ public partial class GameUi : CanvasLayer
         if (!inBattle) return;
         var actor = _world.Combat.CurrentActor;
         if (actor.IsNone) { _combatInfo.Text = "…"; return; }
-        string name = actor.Kind == EntityKind.Colonist
-            ? _world.Colonists.Get(actor).Name
-            : $"Raider {actor.Counter}";
         string side = _world.Combat.IsPlayerTurn ? "YOUR TURN" : "enemy turn";
-        _combatInfo.Text = $"Round {_world.Combat.Encounter.RoundNumber} · {side} · {name} · AP {_world.Combat.RemainingAp(actor)}";
+        _combatInfo.Text = $"Round {_world.Combat.Encounter.RoundNumber} · {side} · {UnitName(actor)} · AP {_world.Combat.RemainingAp(actor)}";
+        UpdateCombatLog();
     }
+
+    private void UpdateCombatLog()
+    {
+        var events = _world.Combat.Events;
+        if (events.Count < _combatEventCursor)
+        {
+            _combatEventCursor = 0; // a new battle began
+            _combatLog.Clear();
+        }
+        while (_combatEventCursor < events.Count)
+            _combatLog.AppendText(FormatEvent(events[_combatEventCursor++]) + "\n");
+    }
+
+    private string UnitName(EntityId id) => id.Kind == EntityKind.Colonist && _world.Colonists.TryGet(id, out var c)
+        ? c.Name
+        : $"raider {id.Counter}";
+
+    private string FormatEvent(in CombatEvent e) => e.Kind switch
+    {
+        CombatEventKind.Move => $"{UnitName(e.Actor)} moves to {e.Cell} ({e.Value} AP)",
+        CombatEventKind.Attack => e.Hit
+            ? $"[color=orange]{UnitName(e.Actor)} hits {UnitName(e.Target)} for {e.Value}[/color]"
+            : $"{UnitName(e.Actor)} misses {UnitName(e.Target)}",
+        CombatEventKind.WallHit => $"{UnitName(e.Actor)} batters the wall at {e.Cell} ({e.Value})",
+        CombatEventKind.WallDestroyed => $"[color=red]the wall at {e.Cell} collapses[/color]",
+        CombatEventKind.DoorHit => $"{UnitName(e.Actor)} batters the door at {e.Cell}",
+        CombatEventKind.DoorBroken => $"[color=red]the door at {e.Cell} shatters[/color]",
+        CombatEventKind.Downed => $"[color=red]{UnitName(e.Target)} goes down![/color]",
+        CombatEventKind.Died => $"[color=red]{UnitName(e.Target)} is slain[/color]",
+        CombatEventKind.Routed => "[color=yellow]the raiders break and flee![/color]",
+        CombatEventKind.BattleEnd => "— battle over —",
+        _ => e.Kind.ToString(),
+    };
 
     private void ShowScarSummary()
     {

@@ -55,6 +55,10 @@ public sealed class NeedsSystem : ITickable
 
             if (food != c.Food || sleep != c.Sleep || morale != c.Morale)
                 _writer.SetNeeds(c.Id, food, sleep, morale);
+
+            // Wounded-but-standing colonists mend slowly while fed (Needs owns HP in RT).
+            if (c.Hp < c.MaxHp && food > GameConfig.HealMinFood)
+                _writer.RegenHp(c.Id, GameConfig.HealHpPerSecond * dt);
         }
     }
 }
