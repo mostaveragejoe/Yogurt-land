@@ -9,7 +9,9 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
   <ItemGroup>
-    <!-- Tests may rig internal store state directly; game code still goes through writers. -->
+    <!-- Tests may rig internal store state directly; game code still goes through writers.
+         The game assembly sees internals ONLY for the debug console's sanctioned writes. -->
     <InternalsVisibleTo Include="Hollowdeep.Core.Tests" />
+    <InternalsVisibleTo Include="Hollowdeep" />
   </ItemGroup>
 </Project>
