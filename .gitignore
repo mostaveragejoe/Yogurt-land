@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+lead_engine.db*
+leads.db
+import_uploads/
+service_account.json
