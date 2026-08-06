@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The plain-C# simulation core (ADR-0001/0002/0003): ZERO Godot references,
+       headlessly testable. CI validation criterion: a grep of this assembly for
+       Godot references must come back empty. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Hollowdeep.Core</RootNamespace>
+    <AssemblyName>Hollowdeep.Core</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

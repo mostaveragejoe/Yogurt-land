@@ -1,0 +1,20 @@
+; Engine configuration file.
+; Godot 4.7.1 + C# (.NET 8) — see docs/engine-reference/godot/VERSION.md.
+; No main scene yet: the Tier 0 spikes add the first runnable scenes.
+; Renderer is deliberately unset ([TO BE CONFIGURED] in technical-preferences —
+; decided during /art-bible follow-up or the terrain spike).
+
+config_version=5
+
+[application]
+
+config/name="Hollowdeep"
+config/features=PackedStringArray("4.7", "C#")
+
+[autoload]
+
+DebugConsole="*res://src/tools/DebugConsole/DebugConsoleRoot.cs"
+
+[dotnet]
+
+project/assembly_name="Hollowdeep"
