@@ -6,6 +6,13 @@ Feature: GDD Authoring
 Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture-decision; Proposed; godot-specialist PASS WITH NOTES + TD-ADR CONCERNS all applied) — next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec. OPEN: registry update skipped (needs user approval)
 <!-- /STATUS -->
 
+## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
+
+- **`main` is now the single current design-pipeline state** (commit `316765f`: the l2ld1p tree at `743be86` restored on top of the `55229c4` merge-revert). Start new sessions from `main`.
+- **The one-shot playable build lives ONLY on `claude/hollowdeep-one-shot-build-nmytzc`** (tip `be955c9`, includes `dist/` packages + Linux download README). It was never meant to merge into the design pipeline (user decision 2026-08-06, confirming the intent of revert `55229c4`). Do not merge it again.
+- **Superseded branches** (fully contained in `main`, keep only for history): `claude/time-authority-mode-switch-l2ld1p` (`743be86`), `claude/terrain-data-model-review-nwhgkg` (`dcb090a`). `claude/terrain-data-model-review-85j1f4` mirrors `main`.
+- A 2026-08-06 /design-review run against the stale `dcb090a` GDD copy was discarded as void — every finding was already covered by the two 2026-08-02 passes (see the review log). Lesson: **verify which branch holds the newest review log before re-reviewing.**
+
 ## ADR-0004 SESSION 2026-08-03 (/architecture-decision battle-checkpoint-architecture)
 
 - **ADR-0004 written**: `docs/architecture/adr-0004-battle-checkpoint-architecture.md` — **Proposed**. Owns: 8-item checkpoint content scope (from the propagation session), snapshot beat pinned at `AwaitingPresentation → NextActor` + an "activation 0" checkpoint immediately post-swap, Option A mechanism (full self-contained checkpoint, double-buffered pooled snapshot via new `SnapshotInto` caller-buffer obligations on ADR-0002/0003 stores, coalesce-newest backpressure — sim never blocks on disk, async gzip + atomic same-volume temp-file replace), writer quiesce at slot retirement, in-file monotonic save-ordering counter (never mtime), `RestoredFromCheckpoint` resume path (no `RequestSwitch`; restore is a distinct sanctioned writer inside the load window; occupancy rebuild filters dead units), AC-68 provenance via writer-id header enforced at WRITE time, quit-path flush-and-join, loud-fallback corrupt-checkpoint recovery (fall back to switch-in autosave WITH an explicit dialog, never silently).
