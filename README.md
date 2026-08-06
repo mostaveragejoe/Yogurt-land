@@ -68,6 +68,11 @@ runs as part of the suite (`SmokeTests`) and in-game via the console command `sm
 | `tests/` | xUnit suite over the core |
 | `DECISIONS.md` | Every judgment call the spec left open, with rationale |
 | `BUILD-REPORT.md` | Honest status: verified / unverified / cut |
+| `design/` | Game concept, systems index, GDDs, art bible, review logs |
+| `docs/architecture/` | ADRs 0001–0004, cross-cutting contracts, change-impact reports |
+| `prototypes/` | Tier-0 spikes (fun, terrain, mode-switch, pathfinding, save/load) with SPIKE-NOTEs |
+| `production/` | Design-pipeline session state and stage tracking |
+| `.claude/` | Studio agents, skills, hooks, and templates driving the design pipeline |
 
 ## Architecture in one breath
 

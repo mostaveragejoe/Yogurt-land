@@ -1,0 +1,20 @@
+; PROTOTYPE - NOT FOR PRODUCTION
+; Question: which render backend (MultiMesh vs GridMap) serves ADR-0002's model,
+;   and what are the draw-call / video-memory numbers at MVP cutaway scale?
+; Date: 2026-07-25
+
+config_version=5
+
+[application]
+
+config/name="TerrainSpikeRender"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.7", "C#")
+
+[dotnet]
+
+project/assembly_name="TerrainSpikeRender"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"

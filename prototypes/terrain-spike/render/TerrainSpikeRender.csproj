@@ -1,0 +1,16 @@
+<Project Sdk="Godot.NET.Sdk/4.7.1">
+  <!-- PROTOTYPE - NOT FOR PRODUCTION -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <NoWarn>CS8632</NoWarn>
+    <RootNamespace>TerrainSpikeRender</RootNamespace>
+  </PropertyGroup>
+
+  <!-- The data model under test, shared with the headless half (prototype-local). -->
+  <ItemGroup>
+    <Compile Include="..\TerrainModel.cs" />
+  </ItemGroup>
+</Project>

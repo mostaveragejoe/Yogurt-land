@@ -1,0 +1,281 @@
+# Game World Entity Registry
+#
+# PURPOSE: Single source of truth for all named game-world facts that appear
+# in more than one document. Skills check this before writing new content to
+# detect cross-doc inconsistencies at authoring time.
+#
+# RULES:
+#   - Only register facts that cross system boundaries. Internal-only facts
+#     (a formula used in one GDD only) do NOT need to be registered.
+#   - Never delete entries — set status: deprecated instead.
+#   - When a value changes: update the value, set revised: to today's date,
+#     and add a comment with the old value and which GDD changed it.
+#   - source: is the authoritative GDD — the one that "owns" this fact.
+#     Other GDDs that reference it list themselves in referenced_by.
+#   - When a new GDD references an existing entry, append its path to
+#     referenced_by. Do not create a duplicate entry.
+#
+# WRITTEN BY: /design-system (Phase 5 — after GDD sections are approved)
+#             /consistency-check (when resolving conflicts)
+# READ BY:    /design-system (Phase 2 — before authoring begins, and after
+#               Section C/D writes to conflict-check new entities/formulas)
+#             /consistency-check (primary input — grep-first, GDD-second)
+#             /review-all-gdds (Phase 1 — baseline for Phase 2 checks)
+#             /architecture-review (data structure and interface validation)
+#
+# SEARCH PATTERNS (for skills using Grep):
+#   All entity names:        Grep pattern="^  - name:" path="design/registry/entities.yaml"
+#   Specific entity:         Grep pattern="  - name: goblin" path="design/registry/entities.yaml"
+#   All items:               Grep pattern="^  - name:" path="design/registry/entities.yaml" (items section)
+#   What combat.md owns:     Grep pattern="source: design/gdd/combat.md"
+#   What inventory.md uses:  Grep pattern="referenced_by.*inventory"
+#   All gold values:          Grep pattern="value_gold:"
+#   Deprecated entries:      Grep pattern="status: deprecated"
+#
+# FORMAT: YAML. Consistent indentation is critical for grep reliability.
+#   Sections: entities | items | formulas | constants
+#   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
+
+version: 1
+last_updated: "2026-08-02"
+
+# ─── ENTITIES ────────────────────────────────────────────────────────────────
+# Named game-world objects: enemies, NPCs, characters, factions, bosses.
+# Register an entity here when it appears in more than one GDD — e.g., an
+# enemy defined in combat.md that also drops items listed in inventory.md.
+#
+# Required fields: name, status, source, referenced_by, added
+# Attribute fields: any key stats that could appear in another GDD
+#   (health, damage, drops, faction, etc.)
+
+entities: []
+
+# Example (remove when first real entry is added):
+#
+# entities:
+#   - name: goblin
+#     status: active              # active | deprecated
+#     source: design/gdd/combat.md
+#     referenced_by:
+#       - design/gdd/combat.md
+#       - design/gdd/inventory.md
+#     health: 40
+#     damage: 8
+#     drops:
+#       - item: goblin_arm        # must match an entry in items section
+#         qty: 1
+#         drop_rate: 0.8          # 0.0–1.0
+#     added: 2026-03-26
+#     revised: ""
+
+
+# ─── ITEMS ───────────────────────────────────────────────────────────────────
+# Named collectables, equipment, consumables, crafting materials, currency.
+# Register an item when its name or value appears in more than one GDD.
+#
+# Required fields: name, status, source, referenced_by, added
+# Attribute fields: value_gold, weight, stackable, category, and any stat
+#   modifiers that another system (e.g., economy, crafting) might reference.
+
+items: []
+
+# Example:
+#
+# items:
+#   - name: goblin_arm
+#     status: active
+#     source: design/gdd/combat.md   # drop defined in combat GDD
+#     referenced_by:
+#       - design/gdd/combat.md
+#       - design/gdd/inventory.md    # inventory GDD lists its weight/stack rules
+#       - design/gdd/economy.md      # economy GDD references its sell price
+#     value_gold: 5
+#     weight: 1
+#     stackable: true
+#     category: crafting_material
+#     added: 2026-03-26
+#     revised: ""
+
+
+# ─── FORMULAS ────────────────────────────────────────────────────────────────
+# Named calculations with defined variables and output ranges.
+# Register a formula when its output feeds into another system's input,
+# or when another GDD references it by name.
+#
+# Required fields: name, status, source, referenced_by, variables[],
+#   output_range[min, max], added
+# Optional: expression (the actual formula), notes
+
+formulas:
+  # NOTE: none of these carry a balance NUMBER. Terrain owns the function, never the
+  # arguments — the magnitudes (tier HP, dig cost, repair rate) are registered later by
+  # Material Catalog, Excavation & Construction, and Repair & Rebuild respectively.
+  - name: wall_damage_application
+    status: active
+    source: design/gdd/terrain-data-model.md
+    referenced_by:
+      - design/gdd/terrain-data-model.md
+    variables:
+      - WallHp
+      - DamageAmount
+      - RemainingHp
+      - AppliedAmount
+    output_range: [0, 65535]          # ushort; upper bound is MaxHp(tier), owned by Material Catalog
+    expression: "RemainingHp = max(WallHp - DamageAmount, 0); AppliedAmount = WallHp - RemainingHp"
+    notes: "Floor-clamped at 0 regardless of DamageAmount. At 0 the wall is removed atomically
+      in the same call and publishes WallRemoved with Previous capturing the failed tier (CD-1).
+      No wall present = no-op, publishes nothing. AppliedAmount (not DamageAmount) is the figure
+      the after-action report cites. Will be referenced_by material-tier-destructibility.md and
+      combat-targeting-resolution.md once those exist."
+    added: 2026-07-26
+    revised: ""
+
+  - name: wall_repair_application
+    status: active
+    source: design/gdd/terrain-data-model.md
+    referenced_by:
+      - design/gdd/terrain-data-model.md
+    variables:
+      - WallHp
+      - RepairAmount
+      - MaxHp
+      - RemainingHp
+      - AppliedAmount
+    output_range: [0, 65535]          # ushort; ceiling is MaxHp(tier), owned by Material Catalog
+    expression: "RemainingHp = min(WallHp + RepairAmount, MaxHp(tier)); AppliedAmount = RemainingHp - WallHp"
+    notes: "Ceiling-clamped at the tier's catalog max — repair can never overheal or bank HP, and
+      cannot manufacture an absent wall (that is Construction's SetWall). AppliedAmount is the
+      figure CD-7's material consumption bills for. Will be referenced_by repair-rebuild.md."
+    added: 2026-07-26
+    revised: ""
+
+  - name: work_position_adjacency
+    status: active
+    source: design/gdd/terrain-data-model.md
+    referenced_by:
+      - design/gdd/terrain-data-model.md
+    variables:
+      - W
+      - T
+    output_range: [0, 1]              # boolean
+    expression: "IsAdjacentSameLayer(W,T) = (max(|Wx-Tx|, |Wy-Ty|) == 1) AND (Wz == Tz)"
+    notes: "Exactly 8 cells qualify (Moore neighbourhood minus centre, same Z). Diagonal-inclusive
+      and purely geometric: deliberately does NOT encode the corner-cutting ban (which governs
+      travel to W and belongs to Pathfinding) and does NOT encode passability or reachability.
+      Formalised so Excavation, Construction and Repair cannot each reimplement 'surrounding'
+      differently. Will be referenced_by excavation-construction.md and repair-rebuild.md."
+    added: 2026-07-26
+    revised: ""
+
+  - name: game_time_throughput
+    status: active
+    source: design/gdd/time-authority-mode-switch.md
+    referenced_by:
+      - design/gdd/time-authority-mode-switch.md
+    variables:
+      - SubStepsDelivered
+      - SubStepDuration
+      - EngineFrameRate
+      - GameSecondsPerRealSecond
+    output_range: [0, 8]              # game-seconds per real second; ceiling = SubStepCap x dt x tick rate at defaults
+    expression: "GameSecondsPerRealSecond = SubStepsDelivered * SubStepDuration * EngineFrameRate"
+    notes: "The canonical real-time<->game-time conversion (Formula D.2). At 3x: 3 game-s/real-s,
+      so a 24-game-hour day = 8 real minutes. ANTI-DUPLICATION RULE: downstream systems must cite
+      this formula, never invent their own conversion knob — Needs decay, day/night, and crafting
+      durations are the named consumers. SubStepDuration (1/60 s) and EngineFrameRate (60 Hz) are
+      pinned build-time values, not balance levers (changing them requires revisiting ADR-0001).
+      Will be referenced_by job-assignment-needs-simulation.md and any day/night or crafting spec."
+    added: 2026-08-02
+    revised: ""
+
+  - name: cell_state_classification
+    status: active
+    source: design/gdd/terrain-data-model.md
+    referenced_by:
+      - design/gdd/terrain-data-model.md
+    variables:
+      - FloorTypeId
+      - WallTypeId
+      - IsStairFloor
+    output_range: [0, 3]              # enum: SolidRock | Open | Stair | Void
+    expression: "IsPassableTerrain(C) = FloorTypeId != 0 AND WallTypeId == 0"
+    notes: "Four states: SolidRock (floor+wall), Open (floor, no wall), Stair (Z-linking floor,
+      no wall), Void (neither). Wall-without-floor is undefined by design — C7 guarantees every
+      excavatable cell is authored with a floor — but degrades safely to impassable. Terrain's
+      sole contribution to walkability; Pathfinding composes it with doors and occupancy. Will be
+      referenced_by pathfinding-navigation.md and terrain-rendering-cutaway.md."
+    added: 2026-07-26
+    revised: ""
+
+# Example:
+#
+# formulas:
+#   - name: damage_formula
+#     status: active
+#     source: design/gdd/combat.md
+#     referenced_by:
+#       - design/gdd/combat.md
+#       - design/gdd/progression.md   # progression GDD scales attack variable
+#     variables:
+#       - attack
+#       - defense
+#       - crit_chance
+#       - crit_multiplier
+#     output_range: [0, 999]
+#     expression: "max(0, attack - defense) * (1 + crit_chance * crit_multiplier)"
+#     notes: "Output feeds into health-system damage intake. Min is 0 (armour
+#       can absorb all damage). Max is uncapped in formula but tuning knob
+#       damage_cap in combat.md clamps at 999."
+#     added: 2026-03-26
+#     revised: ""
+
+
+# ─── CONSTANTS ───────────────────────────────────────────────────────────────
+# Named numerical values referenced across multiple systems.
+# Register a constant when it is defined in one GDD but another GDD must
+# agree with it (e.g., gold carry limit defined in economy but checked in
+# inventory, or base inventory slots defined in inventory but displayed in HUD).
+#
+# Required fields: name, status, source, referenced_by, value, unit, added
+
+constants:
+  - name: battle_length_budget
+    status: active
+    source: design/gdd/time-authority-mode-switch.md
+    referenced_by:
+      - design/gdd/time-authority-mode-switch.md
+    value: "8-15 target, 20 ceiling"
+    unit: minutes
+    notes: "CD-9's single-sitting budget, measured freeze-to-dial-regained. Owned by Time Authority
+      as the boundary budget; the Combat set (#19-23) owns ACHIEVING it via its own pacing levers
+      (incl. the C3-mandated combat pacing control) and carries the primary playtest criterion.
+      Raising the ceiling weakens the no-mid-battle-save justification. Will be referenced_by the
+      combat-set GDDs."
+    added: 2026-08-02
+    revised: ""
+
+# Example:
+#
+# constants:
+#   - name: gold_carry_limit
+#     status: active
+#     source: design/gdd/economy.md
+#     referenced_by:
+#       - design/gdd/economy.md
+#       - design/gdd/inventory.md   # inventory enforces the carry limit
+#       - design/gdd/ui.md          # HUD displays current gold vs limit
+#     value: 9999
+#     unit: gold
+#     added: 2026-03-26
+#     revised: ""
+#
+#   - name: base_inventory_slots
+#     status: active
+#     source: design/gdd/inventory.md
+#     referenced_by:
+#       - design/gdd/inventory.md
+#       - design/gdd/progression.md  # progression unlocks additional slots
+#     value: 20
+#     unit: slots
+#     added: 2026-03-26
+#     revised: ""

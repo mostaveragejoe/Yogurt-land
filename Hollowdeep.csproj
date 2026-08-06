@@ -12,6 +12,8 @@
     <Compile Remove="src/core/**/*.cs" />
     <Compile Remove="src/smoke/**/*.cs" />
     <Compile Remove="tests/**/*.cs" />
+    <!-- Standalone Tier-0 spike projects (own csprojs); keep them out of the game glob. -->
+    <Compile Remove="prototypes/**/*.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="src/core/Hollowdeep.Core.csproj" />

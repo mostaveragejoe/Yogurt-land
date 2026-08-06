@@ -19,3 +19,20 @@ Thumbs.db
 # Local artifacts
 artifacts/
 *.log
+
+# Claude Code local (design pipeline)
+.claude/settings.local.json
+CLAUDE.local.md
+production/session-logs/
+docs/consistency-failures.md
+expansions/
+marrow/
+
+# Prototype build output (throwaway spikes)
+prototypes/**/bin/
+prototypes/**/obj/
+prototypes/**/.godot/
+prototypes/**/.mono/
+
+# NOTE: dist/, export_presets.cfg, and the release archives ARE tracked on
+# purpose (playable builds ship from the repo) — do not re-add ignores for them.

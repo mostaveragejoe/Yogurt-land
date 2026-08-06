@@ -1,0 +1,562 @@
+<!-- PROTOTYPE - NOT FOR PRODUCTION -->
+<!-- Question: Is a turn-based raider battle fought inside architecture the player
+     built themselves actually fun — do layout choices (chokepoints, doors, wall
+     tiers) visibly and traceably decide the battle, with ONE enemy type and no
+     colony sim underneath? (Hollowdeep Tier 0 fun spike) -->
+<!-- Date: 2026-07-25 -->
+<meta charset="utf-8">
+<title>Hollowdeep — Fun Spike</title>
+<style>
+  body { background:#171512; color:#d8d2c8; font:14px/1.45 system-ui,sans-serif; margin:0; padding:12px; }
+  h1 { font-size:18px; margin:0 0 2px; color:#e8b45a; }
+  .sub { color:#8f887c; font-size:12px; margin-bottom:8px; }
+  #wrap { display:flex; gap:12px; align-items:flex-start; }
+  canvas { background:#211d18; border:1px solid #4a443b; cursor:crosshair; }
+  #side { width:320px; }
+  .panel { background:#221f1a; border:1px solid #4a443b; border-radius:4px; padding:8px 10px; margin-bottom:10px; }
+  .panel h2 { font-size:13px; margin:0 0 6px; color:#e8b45a; text-transform:uppercase; letter-spacing:.05em; }
+  button { background:#3a352c; color:#d8d2c8; border:1px solid #5a5344; border-radius:3px; padding:5px 9px; margin:2px 3px 2px 0; cursor:pointer; font:13px system-ui; }
+  button:hover { background:#4a4436; }
+  button.sel { background:#7a5a2a; border-color:#e8b45a; color:#fff; }
+  button.big { background:#6d3030; border-color:#c05545; font-weight:bold; padding:7px 12px; }
+  button.big:hover { background:#8a3a3a; }
+  button:disabled { opacity:.4; cursor:default; }
+  #log { height:180px; overflow-y:auto; font-size:12px; color:#b6afa2; }
+  #log .warn { color:#e0a03a; } #log .bad { color:#e06555; } #log .good { color:#7fc06a; }
+  #stats { font-size:13px; } #stats b { color:#e8b45a; }
+  .hint { color:#8f887c; font-size:12px; }
+  #endpanel { display:none; background:#2a2420; border-color:#e8b45a; }
+  #endpanel pre { font-size:12px; color:#c8c0b2; white-space:pre-wrap; margin:6px 0; }
+</style>
+
+<h1>HOLLOWDEEP — fun spike</h1>
+<div class="sub">Build your architecture, then defend it turn-by-turn. The walls you choose are the battlefield. (Greybox prototype — everything is placeholder.)</div>
+
+<div id="wrap">
+  <canvas id="cv" width="880" height="560"></canvas>
+  <div id="side">
+    <div class="panel" id="buildpanel">
+      <h2>Build — stone: <span id="budget"></span></h2>
+      <div id="tools"></div>
+      <div class="hint">Click/drag on the map to build. Demolish refunds cost. Raiders come from the LEFT edge (bedrock — unbuildable). They want the gold hoard, and they will break through your <i>weakest</i> architecture to get it.</div>
+      <button class="big" id="raidbtn">⚔ SOUND THE ALARM (start raid)</button>
+    </div>
+    <div class="panel" id="battlepanel" style="display:none">
+      <h2>Battle — <span id="turninfo"></span></h2>
+      <div id="unitinfo" class="hint">Click one of your defenders.</div>
+      <div id="actions"></div>
+      <button class="big" id="endturnbtn">END TURN ▸</button>
+    </div>
+    <div class="panel" id="endpanel">
+      <h2 id="endtitle"></h2>
+      <pre id="endreport"></pre>
+      <button class="big" id="rebuildbtn">🔨 REBUILD &amp; FACE THE NEXT RAID</button>
+    </div>
+    <div class="panel">
+      <h2>Events</h2>
+      <div id="log"></div>
+    </div>
+    <div class="panel hint">
+      <b>How to play:</b> Build mode — pick a tool, paint walls/doors, position your 3 crossbow-colonists (squad tool), then sound the alarm. Battle — each colonist has 2 actions: move (up to 4 cells), shoot (range 7, needs line of sight — walls and CLOSED doors block it, for you and for them), or toggle an adjacent door. Raiders smash what's in their way; higher wall tiers take longer to smash. Loot stolen and walls lost stay lost. Each raid is bigger than the last.
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+// PROTOTYPE - NOT FOR PRODUCTION (see header). Hardcoded values throughout, by design.
+
+const W = 22, H = 14, CELL = 40;
+const cv = document.getElementById('cv'), cx = cv.getContext('2d');
+
+const TIERS = {
+  dirt:       { name:'Dirt wall',       cost:1, hp:3,  color:'#7d5c3c' },
+  granite:    { name:'Granite wall',    cost:3, hp:8,  color:'#84848c' },
+  reinforced: { name:'Reinforced wall', cost:6, hp:16, color:'#4f7590' },
+};
+const DOOR = { name:'Door', cost:2, hp:6, color:'#a97b28' };
+const HOARD = { x:18, y:7 };
+
+const S = {
+  mode:'build', tool:'dirt', budget:70, raidNum:0, turn:0,
+  grid:[], defenders:[], raiders:[], loot:3, stolenTotal:0,
+  scars:[], selected:null, hover:null, animTimer:null,
+};
+
+function cell(x,y){ return S.grid[y*W+x]; }
+function inb(x,y){ return x>=0 && x<W && y>=0 && y<H; }
+
+function initGrid(){
+  for (let i=0;i<W*H;i++) S.grid[i] = { wall:null, door:null };
+  // Starter room around the hoard (paid from the initial stone grant).
+  for (let x=15;x<=21;x++) for (let y=4;y<=10;y++){
+    if (x>15 && x<21 && y>4 && y<10) continue;
+    placeStructure(x,y, (x===15&&y===7) ? 'door' : 'dirt', true);
+  }
+  S.defenders = [
+    { name:'Berta',  x:16, y:6, hp:10, maxHp:10, ap:0, alive:true },
+    { name:'Konrad', x:16, y:8, hp:10, maxHp:10, ap:0, alive:true },
+    { name:'Ulli',   x:17, y:7, hp:10, maxHp:10, ap:0, alive:true },
+  ];
+}
+
+function placeStructure(x,y,kind,free){
+  const c = cell(x,y);
+  const def = kind==='door' ? DOOR : TIERS[kind];
+  if (!free && S.budget < def.cost) return false;
+  if (!free) S.budget -= def.cost;
+  if (kind==='door') c.door = { hp:DOOR.hp, maxHp:DOOR.hp, open:false, broken:false };
+  else c.wall = { tier:kind, hp:def.hp, maxHp:def.hp };
+  return true;
+}
+
+// ---------- build mode input ----------
+const TOOL_LIST = [
+  ['dirt', ()=>`Dirt (${TIERS.dirt.cost}⛏ · ${TIERS.dirt.hp}hp)`],
+  ['granite', ()=>`Granite (${TIERS.granite.cost}⛏ · ${TIERS.granite.hp}hp)`],
+  ['reinforced', ()=>`Reinf. (${TIERS.reinforced.cost}⛏ · ${TIERS.reinforced.hp}hp)`],
+  ['door', ()=>`Door (${DOOR.cost}⛏ · ${DOOR.hp}hp)`],
+  ['demolish', ()=>'Demolish (refund)'],
+  ['squad', ()=>'Move squad'],
+];
+let squadCycle = 0;
+
+function buildToolButtons(){
+  const div = document.getElementById('tools'); div.innerHTML='';
+  for (const [id,label] of TOOL_LIST){
+    const b = document.createElement('button');
+    b.textContent = label(); b.dataset.tool = id;
+    if (id===S.tool) b.classList.add('sel');
+    b.onclick = ()=>{ S.tool=id; buildToolButtons(); };
+    div.appendChild(b);
+  }
+}
+
+function unitAt(x,y){
+  return S.defenders.find(d=>d.alive&&d.x===x&&d.y===y) || S.raiders.find(r=>r.x===x&&r.y===y) || null;
+}
+
+function buildClick(x,y){
+  if (x===HOARD.x && y===HOARD.y) return;
+  if (x===0) { logMsg('The left edge is bedrock — raiders come from there.','warn'); return; }
+  const c = cell(x,y);
+  if (S.tool==='demolish'){
+    if (c.wall){ S.budget += TIERS[c.wall.tier].cost; c.wall=null; }
+    else if (c.door){ S.budget += DOOR.cost; c.door=null; }
+  } else if (S.tool==='squad'){
+    if (c.wall || c.door || unitAt(x,y)) return;
+    const d = S.defenders[squadCycle % 3];
+    d.x=x; d.y=y; squadCycle++;
+    logMsg(`${d.name} takes position.`);
+  } else {
+    if (c.wall || c.door || unitAt(x,y)) return;
+    if (!placeStructure(x,y,S.tool,false)) logMsg('Not enough stone.','warn');
+  }
+  refresh();
+}
+
+// ---------- geometry ----------
+function blocksLos(x,y){
+  const c = cell(x,y);
+  return (c.wall && c.wall.hp>0) || (c.door && !c.door.open && !c.door.broken);
+}
+function passable(x,y,forRaider){
+  const c = cell(x,y);
+  if (c.wall) return false;
+  if (c.door && !c.door.broken && !c.door.open) return false;
+  return true;
+}
+function los(x0,y0,x1,y1){
+  // Bresenham; intermediate cells block, endpoints don't.
+  let dx=Math.abs(x1-x0), dy=Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1, err=dx-dy, x=x0, y=y0;
+  while (!(x===x1 && y===y1)){
+    const e2 = 2*err;
+    if (e2 > -dy){ err-=dy; x+=sx; }
+    if (e2 < dx){ err+=dx; y+=sy; }
+    if (x===x1 && y===y1) break;
+    if (blocksLos(x,y)) return false;
+  }
+  return true;
+}
+function dist(a,b){ return Math.abs(a.x-b.x)+Math.abs(a.y-b.y); }
+const DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+
+// Defender movement reach (BFS, blocked by structures and all units).
+function reach(d, maxSteps){
+  const seen = new Map([[d.x+','+d.y,[]]]);
+  const q = [[d.x,d.y,0]];
+  while (q.length){
+    const [x,y,n] = q.shift();
+    if (n===maxSteps) continue;
+    for (const [ox,oy] of DIRS){
+      const nx=x+ox, ny=y+oy, k=nx+','+ny;
+      if (!inb(nx,ny) || seen.has(k)) continue;
+      if (!passable(nx,ny,false) || unitAt(nx,ny)) continue;
+      seen.set(k,[x,y]); q.push([nx,ny,n+1]);
+    }
+  }
+  seen.delete(d.x+','+d.y);
+  return seen;
+}
+
+// Raider breach-pathing: Dijkstra where smashable structures cost the turns
+// needed to smash them — so raiders emergently attack the WEAKEST architecture.
+function breachPath(r, tx, ty){
+  const cost = new Map([[r.x+','+r.y,0]]), prev = new Map();
+  const pq = [[0,r.x,r.y]];
+  while (pq.length){
+    pq.sort((a,b)=>a[0]-b[0]);
+    const [cst,x,y] = pq.shift();
+    if (x===tx && y===ty) break;
+    if (cst > (cost.get(x+','+y) ?? 1e9)) continue;
+    for (const [ox,oy] of DIRS){
+      const nx=x+ox, ny=y+oy;
+      if (!inb(nx,ny)) continue;
+      const c = cell(nx,ny);
+      let step = 1;
+      if (c.wall) step += Math.ceil(c.wall.hp/2) * 3;
+      else if (c.door && !c.door.open && !c.door.broken) step += Math.ceil(c.door.hp/2) * 3;
+      if (S.defenders.some(d=>d.alive&&d.x===nx&&d.y===ny)) step += 6;
+      if (S.raiders.some(o=>o!==r&&o.x===nx&&o.y===ny)) step += 2;
+      const nc = cst + step, k = nx+','+ny;
+      if (nc < (cost.get(k) ?? 1e9)){ cost.set(k,nc); prev.set(k,[x,y]); pq.push([nc,nx,ny]); }
+    }
+  }
+  // Walk back from target to build the forward path.
+  const path = []; let k = tx+','+ty;
+  if (!prev.has(k) && !(r.x===tx&&r.y===ty)) return path;
+  let cur = [tx,ty];
+  while (!(cur[0]===r.x && cur[1]===r.y)){ path.unshift(cur); cur = prev.get(cur[0]+','+cur[1]); if (!cur) return []; }
+  return path;
+}
+
+// ---------- battle flow ----------
+function startRaid(){
+  S.raidNum++; S.turn = 1; S.mode = 'battle';
+  S.scars = []; S.selected = null;
+  const n = 4 + S.raidNum;
+  const rows = [...Array(H).keys()].filter(y=>passable(0,y,true));
+  S.raiders = [];
+  for (let i=0;i<n;i++){
+    const y = rows[Math.floor(Math.random()*rows.length)];
+    if (S.raiders.some(r=>r.x===0&&r.y===y)) { i--; continue; }
+    S.raiders.push({ x:0, y, hp:8, maxHp:8, loot:0 });
+  }
+  for (const d of S.defenders) d.ap = 2;
+  logMsg(`— RAID ${S.raidNum}: ${n} raiders at the gates! Your turn. —`,'bad');
+  refresh();
+}
+
+function selectDefender(d){
+  S.selected = (d.ap>0) ? d : null;
+  refresh();
+}
+
+function tryDefenderAction(x,y){
+  const d = S.selected;
+  if (!d || d.ap<=0) return;
+  const target = S.raiders.find(r=>r.x===x&&r.y===y);
+  if (target){
+    if (dist(d,target)<=7 && los(d.x,d.y,x,y)){
+      d.ap--;
+      target.hp -= 3;
+      logMsg(`${d.name} shoots a raider (3 dmg).`,'good');
+      if (target.hp<=0){ S.raiders.splice(S.raiders.indexOf(target),1); logMsg('Raider down!','good'); }
+      afterAction();
+    } else logMsg('No line of sight / out of range.','warn');
+    return;
+  }
+  const moves = reach(d,4);
+  if (moves.has(x+','+y)){ d.ap--; d.x=x; d.y=y; afterAction(); }
+}
+
+function toggleAdjacentDoor(){
+  const d = S.selected; if (!d || d.ap<=0) return;
+  for (const [ox,oy] of DIRS){
+    const c = inb(d.x+ox,d.y+oy) && cell(d.x+ox,d.y+oy);
+    if (c && c.door && !c.door.broken){
+      c.door.open = !c.door.open; d.ap--;
+      logMsg(`${d.name} ${c.door.open?'opens':'closes'} the door.`);
+      afterAction(); return;
+    }
+  }
+}
+
+function afterAction(){
+  if (S.selected && S.selected.ap<=0) S.selected = null;
+  checkEnd() || refresh();
+}
+
+function endTurn(){
+  S.selected = null;
+  runRaiderPhase();
+}
+
+function runRaiderPhase(){
+  const queue = [...S.raiders];
+  document.getElementById('endturnbtn').disabled = true;
+  const stepOne = ()=>{
+    if (checkEnd()) return;
+    if (!queue.length){
+      S.turn++;
+      for (const d of S.defenders) d.ap = d.alive?2:0;
+      document.getElementById('endturnbtn').disabled = false;
+      if (!checkEnd()){
+        if (S.defenders.some(d=>d.alive)) logMsg(`— Turn ${S.turn}: your move. —`);
+        else runRaiderPhase(); // squad wiped: raiders play on
+        refresh();
+      }
+      return;
+    }
+    const r = queue.shift();
+    if (!S.raiders.includes(r)) { stepOne(); return; }
+    raiderTurn(r);
+    refresh();
+    S.animTimer = setTimeout(stepOne, 260);
+  };
+  stepOne();
+}
+
+function raiderTurn(r){
+  // 1. Adjacent defender? Attack them.
+  const adj = S.defenders.find(d=>d.alive && dist(d,r)===1);
+  if (adj){ hitDefender(r,adj); return; }
+  // 2. Steal if standing on the hoard.
+  if (r.x===HOARD.x && r.y===HOARD.y && r.loot===0 && S.loot>0){
+    S.loot--; r.loot=1; logMsg('A raider grabs a sack of gold!','bad'); return;
+  }
+  // 3. Head for the objective, smashing what's in the way.
+  // Raiders leave when they get what they came for — or when nothing is left.
+  const leaving = r.loot > 0 || S.loot === 0;
+  const [tx,ty] = leaving ? [0, r.y] : [HOARD.x, HOARD.y];
+  let path = breachPath(r,tx,ty);
+  if (leaving && !path.length){ // exit row blocked: try any exit cell
+    for (let y=0;y<H && !path.length;y++) path = breachPath(r,0,y);
+  }
+  let steps = 4;
+  while (steps>0 && path.length){
+    const [nx,ny] = path[0];
+    const c = cell(nx,ny);
+    if (c.wall){
+      damageStructure(nx,ny,c.wall,TIERS[c.wall.tier].name,()=>c.wall=null);
+      return;
+    }
+    if (c.door && !c.door.open && !c.door.broken){
+      damageStructure(nx,ny,c.door,'Door',()=>{ c.door.broken=true; c.door.open=true; });
+      return;
+    }
+    if (unitAt(nx,ny)) return; // wait — occupied
+    r.x=nx; r.y=ny; path.shift(); steps--;
+    if (r.x===0 && (r.loot || S.loot===0)){
+      S.raiders.splice(S.raiders.indexOf(r),1);
+      if (r.loot){ S.stolenTotal++; logMsg('A raider ESCAPES with your gold!','bad'); }
+      else logMsg('A raider slinks away empty-handed.','good');
+      return;
+    }
+    if (r.x===HOARD.x && r.y===HOARD.y && r.loot===0 && S.loot>0){
+      S.loot--; r.loot=1; logMsg('A raider grabs a sack of gold!','bad'); return;
+    }
+    const nowAdj = S.defenders.find(d=>d.alive && dist(d,r)===1);
+    if (nowAdj){ hitDefender(r,nowAdj); return; }
+  }
+}
+
+function hitDefender(r,d){
+  d.hp -= 3;
+  logMsg(`A raider strikes ${d.name} (3 dmg).`,'bad');
+  if (d.hp<=0){ d.alive=false; logMsg(`${d.name} has fallen.`,'bad'); }
+}
+
+function damageStructure(x,y,s,label,onDestroy){
+  s.hp -= 2;
+  if (s.hp<=0){
+    onDestroy();
+    S.scars.push(`${label} at (${x},${y}) DESTROYED`);
+    logMsg(`CRUNCH — ${label} at (${x},${y}) is destroyed!`,'bad');
+  } else {
+    logMsg(`A raider smashes the ${label.toLowerCase()} at (${x},${y}) (${s.hp}/${s.maxHp}).`,'warn');
+  }
+}
+
+function checkEnd(){
+  if (S.mode!=='battle') return true;
+  const defendersUp = S.defenders.some(d=>d.alive);
+  if (S.raiders.length===0){ endRaid(defendersUp); return true; }
+  if (!defendersUp && S.raiders.every(r=>r.loot||S.loot===0)) { /* let them walk out via phases */ }
+  return false;
+}
+
+function endRaid(victory){
+  clearTimeout(S.animTimer);
+  S.mode='ended';
+  const dead = S.defenders.filter(d=>!d.alive);
+  const report = [
+    victory ? 'The raid is broken. The mountain holds.' : 'The raiders are gone... with your gold.',
+    '',
+    `Turns fought: ${S.turn}`,
+    `Colonists lost: ${dead.length ? dead.map(d=>d.name).join(', ') : 'none'}`,
+    `Squad wounds: ${S.defenders.filter(d=>d.alive&&d.hp<d.maxHp).map(d=>`${d.name} ${d.hp}/${d.maxHp}`).join(', ')||'none'}`,
+    `Gold stolen: ${S.stolenTotal} (all raids)`,
+    '',
+    'SCARS — what your architecture gave up:',
+    ...(S.scars.length ? S.scars.map(s=>'  · '+s) : ['  · Nothing. Not one stone lost.']),
+    '',
+    'Study the breach. Rebuild stronger.',
+  ].join('\n');
+  document.getElementById('endtitle').textContent = victory ? '✔ RAID REPULSED' : '✖ RAID SURVIVED (barely)';
+  document.getElementById('endreport').textContent = report;
+  refresh();
+}
+
+function rebuild(){
+  S.mode='build';
+  S.budget += 12; S.loot = 3;
+  for (const d of S.defenders){
+    if (!d.alive){ d.alive=true; d.hp=d.maxHp; logMsg(`A new colonist takes up ${d.name}'s crossbow.`,'warn'); d.x=17; d.y=7; }
+    else d.hp = d.maxHp;
+    d.ap=0;
+  }
+  // Relocate any defender standing in an invalid spot (overlap or rebuilt wall).
+  for (const d of S.defenders){
+    if (passable(d.x,d.y,false) && !S.defenders.some(o=>o!==d&&o.x===d.x&&o.y===d.y)) continue;
+    outer:
+    for (let y=0;y<H;y++) for (let x=1;x<W;x++){
+      if (x===HOARD.x&&y===HOARD.y) continue;
+      if (passable(x,y,false) && !unitAt(x,y)){ d.x=x; d.y=y; break outer; }
+    }
+  }
+  logMsg(`— Rebuild: +12 stone mined, hoard restocked. Raid ${S.raidNum+1} will be bigger. —`);
+  refresh();
+}
+
+// ---------- rendering ----------
+function refresh(){
+  document.getElementById('buildpanel').style.display = S.mode==='build' ? '' : 'none';
+  document.getElementById('battlepanel').style.display = S.mode==='battle' ? '' : 'none';
+  document.getElementById('endpanel').style.display = S.mode==='ended' ? 'block' : 'none';
+  document.getElementById('budget').textContent = S.budget + '⛏';
+  document.getElementById('turninfo').textContent = `raid ${S.raidNum}, turn ${S.turn}`;
+  const d = S.selected;
+  document.getElementById('unitinfo').innerHTML = d
+    ? `<b>${d.name}</b> — ${d.hp}/${d.maxHp} hp, <b>${d.ap} AP</b>. Click a highlighted cell to move, a raider to shoot.`
+    : 'Click one of your defenders (blue).';
+  const act = document.getElementById('actions'); act.innerHTML='';
+  if (d){
+    const b = document.createElement('button');
+    b.textContent = 'Toggle adjacent door (1 AP)';
+    b.onclick = toggleAdjacentDoor;
+    act.appendChild(b);
+  }
+  draw();
+}
+
+function draw(){
+  cx.clearRect(0,0,cv.width,cv.height);
+  for (let y=0;y<H;y++) for (let x=0;x<W;x++){
+    const px=x*CELL, py=y*CELL, c=cell(x,y);
+    cx.fillStyle = x===0 ? '#14110e' : '#2b2620';
+    cx.fillRect(px,py,CELL,CELL);
+    cx.strokeStyle='#1d1a15'; cx.strokeRect(px+.5,py+.5,CELL,CELL);
+    if (x===HOARD.x&&y===HOARD.y){
+      cx.fillStyle='#e8b45a';
+      for (let i=0;i<S.loot;i++) cx.fillRect(px+8+i*9, py+24, 7, 8);
+      cx.fillStyle='#8f7a3a'; cx.fillText('gold', px+9, py+16);
+    }
+    if (c.wall){
+      const t=TIERS[c.wall.tier];
+      cx.fillStyle=t.color; cx.fillRect(px+2,py+2,CELL-4,CELL-4);
+      drawHp(px,py,c.wall);
+    }
+    if (c.door){
+      cx.fillStyle = c.door.broken ? '#4a3a20' : DOOR.color;
+      if (c.door.open || c.door.broken) cx.fillRect(px+2,py+2,8,CELL-4);
+      else cx.fillRect(px+2,py+2,CELL-4,CELL-4);
+      if (!c.door.broken) drawHp(px,py,c.door);
+    }
+  }
+  // move range + targets for selected defender
+  if (S.selected && S.mode==='battle'){
+    const d=S.selected;
+    if (d.ap>0){
+      for (const k of reach(d,4).keys()){
+        const [x,y]=k.split(',').map(Number);
+        cx.fillStyle='rgba(109,179,242,.18)'; cx.fillRect(x*CELL,y*CELL,CELL,CELL);
+      }
+      for (const r of S.raiders){
+        if (dist(d,r)<=7 && los(d.x,d.y,r.x,r.y)){
+          cx.strokeStyle='#e05545'; cx.lineWidth=2;
+          cx.strokeRect(r.x*CELL+3,r.y*CELL+3,CELL-6,CELL-6); cx.lineWidth=1;
+        }
+      }
+    }
+    cx.strokeStyle='#6db3f2'; cx.lineWidth=2;
+    cx.strokeRect(d.x*CELL+2,d.y*CELL+2,CELL-4,CELL-4); cx.lineWidth=1;
+  }
+  for (const d of S.defenders){
+    if (!d.alive) continue;
+    const px=d.x*CELL, py=d.y*CELL;
+    cx.fillStyle = d.ap>0 && S.mode==='battle' ? '#6db3f2' : '#3f6c94';
+    cx.beginPath(); cx.arc(px+CELL/2,py+CELL/2,12,0,7); cx.fill();
+    cx.fillStyle='#0e1a24'; cx.font='10px system-ui';
+    cx.fillText(d.name[0], px+CELL/2-3, py+CELL/2+3);
+    cx.fillStyle='#9fd0ff'; cx.fillText(`${d.hp}`, px+4, py+12);
+  }
+  for (const r of S.raiders){
+    const px=r.x*CELL, py=r.y*CELL;
+    cx.fillStyle = r.loot ? '#e8b45a' : '#e05545';
+    cx.beginPath();
+    cx.moveTo(px+CELL/2,py+8); cx.lineTo(px+CELL-8,py+CELL-8); cx.lineTo(px+8,py+CELL-8);
+    cx.closePath(); cx.fill();
+    cx.fillStyle='#ffb0a5'; cx.font='10px system-ui'; cx.fillText(`${r.hp}`, px+4, py+12);
+  }
+  if (S.mode==='build' && S.hover){
+    cx.strokeStyle='#e8b45a';
+    cx.strokeRect(S.hover.x*CELL+1,S.hover.y*CELL+1,CELL-2,CELL-2);
+  }
+}
+function drawHp(px,py,s){
+  if (s.hp>=s.maxHp) return;
+  cx.fillStyle='#1a1512'; cx.fillRect(px+4,py+CELL-9,CELL-8,5);
+  cx.fillStyle='#e05545'; cx.fillRect(px+4,py+CELL-9,(CELL-8)*s.hp/s.maxHp,5);
+}
+
+// ---------- wiring ----------
+let dragging=false;
+cv.addEventListener('mousedown', e=>{ dragging=true; handleClick(e); });
+cv.addEventListener('mouseup', ()=>dragging=false);
+cv.addEventListener('mouseleave', ()=>{ dragging=false; S.hover=null; draw(); });
+cv.addEventListener('mousemove', e=>{
+  const {x,y}=toCell(e); S.hover={x,y};
+  if (dragging && S.mode==='build' && S.tool!=='squad') buildClick(x,y);
+  else draw();
+});
+function toCell(e){
+  const r=cv.getBoundingClientRect();
+  return { x:Math.max(0,Math.min(W-1,Math.floor((e.clientX-r.left)/CELL))),
+           y:Math.max(0,Math.min(H-1,Math.floor((e.clientY-r.top)/CELL))) };
+}
+function handleClick(e){
+  const {x,y}=toCell(e);
+  if (S.mode==='build') buildClick(x,y);
+  else if (S.mode==='battle'){
+    const d = S.defenders.find(d=>d.alive&&d.x===x&&d.y===y);
+    if (d) selectDefender(d); else tryDefenderAction(x,y);
+  }
+}
+document.getElementById('raidbtn').onclick = startRaid;
+document.getElementById('endturnbtn').onclick = endTurn;
+document.getElementById('rebuildbtn').onclick = rebuild;
+
+function logMsg(msg, cls){
+  const el=document.getElementById('log');
+  const d=document.createElement('div'); if (cls) d.className=cls;
+  d.textContent=msg; el.appendChild(d); el.scrollTop=el.scrollHeight;
+}
+
+window.__dbg = { S, los, dist };   // headless-test hook only
+
+initGrid();
+buildToolButtons();
+logMsg('Your starter room is dirt. Dirt crumbles. You have stone to spend — the alarm sounds when YOU are ready.');
+refresh();
+</script>
