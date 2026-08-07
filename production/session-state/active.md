@@ -3,7 +3,7 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: ADR-0005 Seeded RNG / Determinism AUTHORED 2026-08-07 (/architecture-decision; Proposed; godot-specialist CONCERNS ×3 folded + TD-ADR CONCERNS C1–C6 all applied; both registries + companions updated, user-approved) — Save/Load #6 now unblocked (ADR-0004 + ADR-0005). IN FLIGHT: the 2 CD questions routed (post-battle time; save-scum hole) — awaiting recommendations, USER decides
+Task: ADR-0005 AUTHORED + both CD questions RULED 2026-08-07 — CD-19 post-battle time (turn-derived w/ cap; USER ruling, overrides CD rec) + CD-20 save-scum (lock + re-roll, Commitment opt-in; adopts CD rec), recorded in systems-index/ADR-0001/technical-preferences. Next: /propagate-design-change time-authority-mode-switch (GDD restatement + Rule 8/AC-10 + AC-44), then Save/Load #6 + Needs & Simulation GDD (#13) both unblocked
 <!-- /STATUS -->
 
 ## ADR-0005 SESSION 2026-08-07 (/architecture-decision seeded-rng, review mode full)
@@ -13,6 +13,13 @@ Task: ADR-0005 Seeded RNG / Determinism AUTHORED 2026-08-07 (/architecture-decis
 - Registries updated (user-approved): `docs/registry/architecture.yaml` first 4 stances (rng_stream_state ownership; simulation_randomness API decision; ad_hoc_rng_source + bare_combat_root_stream_draw forbidden); `design/registry/entities.yaml` +2 constants (rng_stream_registry, rng_stream_layout_version). Companions: technical-preferences (2 forbidden patterns + ADR log + Next line), systems-index #4 → Designed.
 - **Promotion**: NOT gated on the target-hardware run (RNG not on the frame-time profile). Validation criteria 1–9 are implementation-time (Save/Load #6 / first consumer).
 - **User decision 2026-08-07**: next = route the 2 open CD questions (post-battle time semantics → blocks Needs & Simulation GDD; colony-save save-scum hole → should precede Save/Load #6). CD recommendations only — final rulings are the USER's.
+
+## CD RULINGS 2026-08-07 (both routed questions decided; recommendations by creative-director agents (Opus), RULINGS by user)
+
+- **CD-19 — post-battle time: TURN-DERIVED WITH CAP** (USER ruling, **overrides** the CD recommendation of zero-elapsed + labor aftermath). Full binding text in systems-index CD-19. Rate + cap = #13 knobs; guardrails: multiplicative decay only, catch-up after `PostEncounterReconcile` / before battle-end autosave, clemency clause, dead reaped first, queued thresholds, #10 re-plans once. Recorded playtest risks: double-punish, 3× triple-tax, rush incentive (→ Combat pacing C3). Closes ADR-0001 OQ #1 (closure note added in the ADR); unblocks #13.
+- **CD-20 — save-scum: RAID-WINDOW LOCK + RELOAD RE-ROLL, COMMITMENT MODE OPT-IN (default off)** (USER ruling, adopts the CD recommendation). Full binding text + Save/Load #6 slot taxonomy in systems-index CD-20. Re-roll obligation → Raid Trigger #18 + ADR-0005 streams; falsification thresholds recorded.
+- **ADOPTED GDD RESTATEMENT** (replaces the time-authority GDD Player Fantasy's "no pre-battle rewind by any player action" absolutism; land via `/propagate-design-change`): *"A battle is a single sitting — and the fight itself cannot be taken back. The 8–15 minute budget and Battle Persistence are design, not constraint: you cannot pause the judgment, manually save inside it, or pick it apart across sessions, and quitting suspends rather than cancels — the checkpoint resumes the fight exactly where it stood. What the game guarantees is narrower and more honest than 'no rewind exists': no rewind is reachable cheaply, and no rewind returns you to the same raid. Manual saving is locked from the raid warning through battle-end, so the newest save you can select entering a fight is always one the game wrote; an older colony save can still be loaded, but it costs real colony time and the raid it rewinds is re-rolled — you retake a different test, you do not replay a known one. Two carve-outs are stated rather than hidden: a corrupt checkpoint offers a loud, explicit fallback to the battle-start autosave (disk failure must never brick a colony), and deleting or editing save files reaches anything — the design closes UI paths, not disks. Players who want the stricter promise can start a colony in Commitment Mode: one rolling save, no manual saves, no reload at all."*
+- **Propagation pending** (route via `/propagate-design-change time-authority-mode-switch`): the restatement paragraph; Rule 8/AC-10 catch-up ordering revision (CD-19); AC-44 lock extended to the warning window + non-selectable quit slot + load-list labelling (CD-20); Raid Trigger #18 re-roll obligation; Needs & Simulation #13 gains the CD-19 knob/guardrail set at authoring.
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
 
@@ -134,5 +141,6 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 - production/session-state/active.md (this file)
 
 ## Open Questions
-- Post-battle time: resume as zero-elapsed vs. advance by battle duration — route to creative-director BEFORE Needs & Simulation GDD (both stay possible under ADR-0001's fixed-dt sub-stepping)
+- ~~Post-battle time~~ **RESOLVED 2026-08-07 (CD-19)**: turn-derived with cap — user ruling, overrides CD recommendation; see the CD Rulings section above
+- ~~Colony-save save-scum hole~~ **RESOLVED 2026-08-07 (CD-20)**: raid-window lock + reload re-roll + Commitment Mode opt-in; see the CD Rulings section above
 - Working-hours assumption (full-time vs evenings) — timeline bands double if part-time
