@@ -3,8 +3,16 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture-decision; Proposed; godot-specialist PASS WITH NOTES + TD-ADR CONCERNS all applied); registry update DONE 2026-08-07 (user-approved) — next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec
+Task: ADR-0005 Seeded RNG / Determinism AUTHORED 2026-08-07 (/architecture-decision; Proposed; godot-specialist CONCERNS ×3 folded + TD-ADR CONCERNS C1–C6 all applied; both registries + companions updated, user-approved) — Save/Load #6 now unblocked (ADR-0004 + ADR-0005). IN FLIGHT: the 2 CD questions routed (post-battle time; save-scum hole) — awaiting recommendations, USER decides
 <!-- /STATUS -->
+
+## ADR-0005 SESSION 2026-08-07 (/architecture-decision seeded-rng, review mode full)
+
+- **ADR-0005 written**: `docs/architecture/adr-0005-seeded-rng-determinism.md` — **Proposed**. PCG32 (16-byte state/stream) in `Hollowdeep.Core`; `WorldSeed` + stable `(RngOwner, SubKey)` FNV-1a→SplitMix64 derivation (never registration order); owners: ColonistIdentity/RaidTrigger/Combat (named SubKeys only, bare root BANNED)/MapGeneration; draw assert = BOTH MutationWindow clauses; `Snapshot()`/`SnapshotInto()` (ADR-0004 item 7 discharged)/`Restore()` + stream-layout version (loud-fail on checkpoint load); checkpoint captures ENTIRE registry (TD C1 — combat-only capture would repeat raid composition); `NextRange` Lemire + `NextFloat01` 24-bit pinned as format; streams sealed reference types; registry composition-root-owned per-world, never static. 3 user decisions at authoring: PCG32 over xoshiro/PCG64; single root seed + derivation; fixed enum + namespaced Combat extensibility.
+- Gates (both CONCERNS, all findings applied same day): **godot-specialist** — Godot's `RandomNumberGenerator` is PCG32 internally but doesn't expose the increment (stream selector) + GodotSharp unreferenceable from Core = hand-rolled is doubly correct; no 4.4–4.7.1 API changes apply; 3 gaps folded (registry lifecycle, struct-boxing trap, thread confinement). **TD-ADR** — C1 full-registry checkpoint scope; C2 SnapshotInto; C3 counter-based (Philox) alternative recorded so "arbitrary draw counts"=exact-state-capture is decided-not-assumed; C4 both assert clauses + sanctioned load-window draws named; C5 bare-root ban + layout version; C6 debiasing/float construction/reference-types pinned as format contract.
+- Registries updated (user-approved): `docs/registry/architecture.yaml` first 4 stances (rng_stream_state ownership; simulation_randomness API decision; ad_hoc_rng_source + bare_combat_root_stream_draw forbidden); `design/registry/entities.yaml` +2 constants (rng_stream_registry, rng_stream_layout_version). Companions: technical-preferences (2 forbidden patterns + ADR log + Next line), systems-index #4 → Designed.
+- **Promotion**: NOT gated on the target-hardware run (RNG not on the frame-time profile). Validation criteria 1–9 are implementation-time (Save/Load #6 / first consumer).
+- **User decision 2026-08-07**: next = route the 2 open CD questions (post-battle time semantics → blocks Needs & Simulation GDD; colony-save save-scum hole → should precede Save/Load #6). CD recommendations only — final rulings are the USER's.
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
 

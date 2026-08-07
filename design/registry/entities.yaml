@@ -344,6 +344,38 @@ constants:
     added: 2026-08-07
     revised: ""
 
+  # ADR-0005 seeded-RNG facts (registered 2026-08-07, user-approved alongside the ADR).
+  - name: rng_stream_registry
+    status: active
+    source: docs/architecture/adr-0005-seeded-rng-determinism.md
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng-determinism.md
+    value: "4 owners — ColonistIdentity (MVP), RaidTrigger (MVP), Combat (MVP, named SubKeys only), MapGeneration (Alpha)"
+    unit: stream owner list
+    notes: "One WorldSeed derives every stream via stable (RngOwner, SubKey) keys — never
+      registration order, so adding a stream can never perturb an existing one. The bare Combat
+      root is never drawn from (SubKey required from day one). New SubKeys under an existing
+      owner are that owner's namespace and need no ADR change; new RngOwner values extend
+      ADR-0005's table (documentation change, append-only, never renumbered). Will be
+      referenced_by the combat-set GDDs, raid-trigger GDD, colonist-entity quick-spec, and
+      save-load quick-spec (#6) once those exist."
+    added: 2026-08-07
+    revised: ""
+
+  - name: rng_stream_layout_version
+    status: active
+    source: docs/architecture/adr-0005-seeded-rng-determinism.md
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng-determinism.md
+    value: "in-snapshot version stamp; bumped when draws MOVE between streams or when NextRange/NextFloat01 internals change"
+    unit: versioning rule
+    notes: "Adding a new stream needs no bump (streams restore by key). On battle-checkpoint load
+      a mismatch fails loudly into ADR-0004's corrupt-checkpoint fallback — never a silent resume
+      whose future draw sequence can no longer match the pre-patch control run. Colony saves are
+      unaffected by layout bumps. Will be referenced_by the save-load quick-spec (#6)."
+    added: 2026-08-07
+    revised: ""
+
 # Example:
 #
 # constants:

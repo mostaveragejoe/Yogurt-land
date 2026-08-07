@@ -30,7 +30,7 @@
 #   Superseded entries:     Grep pattern="status: superseded"
 
 version: 1
-last_updated: ""
+last_updated: "2026-08-07"
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
 # Who is the authoritative owner of each piece of shared game state.
@@ -43,7 +43,20 @@ last_updated: ""
 # interface: how other systems access this state (read-only property, method call,
 #   signal, shared resource, etc.) — this is the contract other ADRs depend on.
 
-state_ownership: []
+state_ownership:
+  - state: rng_stream_state
+    status: active
+    owner_system: seeded-rng
+    adr: docs/architecture/adr-0005-seeded-rng-determinism.md
+    interface: "SeededRngRegistry.GetStream(RngStreamKey) for draws; Snapshot() (colony saves) /
+      SnapshotInto(IBufferWriter<byte>) (battle checkpoints) / Restore() for serialization.
+      Covers every per-stream (State, Increment) pair plus the top-level WorldSeed."
+    write_access: seeded-rng-only   # streams advance only via their own draw calls; Restore only inside the load window
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng-determinism.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md   # checkpoint content-scope item 3 captures the entire registry
+    added: 2026-08-07
+    revised: ""
 
 # Example:
 #
@@ -131,7 +144,21 @@ performance_budgets: []
 # Register an API decision when the choice is non-obvious and other ADRs might
 # make a different choice for the same purpose without knowing this was decided.
 
-api_decisions: []
+api_decisions:
+  - purpose: simulation_randomness
+    status: active
+    api: "Hand-rolled PCG32 (PCG XSH RR 64/32) behind SeededRngRegistry in Hollowdeep.Core"
+    not: "System.Random (algorithm not stable across .NET versions, state not serializable);
+      Godot RandomNumberGenerator (PCG32 internally but the increment/stream selector is not
+      exposed, and GodotSharp cannot be referenced from Hollowdeep.Core)"
+    adr: docs/architecture/adr-0005-seeded-rng-determinism.md
+    reason: "Explicit 16-byte serializable state per stream; PCG's odd-increment mechanism
+      natively provides per-system streams; NextRange (Lemire debiased multiply) and
+      NextFloat01 (24-bit mantissa) are pinned as part of the serialized format contract"
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng-determinism.md
+    added: 2026-08-07
+    revised: ""
 
 # Example:
 #
@@ -157,7 +184,26 @@ api_decisions: []
 # Register a pattern when an ADR explicitly bans it AND other ADRs might
 # unknowingly use it (i.e., it's a tempting but wrong approach for this project).
 
-forbidden_patterns: []
+forbidden_patterns:
+  - pattern: ad_hoc_rng_source
+    status: active
+    description: "Simulation code must never use System.Random, Godot's RandomNumberGenerator,
+      Guid-derived entropy, or any RNG other than a named SeededRngRegistry stream."
+    why: "Any non-registry source is invisible to Snapshot()/Restore() and breaks deterministic
+      resume (GDD AC-67) and same-seed reproducibility. One stray draw desyncs a save silently."
+    adr: docs/architecture/adr-0005-seeded-rng-determinism.md
+    added: 2026-08-07
+
+  - pattern: bare_combat_root_stream_draw
+    status: active
+    description: "Never draw from RngOwner.Combat without a named SubKey — MVP combat uses a
+      named sub-stream (e.g. SubKey: Encounter) from day one; new combat concerns register
+      new SubKeys under the Combat namespace."
+    why: "Moving draws off an already-used stream changes its sequence and silently desyncs
+      every in-flight battle checkpoint across a patch; banning the bare root keeps the
+      day-one layout cheap to split later (ADR-0005 s3, TD-ADR C5)."
+    adr: docs/architecture/adr-0005-seeded-rng-determinism.md
+    added: 2026-08-07
 
 # Example:
 #
