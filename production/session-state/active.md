@@ -60,7 +60,7 @@ Tier 0 FUN SPIKE: **COMPLETE — PROCEED, CD-PLAYTEST CONFIRM (2026-07-25)**.
 - **Zero state conversion proven by identity**: same store instance, same values, unchanged Revision across the swap.
 - Cost: dispatch 0.578 µs (0.003% frame), swap 0.31 µs, reconcile 28.9 µs once per battle, **0.00 B/sub-step allocation**.
 - **3 corrections**: (1) MutationWindow.Open() must return a `readonly struct` scope — the IDisposable class version boxed 24 B/dispatch, violating the zero-allocation standard (now in technical-preferences); (2) pre-switch normalization must decide against the DECISION SET, not live occupancy — otherwise every co-located unit moves incl. the lowest id that should keep its cell (recorded in ADR-0001 + ADR-0003); (3) **ADR-0003 raider reap leaked** — "dead/withdrawn" leaves live raiders as undespawnable ghosts; corrected to reap ALL raiders at reconcile (ADR-0003 lifecycle row updated).
-- **ADR-0001 recommended for promotion to Accepted** — awaiting user decision. ADR-0003 still gated on pathfinding + save/load spikes.
+- **ADR-0001 PROMOTED to Accepted 2026-07-26** (user decision). ADR-0003 likewise Accepted 2026-07-26 once pathfinding + save/load spikes validated criteria 2–5.
 - NOT answered: presentation gating against a real Godot view (stub only); battle length (design, not architecture); post-battle time semantics (still the open CD question — spike confirms fixed-dt keeps both options open).
 
 **PATHFINDING SPIKE: COMPLETE 2026-07-26 — YES, 44/44** (`prototypes/pathfinding-spike/`, SPIKE-NOTE.md).
@@ -87,7 +87,7 @@ Tier 0 FUN SPIKE: **COMPLETE — PROCEED, CD-PLAYTEST CONFIRM (2026-07-25)**.
 ## TIER 0 SPIKE GATE: COMPLETE (5/5)
 fun ✅ PROCEED · terrain ✅ · mode-switch ✅ · pathfinding ✅ · save/load ✅
 
-**AWAITING USER DECISION**: promote ADR-0001 and ADR-0003 to Accepted (both recommended). ADR-0002 still needs the frame-rate clause re-run on target hardware (software Vulkan gave no fps signal).
+**RESOLVED 2026-07-26**: ADR-0001 and ADR-0003 both PROMOTED to Accepted (user decision) — reflected in the ADR docs, technical-preferences.md, and systems-index.md. Only remaining ADR gate: **ADR-0002 (and ADR-0004, which shares its criterion 5) still need the frame-rate clause re-run on target hardware** — software Vulkan (lavapipe) gave no fps signal.
 
 **Next per the design order**: begin GDD authoring — `/design-system terrain-data-model` first (it was explicitly waiting on terrain-spike numbers, which now exist), then Time Authority GDD, then the quick-specs. Fold in: CD-10–CD-18, the pathfinding region-rebuild trigger + movement model, and the measured budgets.
 
