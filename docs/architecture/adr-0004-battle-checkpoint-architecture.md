@@ -1,7 +1,13 @@
 # ADR-0004: Battle Checkpoint Architecture
 
 ## Status
-**Proposed**
+**Accepted** (2026-08-07, user decision)
+
+> ### Promotion note 2026-08-07 — Accepted (user decision)
+>
+> This ADR shared ADR-0002's criterion 5: a checkpoint-cadence frame-time run on target hardware. CI cannot supply a real GPU, so that run stayed open for weeks and blocked promotion. The design is complete, and the review gates passed: godot-specialist PASS WITH NOTES (folded), TD-ADR CONCERNS resolved (B1–B7 + A1–A10 applied). The costed model is small — a double-buffered snapshot ~0.61 ms on the sim thread, gzip and write ~30 KB on a background thread.
+>
+> **User decision 2026-08-07**: promote ADR-0004 to Accepted with ADR-0002. The checkpoint-cadence frame-time run becomes a verification item to finish before the vertical slice, not a gate on this ADR.
 
 ## Date
 2026-08-03
@@ -21,10 +27,10 @@
 
 | Field | Value |
 |-------|-------|
-| **Depends On** | ADR-0001 (Accepted, amended 2026-08-03 — snapshot contract and resume path delegated here); ADR-0002 (Proposed, amended — `TerrainSnapshot` reuse, buffer strategy); ADR-0003 (Accepted, amended — side-table serialization, occupancy rebuild); **Seeded RNG ADR (pending)** for item 3 of the content scope — this ADR reserves the slot, that ADR defines the stream format |
+| **Depends On** | ADR-0001 (Accepted, amended 2026-08-03 — snapshot contract and resume path delegated here); ADR-0002 (Accepted, amended — `TerrainSnapshot` reuse, buffer strategy); ADR-0003 (Accepted, amended — side-table serialization, occupancy rebuild); **Seeded RNG ADR (pending)** for item 3 of the content scope — this ADR reserves the slot, that ADR defines the stream format |
 | **Enables** | Save/Load quick-spec (#6); all battle-checkpoint stories; GDD AC-67's determinism test |
 | **Blocks** | Save/Load quick-spec (#6) — it must not be specced before this ADR and the Seeded RNG ADR exist |
-| **Ordering Note** | The non-RNG scope is implementable before the Seeded RNG ADR lands; AC-67 (deterministic resume) needs both. Do not promote ADR-0002 until checkpoint cadence is measured on target hardware. |
+| **Ordering Note** | The non-RNG scope is implementable before the Seeded RNG ADR lands; AC-67 (deterministic resume) needs both. Do not promote ADR-0002 until checkpoint cadence is measured on target hardware. *[Superseded 2026-08-07 — both ADRs are now Accepted; the target-hardware run is a pre-vertical-slice verification item. See the Promotion note under Status.]* |
 
 ## Context
 
@@ -186,7 +192,7 @@ Nothing ships yet — the save/load spike validated the colony path only. Save/L
 8. Quit-join test: player-initiated quit flushes the newest resolved activation to disk before process exit
 9. Kill test: process kill at arbitrary points during a write always leaves a loadable slot (old or new)
 10. Corrupt-file test: a truncated/bit-flipped checkpoint produces the loud fallback offer, never a silent load
-11. Frame profile: checkpoint cost never appears in the combat frame-time profile on target hardware — **this is the same measurement as ADR-0002's re-scoped criterion 5**; one shared target-hardware run gates both promotions, and ADR-0004 cannot reach Accepted before it
+11. Frame profile: checkpoint cost never appears in the combat frame-time profile on target hardware — **this is the same measurement as ADR-0002's re-scoped criterion 5**; one shared target-hardware run confirms both. *[Updated 2026-08-07 — this is now a post-acceptance verification item, not a promotion gate; both ADRs are Accepted. The run must finish before the vertical slice.]*
 
 ## Related Decisions
 - ADR-0001/0002/0003 — Amendments 2026-08-03 (Battle Persistence); this ADR discharges the obligations they delegate

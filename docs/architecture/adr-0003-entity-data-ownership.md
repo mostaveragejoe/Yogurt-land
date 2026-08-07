@@ -38,7 +38,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Depends On** | ADR-0001 Time Authority (Proposed) — writes only inside authority-driven execution; per-entity sim state is plain data (Nodes are views); `SwitchTransitionData.ParticipantIds`; `PostEncounterReconcile`. ADR-0002 Terrain Data Model (Proposed) — `CellCoord`/`EntityId` primitives; the firewall table that pre-assigns entity-layer ownership; `IsPassableTerrain` as terrain's contribution to composite walkability |
+| **Depends On** | ADR-0001 Time Authority (Accepted) — writes only inside authority-driven execution; per-entity sim state is plain data (Nodes are views); `SwitchTransitionData.ParticipantIds`; `PostEncounterReconcile`. ADR-0002 Terrain Data Model (Accepted) — `CellCoord`/`EntityId` primitives; the firewall table that pre-assigns entity-layer ownership; `IsPassableTerrain` as terrain's contribution to composite walkability |
 | **Enables** | Colonist Entity & Attributes quick-spec; Job Assignment + Needs & Simulation GDD; Stockpile & Hauling quick-spec; Combat set GDDs (#19–#23); Squad Preparation quick-spec; Raid Trigger GDD; Pathfinding quick-spec (composite walkability inputs defined here); Seeded RNG ADR (per-system streams touch entity spawn) |
 | **Blocks** | Tier 0 pathfinding spike (needs occupancy + door contracts), save/load spike (needs entity snapshot contract), mode-switch spike (needs participant/normalization/reconcile contracts); every story touching colonist, raider, item, or door state |
 | **Ordering Note** | Third and last Foundation ADR before the contracts annex and the spikes. Written against ADR-0001/0002 as Proposed — if a spike falsifies either, this ADR is re-checked at the same revision point. The Colonist Entity quick-spec (#9) authors the *player-facing attribute list* later; this ADR fixes who may write which field group, not the full field list |
@@ -377,8 +377,8 @@ Also validated here: ADR-0002's stair Z-linkage; A* is allocation-free (0.00 B/q
 - **Post-battle time semantics** (zero-elapsed vs. advance) — already routed to creative-director before the Needs GDD (open question in session state); does not change ownership, only Needs' decay math.
 
 ## Related Decisions
-- ADR-0001 Time Authority (Proposed) — mutation window, mode exclusivity that makes writer-per-authority sound, `ParticipantIds`, `PostEncounterReconcile` as the outcome-processing site; companion edits listed in Migration Plan
-- ADR-0002 Terrain Data Model (Proposed) — firewall table pre-assignments honored (occupancy, reservations, doors; zones stay Stockpile & Hauling's sparse cell-sets); `IsPassableTerrain` composed with door/occupancy inputs under the mode-aware rule; enforcement patterns reused (writer tables, debug sweeps, single write paths, `Revision`)
+- ADR-0001 Time Authority (Accepted) — mutation window, mode exclusivity that makes writer-per-authority sound, `ParticipantIds`, `PostEncounterReconcile` as the outcome-processing site; companion edits listed in Migration Plan
+- ADR-0002 Terrain Data Model (Accepted) — firewall table pre-assignments honored (occupancy, reservations, doors; zones stay Stockpile & Hauling's sparse cell-sets); `IsPassableTerrain` composed with door/occupancy inputs under the mode-aware rule; enforcement patterns reused (writer tables, debug sweeps, single write paths, `Revision`)
 - Seeded RNG ADR (pending) — entity spawn (appearance seeds, raider composition) draws from per-system streams inside authority-driven execution
 - `design/gdd/systems-index.md` — #9 mandate, circular-dependency resolutions, CD-3/CD-4/CD-9 notes, High-Risk seam entry
 - `design/gdd/game-concept.md` — MVP caps that size this architecture; Pillar 4 (colony works autonomously — orders flow through owning systems, never direct writes)

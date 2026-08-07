@@ -1,9 +1,15 @@
 # ADR-0002: Terrain Data Model
 
 ## Status
-Proposed — **spike-validated 2026-07-25 on 5 of 6 criteria; one gate open (see Spike Results)** · **Amended 2026-08-03** (Battle Persistence)
+**Accepted** (2026-08-07, user decision) — spike-validated 2026-07-25 on 5 of 6 criteria · **Amended 2026-08-03** (Battle Persistence). Criterion 5 (frame rate on target hardware) is now a post-acceptance verification item — see the Promotion note below.
 
-*(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the terrain spike validates chunk size, memory footprint, allocation behavior, and render-extraction cost. The Tier 0 terrain spike has now run — see **Spike Results (2026-07-25)** below. Every measurable criterion passed and three tuning items are fixed; promotion to Accepted awaits only the frame-rate clause of validation criterion 5, which requires target hardware — **as re-scoped by the Amendment below**.)*
+*(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the terrain spike validates chunk size, memory footprint, allocation behavior, and render-extraction cost. The Tier 0 terrain spike has now run — see **Spike Results (2026-07-25)** below. Every measurable criterion passed and three tuning items are fixed.)*
+
+> ### Promotion note 2026-08-07 — Accepted (user decision)
+>
+> The frame-rate clause of criterion 5 needs a real GPU. CI has only software rendering (lavapipe). It runs any 3D scene at 3–4 fps. That number is meaningless, and CI cannot give a better one. The measurable indicators that the clause protects all passed with a large margin: **32 draw calls against a 150 budget, 16 MB video memory, ~2 µs per dig.** A 60 fps result on any real GPU is near-certain at this cost.
+>
+> **User decision 2026-08-07**: promote ADR-0002 to Accepted now. Criterion 5 becomes a verification item that the team must finish before the vertical slice, not a gate on this ADR. If the target-hardware run fails, the fix is a render-backend change — GridMap octant size or stacked-map count. The data model in this ADR does not change.
 
 > ### Amendment 2026-08-03 — Battle Persistence (user ruling 2026-08-02; propagated via `/propagate-design-change`, see `change-impact-2026-08-03-time-authority-mode-switch.md`)
 >
@@ -11,7 +17,7 @@ Proposed — **spike-validated 2026-07-25 on 5 of 6 criteria; one gate open (see
 >
 > 1. **`Snapshot()` is no longer confined to non-gameplay moments** — it also runs once per activation, inside the turn loop, directly under the presentation-gated animation. The Spike Results' decision 3 ("one-shot allocation … at a non-gameplay moment; no buffer-reuse machinery is warranted") is **retracted for the checkpoint path**: the measured 21.9 ms synchronous write (~1.2 frames) and 2 MB one-shot allocation per activation are unacceptable at checkpoint cadence. **Decision (user, 2026-08-03, Option A)**: checkpoints are full self-contained saves — snapshot on the sim thread into a **double-buffered pooled buffer** (~0.61 ms measured), gzip (~30 KB at MVP) and write on a background thread with atomic replace. Mechanism detail: ADR-0004 (Battle Checkpoint Architecture, pending). Colony-mode autosaves (switch-in, battle-end) keep the one-shot stance.
 > 2. **The checkpoint must carry terrain state (full grid, standard snapshot).** "Reconstruct via mutation replay" is architecturally unavailable by this ADR's own rule 9 — the bus has no replay and terrain keeps no journal — and no player-input log exists. Combat: Targeting & Resolution is a legal TurnBased terrain writer (rule 4), so wall damage between checkpoints is exactly the state a resumed battle needs.
-> 3. **Validation criterion 5 is re-scoped**: the target-hardware re-run must additionally measure checkpoint snapshot+write at combat cadence (per-activation) with the double-buffered async path, and confirm no frame-time impact during combat. **This ADR must not be promoted to Accepted on the old criterion 5.**
+> 3. **Validation criterion 5 is re-scoped**: the target-hardware re-run must additionally measure checkpoint snapshot+write at combat cadence (per-activation) with the double-buffered async path, and confirm no frame-time impact during combat. **This ADR must not be promoted to Accepted on the old criterion 5.** *[Superseded 2026-08-07 — user decision: criterion 5 is now a post-acceptance verification item, not a promotion gate. See the Promotion note under Status. The re-run must still measure checkpoint cadence; it now happens after Accepted, before the vertical slice.]*
 >
 > The data model, facade, event contract, and all other rules are unchanged.
 
@@ -33,7 +39,7 @@ Proposed — **spike-validated 2026-07-25 on 5 of 6 criteria; one gate open (see
 
 | Field | Value |
 |-------|-------|
-| **Depends On** | ADR-0001 Time Authority (Proposed) — terrain mutations occur only inside authority-driven execution; the mutation-window assertion is provided by `TimeAuthorityManager` |
+| **Depends On** | ADR-0001 Time Authority (Accepted) — terrain mutations occur only inside authority-driven execution; the mutation-window assertion is provided by `TimeAuthorityManager` |
 | **Enables** | ADR-0003 Entity Data Ownership (entities live at `CellCoord`s; occupancy index and door boundary defined there); Pathfinding, Spatial Query/LOS, Terrain Rendering & Cutaway quick-specs; Excavation+Construction, Material-Tier Destructibility GDDs; Map Authoring quick-spec |
 | **Blocks** | Tier 0 terrain spike (implements this ADR); every system in the index that lists Terrain Data Model as a dependency (11 of 35 entries) |
 | **Ordering Note** | Proposed BEFORE the terrain spike by design; the spike validates chunk size, layout, and extraction strategy. The Terrain Data Model **GDD** additionally waits for spike numbers per the sequencing policy — this ADR is the data contract, the GDD is the gameplay-facing rules. **Shared primitives**: `CellCoord`, `ChunkCoord`, and `EntityId` live in a foundation-primitives namespace (`Hollowdeep.Core.Primitives`) that both ADR-0001 and ADR-0002 consume — neither ADR's assembly depends on the other for its types (companion correction to ADR-0001's dependency note) |
@@ -406,7 +412,7 @@ GridMap at octant 32 wins **both** axes: 2.6× fewer draw calls and ~240× cheap
 - **Zone data structure** (sparse cell sets for stockpiles/home areas) → Stockpile & Hauling quick-spec; never terrain state.
 
 ## Related Decisions
-- ADR-0001 Time Authority (Proposed) — mutation-window provider; writer-set-per-authority rule; passive-store behavior; companion edits listed in Migration Plan
+- ADR-0001 Time Authority (Accepted) — mutation-window provider; writer-set-per-authority rule; passive-store behavior; companion edits listed in Migration Plan
 - ADR-0003 Entity Data Ownership (pending) — the entity/cell boundary defined by the firewall table; door boundary; occupancy index; item/stack reservations
 - Seeded RNG ADR (pending) — terrain itself draws no RNG; map generation (Alpha) will
 - `design/gdd/systems-index.md` — cell-record mandate, God-object risk entry, cross-cutting contracts #2 and #3, CD-1/CD-5/CD-7 notes

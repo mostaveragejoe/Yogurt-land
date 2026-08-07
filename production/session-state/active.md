@@ -3,7 +3,7 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture-decision; Proposed; godot-specialist PASS WITH NOTES + TD-ADR CONCERNS all applied) — next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec. OPEN: registry update skipped (needs user approval)
+Task: ALL FOUR FOUNDATION ADRs (0001–0004) ACCEPTED as of 2026-08-07. Criterion 5 (terrain frame rate on target hardware) is now a pre-vertical-slice verification item, not a promotion gate. Next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec, and terrain-data-model GDD. OPEN: ADR-0004 registry update still skipped (needs user approval).
 <!-- /STATUS -->
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
@@ -87,7 +87,8 @@ Tier 0 FUN SPIKE: **COMPLETE — PROCEED, CD-PLAYTEST CONFIRM (2026-07-25)**.
 ## TIER 0 SPIKE GATE: COMPLETE (5/5)
 fun ✅ PROCEED · terrain ✅ · mode-switch ✅ · pathfinding ✅ · save/load ✅
 
-**RESOLVED 2026-07-26**: ADR-0001 and ADR-0003 both PROMOTED to Accepted (user decision) — reflected in the ADR docs, technical-preferences.md, and systems-index.md. Only remaining ADR gate: **ADR-0002 (and ADR-0004, which shares its criterion 5) still need the frame-rate clause re-run on target hardware** — software Vulkan (lavapipe) gave no fps signal.
+**RESOLVED 2026-07-26**: ADR-0001 and ADR-0003 both PROMOTED to Accepted (user decision).
+**RESOLVED 2026-08-07**: ADR-0002 and ADR-0004 PROMOTED to Accepted (user decision). Criterion 5 (frame rate on target hardware) is re-scoped from a promotion gate to a pre-vertical-slice verification item — CI has only software rendering (lavapipe, 3–4 fps, no real signal), and every measurable indicator passed with a large margin (32 draw calls vs 150 budget, 16 MB video memory, ~2 µs/dig). **All four foundation ADRs (0001–0004) are now Accepted.** Edited: adr-0002, adr-0004, technical-preferences.md, systems-index.md.
 
 **Next per the design order**: begin GDD authoring — `/design-system terrain-data-model` first (it was explicitly waiting on terrain-spike numbers, which now exist), then Time Authority GDD, then the quick-specs. Fold in: CD-10–CD-18, the pathfinding region-rebuild trigger + movement model, and the measured budgets.
 
