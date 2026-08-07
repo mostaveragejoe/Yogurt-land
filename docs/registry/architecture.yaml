@@ -32,6 +32,7 @@
 version: 1
 last_updated: "2026-08-07"
 # Backfilled 2026-08-07 (user approval) from ADR-0001, ADR-0002, ADR-0003, ADR-0004.
+# ADR-0005 entries added + rng_outside_authority_execution revised 2026-08-07 (user approval).
 # `added` is the registry-entry date; decision dates and full rationale live in the ADRs.
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
@@ -130,6 +131,20 @@ state_ownership:
     referenced_by:
       - docs/architecture/adr-0003-entity-data-ownership.md
       - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
+
+  - state: rng_streams
+    status: active
+    owner_system: per-stream-owner   # ADR-0005 ownership table: RaidTrigger -> Raid Trigger #18; ColonistIdentity -> Map Authoring embark path #14 (Colonist Entity #9 is a passive store, never draws); MapGeneration -> Map Authoring/procgen #35 (post-MVP); CombatResolution -> Combat Targeting & Resolution #22; CombatRaiderAi -> Combat Raider Decision-Making #23
+    adr: docs/architecture/adr-0005-seeded-rng-determinism.md
+    interface: "RngStream (PCG32 XSH-RR; NextUInt32/NextUInt64/NextInt/NextFloat01/NextBool; Snapshot()/Restore() of the 16-byte PcgState, NAMED fields only — never struct memcpy); persistent streams serialized in colony saves; encounter-scoped streams (CombatResolution, CombatRaiderAi) in battle checkpoints ONLY, each snapshotted by its owning combat system; MasterSeed serialized in the colony save, EncounterIdSource by Time Authority in both save kinds"
+    write_access: sole-drawer-per-stream   # the ownership table's "Drawn under" authority column is assertable; every Next* debug-asserts the mutation window (Tick / authority-driven resolution / load window); restore never re-derives
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng-determinism.md
+      - docs/architecture/adr-0001-time-authority-mode-switch.md   # draw-legality rule; EncounterId allocation
+      - docs/architecture/adr-0003-entity-data-ownership.md        # AppearanceSeed draw; EntityIdSource precedent; combat-transient firewall
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md   # content item 3 — checkpoint carries the combat stream states
     added: 2026-08-07
     revised: ""
 
@@ -274,6 +289,23 @@ interfaces:
     signal_signature: "IPresentationGate.IsComplete — no Godot type ever enters the authority; paces combat-interior turn advancement only (distinct from ModeTransitioned)"
     referenced_by:
       - docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+    revised: ""
+
+  - contract: rng_stream_grants
+    status: active
+    pattern: direct_call   # per-stream references handed out at the composition root — same segregation as ADR-0003's entity-store writer interfaces
+    producer: composition-root   # RngSeeder.DerivePersistent at world creation; RngSeeder.DeriveEncounterScoped inside the authority-driven Reaction-phase seam at switch-in (streams allocated once, Restore()d in place per encounter — zero allocation per battle)
+    consumers:
+      - raid-trigger                     # RaidTrigger stream
+      - map-authoring                    # ColonistIdentity embark draw (#14); MapGeneration (post-MVP #35)
+      - combat-targeting-resolution      # CombatResolution stream (TurnBased only)
+      - combat-raider-decision-making    # CombatRaiderAi stream (TurnBased only)
+    adr: docs/architecture/adr-0005-seeded-rng-determinism.md
+    signal_signature: "Each system receives ONLY its own named stream(s) per the ADR-0005 ownership table — holding an unowned stream is unrepresentable; RngStreamId enum values are explicit and NEVER renumbered (they participate in derivation); on RestoredFromCheckpoint the streams are Restore()d by ADR-0004's sanctioned restore writer, never re-derived; PresentationRng is the sole sanctioned non-sim generator"
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng-determinism.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
     added: 2026-08-07
     revised: ""
 
@@ -468,6 +500,18 @@ api_decisions:
     added: 2026-08-07
     revised: ""
 
+  - purpose: simulation_rng
+    status: active
+    api: "Hand-rolled PCG32 XSH-RR 64/32 (Hollowdeep.Core.Random) — 16-byte PcgState {State, Increment}, increment-as-stream-selector (odd, RngSeeder-set only, Restore debug-asserts), SplitMix64 seeding over (MasterSeed, RngStreamId [, EncounterId]); core multiply-add step in an explicit unchecked block; NextFloat01 via a specified bit construction; NextInt via Lemire's method"
+    not: "System.Random (seeded sequence not stable across .NET versions; state not restorable); Godot.RandomNumberGenerator (Godot dependency in core + no stream-selector primitive — fails two independent rules); xoshiro256** (2x state, jump-ahead coefficient risk unneeded at MVP scale); one global sequential stream (draw-order coupling — the exact failure mode systems-index #4 names)"
+    adr: docs/architecture/adr-0005-seeded-rng-determinism.md
+    reason: "Determinism must survive years of .NET upgrades; MasterSeed is the ONE external-entropy admission point in the game; AC-67's resumable-at-arbitrary-draw-counts reduces to serializing two named ulong fields; CI matches NextUInt32 against PCG32's published reference test vectors"
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng-determinism.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
+
   - purpose: checkpoint_file_io
     status: active
     api: ".NET System.IO + GZipStream on a background writer thread; gzip to a same-volume temp file, fsync, atomic rename/File.Replace over the slot"
@@ -538,10 +582,14 @@ forbidden_patterns:
 
   - pattern: rng_outside_authority_execution
     status: active
-    description: "Random draws occur only inside Tick() or authority-driven resolution — never in _Process, UI callbacks, or event handlers."
-    why: "Otherwise TickSequence guarantees nothing and same-seed replay/resume breaks. Constrains the Seeded RNG ADR."
-    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    # revised 2026-08-07 (ADR-0005 companion, TD-ADR A5). Old description: "Random draws occur
+    # only inside Tick() or authority-driven resolution — never in _Process, UI callbacks, or
+    # event handlers." Old why ended: "Constrains the Seeded RNG ADR."
+    description: "SIMULATION random draws occur only inside Tick(), authority-driven resolution, or the load window — never in _Process, UI callbacks, or event handlers. Governs the simulation streams in ADR-0005's ownership table only; PresentationRng (OS-seeded, never serialized, never drawn in Tick) is the sanctioned generator for views/audio/VFX noise and sits outside this rule by design."
+    why: "Otherwise TickSequence guarantees nothing and same-seed replay/resume breaks. The load-window extension (mirroring ADR-0002 rule 5) sanctions the ColonistIdentity embark draw and future MapGeneration; RngStream.Next* debug-asserts the window."
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md   # amended 2026-08-07; extension + scope defined in ADR-0005
     added: 2026-08-07
+    revised: "2026-08-07"
 
   - pattern: state_advancing_bus_handlers
     status: active
@@ -646,6 +694,13 @@ forbidden_patterns:
     description: "A Mode == TurnBased save is valid iff authored by the battle-checkpoint writer (writer-id header, refused write-side); from any other writer it is corrupt by definition."
     why: "AC-68's mechanism — without write-side refusal, a forged combat save is byte-indistinguishable from a checkpoint."
     adr: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+
+  - pattern: rng_rederivation_at_restore
+    status: active
+    description: "Checkpoint restore Restore()s combat streams from their serialized PcgState inside the load window (via ADR-0004's sanctioned restore writer); deriving from (MasterSeed, RngStreamId, EncounterId) happens at switch-in ONLY, never on the RestoredFromCheckpoint path."
+    why: "Re-derivation resets both combat streams to draw count zero and silently falsifies AC-67's determinism-vs-unquit-control guarantee — the checkpoint's 16 bytes per stream ARE the mid-battle position (TD-ADR B1)."
+    adr: docs/architecture/adr-0005-seeded-rng-determinism.md
     added: 2026-08-07
 
 # Example:

@@ -3,7 +3,7 @@
 ## Status
 **Proposed** (2026-08-07)
 
-*(Gates: godot-specialist — sound, no blocking issue; findings folded in (unchecked-arithmetic requirement, named-field serialization, reference test vectors, Alternative E, FMA note, stream pooling). TD-ADR (full mode) — CONCERNS: B1/B2/B4 and A1–A6 applied same day; B3 (reload seed policy) discharged at the ADR level — both policies one-knob cheap, identical-replay placeholder default, design pick routed to Raid Trigger #18's GDD (see §Reload seed policy). Companion edits + registry update pending user approval.)*
+*(Gates: godot-specialist — sound, no blocking issue; findings folded in (unchecked-arithmetic requirement, named-field serialization, reference test vectors, Alternative E, FMA note, stream pooling). TD-ADR (full mode) — CONCERNS: B1/B2/B4 and A1–A6 applied same day; B3 (reload seed policy) discharged at the ADR level — both policies one-knob cheap, identical-replay placeholder default, design pick routed to Raid Trigger #18's GDD (see §Reload seed policy). Companion edits + registry update applied 2026-08-07 with user approval.)*
 
 ## Date
 2026-08-07

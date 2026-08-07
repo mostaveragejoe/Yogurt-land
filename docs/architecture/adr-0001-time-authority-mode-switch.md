@@ -1,7 +1,7 @@
 # ADR-0001: Time Authority / Mode-Switch Architecture
 
 ## Status
-**Accepted** (2026-07-26, user decision) — spike-validated 61/61 · **Amended 2026-08-03** (Battle Persistence)
+**Accepted** (2026-07-26, user decision) — spike-validated 61/61 · **Amended 2026-08-03** (Battle Persistence) · **Amended 2026-08-07** (ADR-0005 companion: RNG rule gains the load window; `EncounterId` widens `int` → `long` and gains its allocator, `EncounterIdSource` — edits marked in place)
 
 *(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes, promoted once the mode-switch spike validated the architecture — see **Spike Results (2026-07-26)** below. All four testable validation criteria pass; criterion 5 remains a six-month review item. Two corrections were applied at promotion, neither structural: the mutation window must be a struct scope, and pre-switch normalization decides against the decision set rather than live occupancy.)*
 
@@ -35,7 +35,7 @@
 | Field | Value |
 |-------|-------|
 | **Depends On** | None (first ADR, Foundation layer). Primitive types this ADR references (`CellCoord`, `EntityId`) live in the shared foundation-primitives namespace (`Hollowdeep.Core.Primitives`, defined jointly with ADR-0002) — this ADR does not depend on the terrain assembly. *(Corrected 2026-07-24 with ADR-0002 to remove a circular type-ownership implication.)* |
-| **Enables** | ADR-0002 (Terrain Data Model), ADR-0003 (Entity Data Ownership), the Seeded RNG ADR (constrained by this ADR: draws only inside authority-driven execution), Save/Load contract (mode invariant defined here) |
+| **Enables** | ADR-0002 (Terrain Data Model), ADR-0003 (Entity Data Ownership), ADR-0005 (Seeded RNG / Determinism — constrained by this ADR: draws only inside authority-driven execution or the load window), Save/Load contract (mode invariant defined here) |
 | **Blocks** | All simulation-bearing GDDs/quick-specs (their mandatory "Behavior under each time authority" sections are written against this contract); the Tier 0 mode-switch spike implements this ADR |
 | **Ordering Note** | Written as Proposed BEFORE the Tier 0 spikes by design; the spike validates rather than precedes it. Physics-body specifics (Jolt default since 4.6, `HingeJoint3D.damp` GodotPhysics-only) are NOT relevant to this ADR but become relevant in ADR-0002/0003 territory — re-check `breaking-changes.md` there. |
 
@@ -116,7 +116,11 @@ public sealed class TimeAuthorityManager
 }
 
 public readonly record struct SwitchTransitionData(
-    int EncounterId,
+    long EncounterId,   // [amended 2026-08-07, ADR-0005] widened int -> long; allocated by
+                        // TimeAuthorityManager at RequestSwitch acceptance from EncounterIdSource
+                        // (monotonic from 1, never reused, serialized by Time Authority in both
+                        // colony saves and battle checkpoints — mirrors EntityIdSource, ADR-0003).
+                        // The requester never supplies or sees the counter.
     SwitchTriggerReason TriggerReason,
     IReadOnlyList<CellCoord> BreachCells,
     IReadOnlyList<EntityId> ParticipantIds);
@@ -147,7 +151,7 @@ public interface IPresentationGate      // plain C#; view layer satisfies it, te
 - The **inactive** authority's systems receive **zero Tick calls** — true pause.
 - **Events are orthogonal to ticks**: paused systems still receive World Change Event Bus events, but ALL bus handlers (paused or not) are restricted to **idempotent bookkeeping** — invalidate a cached path, mark a reservation stale, dirty a chunk. Handlers never advance simulation state; ticking is the only channel that advances state.
 - **Re-entrancy**: `RequestSwitch` from inside any Tick or transition handler is deferred to end-of-dispatch (`DeferredMidDispatch`). The manager enforces the single-encounter invariant itself — it rejects, never queues. While deferred, `SwitchPending`/`PendingSwitchTarget` expose the accepted-but-pending switch so Reaction-phase systems can run pre-switch work inside that same dispatch — the ordinary mutation window; ADR-0003's placement normalization is the defined consumer.
-- **RNG rule (constraint on the Seeded RNG ADR)**: random draws occur only inside `Tick()` or authority-driven resolution — never in `_Process`, UI callbacks, or event handlers. Otherwise `TickSequence` guarantees nothing.
+- **RNG rule (constraint on ADR-0005, Seeded RNG)**: random draws occur only inside `Tick()`, authority-driven resolution, or the load window *[amended 2026-08-07 — the load-window extension mirrors ADR-0002 rule 5's existing carve-out; sanctions the `ColonistIdentity` embark draw and future `MapGeneration`]* — never in `_Process`, UI callbacks, or event handlers. Otherwise `TickSequence` guarantees nothing.
 - **DeltaSeconds=0 rule**: systems that integrate `rate * DeltaSeconds` must not register with the TurnBased authority — a debug assertion flags any TurnBased-registered system reading DeltaSeconds. Silent no-op integration is a bug class that presents as "the game is subtly wrong."
 
 ### The mode switch (atomic, between dispatches)
@@ -306,7 +310,7 @@ Also regression-locked: inactive authority receives **zero** ticks (colony fully
 ## Related Decisions
 - ADR-0002 Terrain Data Model (pending — single source of truth across the switch)
 - ADR-0003 Entity Data Ownership (pending — per-entity sim state as plain data; write-ownership table)
-- Seeded RNG ADR (pending — constrained by the draws-only-inside-Tick rule)
+- ADR-0005 Seeded RNG / Determinism (Proposed 2026-08-07) — companion amendments applied here: the RNG rule's load-window extension; `EncounterId` `int` → `long` with `EncounterIdSource` allocation
 - `design/gdd/systems-index.md` — Cross-Cutting Contracts annex; CD-9 (save half overturned by Battle Persistence 2026-08-02; battle-length half stands)
 - ADR-0004 Battle Checkpoint Architecture (pending — checkpoint content scope, cadence, Option A write mechanism, the `RestoredFromCheckpoint` resume path, ordering invariants)
 - `design/gdd/game-concept.md` — mode-switch named as permanent integration tax

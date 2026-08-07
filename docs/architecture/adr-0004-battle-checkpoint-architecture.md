@@ -21,7 +21,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Depends On** | ADR-0001 (Accepted, amended 2026-08-03 — snapshot contract and resume path delegated here); ADR-0002 (Proposed, amended — `TerrainSnapshot` reuse, buffer strategy); ADR-0003 (Accepted, amended — side-table serialization, occupancy rebuild); **Seeded RNG ADR (pending)** for item 3 of the content scope — this ADR reserves the slot, that ADR defines the stream format |
+| **Depends On** | ADR-0001 (Accepted, amended 2026-08-03 — snapshot contract and resume path delegated here); ADR-0002 (Proposed, amended — `TerrainSnapshot` reuse, buffer strategy); ADR-0003 (Accepted, amended — side-table serialization, occupancy rebuild); **ADR-0005 Seeded RNG (Proposed 2026-08-07)** for item 3 of the content scope — the reserved slot is discharged; ADR-0005 defines the stream format |
 | **Enables** | Save/Load quick-spec (#6); all battle-checkpoint stories; GDD AC-67's determinism test |
 | **Blocks** | Save/Load quick-spec (#6) — it must not be specced before this ADR and the Seeded RNG ADR exist |
 | **Ordering Note** | The non-RNG scope is implementable before the Seeded RNG ADR lands; AC-67 (deterministic resume) needs both. Do not promote ADR-0002 until checkpoint cadence is measured on target hardware. |
@@ -54,7 +54,7 @@ The Battle Persistence ruling (user, 2026-08-02) requires one rolling, non-selec
 |---|---------|--------------|-------|
 | 1 | Encounter side tables, by owner: Turn Order (initiative/order), Action Economy (AP), Targeting (locks, overwatch) | Their owning combat systems | Into the checkpoint only — never colony saves (ADR-0003 amendment, owner-scoped wording mirrored per its binding constraint) |
 | 2 | `TurnBasedAuthority` state | Time Authority | State-machine position and current/next actor, beyond `{Mode, TurnIndex, TickSequence}` — the ADR-0001 contract extension |
-| 3 | Combat RNG streams | Seeded RNG owner | Resumable at arbitrary draw counts — format owned by the Seeded RNG ADR |
+| 3 | Combat RNG streams (`CombatResolution`, `CombatRaiderAi`) | Each stream's owning combat system *(wording corrected 2026-08-07 per ADR-0003's binding side-table constraint — there is no central "RNG module" serializer)* | **Discharged 2026-08-07 by ADR-0005**: 16-byte `PcgState` per stream, resumable at arbitrary draw counts; restore `Restore()`s serialized state and never re-derives |
 | 4 | Encounter framing | Time Authority | `EncounterId`, `BreachCells`, `ParticipantIds` — promoted from transient to serialized |
 | 5 | `RaiderStore` in its entirety | Entity stores | "Adds zero records" is a colony-save-only property now |
 | 6 | Un-reaped `IsDead` colonists and `IsBroken` doors | Entity stores | Legal serialized states; **the load path never reaps** — reaping stays reconcile's job |
@@ -148,7 +148,7 @@ return to turn loop (~0.6 ms + KBs)   ┘    gzip (~30 KB at MVP)
 - **Cross-thread buffer handoff bug** (torn snapshot) — mitigated: single handoff point, lock/interlocked discipline, headless stress test
 - **`File.Replace`/rename atomicity differs per OS** — mitigated: verification item; the fallback (write-temp + delete + rename) is loud-fail safe
 - **Corruption fallback reaches the pre-battle state** — accepted and bounded: loud, explicit, and only via disk failure or tampering (outside the design's threat model)
-- **RNG streams not yet specified** — bounded: content slot reserved; Seeded RNG ADR is blocking for Save/Load #6
+- **RNG streams not yet specified** — *discharged 2026-08-07: ADR-0005 defines the format (16-byte `PcgState`, encounter-scoped derivation, restore-never-rederives)*; ADR-0005's own promotion still gates Save/Load #6
 - **Editor-only: C# hot reload can tear down the assembly context mid-write** — a background write in flight when the editor reloads assemblies references a dying `AssemblyLoadContext`. Dev-iteration hazard only (exported builds have no hot reload); mitigation lands in Save/Load #6's composition-root wiring: quiesce/join the writer before reload, or recreate the pool cleanly on reload
 - **Player-initiated quit MUST flush and join the writer** — atomic replace guarantees the slot is *valid*, not *current*. Quitting with an unjoined writer can lose the newest resolved activation: a small non-deterministic scum window on an outcome the player just watched, which is the exact regression Battle Persistence exists to close (GDD AC-45). The quit-confirmation dialog already provides the wall-clock cover for the join. "Atomic replace alone" is the guarantee for the crash/kill case only, where lag is unavoidable and accepted. The `NOTIFICATION_WM_CLOSE_REQUEST` hook that routes window-close through this join is therefore part of the requirement, not a nice-to-have
 - **Steam Cloud sync churn** — 150–300 same-file replacements per battle generate that many change events for the cloud-sync watcher, and possibly conflict prompts under multi-machine play. The rolling checkpoint slot should be excluded from Steam Cloud (or debounced) — routed to whoever configures cloud-file inclusion at release setup
@@ -191,7 +191,7 @@ Nothing ships yet — the save/load spike validated the colony path only. Save/L
 ## Related Decisions
 - ADR-0001/0002/0003 — Amendments 2026-08-03 (Battle Persistence); this ADR discharges the obligations they delegate
 - `docs/architecture/change-impact-2026-08-03-time-authority-mode-switch.md` — decision record this ADR implements (§3, §4)
-- Seeded RNG ADR (pending) — owns stream format; blocking for Save/Load #6
+- ADR-0005 Seeded RNG / Determinism (Proposed 2026-08-07) — owns stream format; content item 3 discharged; AC-67's RNG half now specified
 - Cross-cutting contract #2 (serialization) — mode-tagging rule as amended
 - ~~Open design hole routed to creative-director: colony manual saves still allow pre-raid reload~~ **Resolved 2026-08-07 (user decision)**: accepted for MVP as reload freedom; optional ironman mode stays a Save/Load #6 candidate
 
