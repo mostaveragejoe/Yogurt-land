@@ -3,8 +3,15 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture-decision; Proposed; godot-specialist PASS WITH NOTES + TD-ADR CONCERNS all applied) — next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec. OPEN: registry update skipped (needs user approval)
+Task: 2026-08-07 decisions session DONE (registry backfilled; OQ #1 + save-scum stance resolved and recorded) — next: Seeded RNG ADR (blocking Save/Load #6), then the Colonist Entity quick-spec
 <!-- /STATUS -->
+
+## DECISIONS SESSION 2026-08-07 (three user decisions, all recorded to file)
+
+1. **Architecture registry backfilled — `docs/registry/architecture.yaml`** (user approved "all 4 ADRs"): 8 state-ownership rows, 8 interface contracts, 5 performance budgets, 8 API decisions, 19 forbidden patterns extracted from ADR-0001/0002/0003/0004. The ADR-0004 open registry item is CLOSED. Note: earlier sessions pointed at `design/registry/` — the correct target was always `docs/registry/architecture.yaml` (`design/registry/entities.yaml` is the GDD game-world registry, still empty by design).
+2. **Save-scum stance: pre-raid reload via colony manual saves ACCEPTED for MVP** (reload freedom = genre default; optional ironman mode stays a Save/Load #6 candidate). Time-authority GDD's Player Fantasy + EC-8 "no longer reachable by any player action" absolutism replaced with one honest scope statement covering both the manual-save reload and ADR-0004's corrupt-checkpoint fallback (ADR-0004 routed correction 3 — DISCHARGED). Save/Load #6 scope unchanged.
+3. **OQ #1 RESOLVED: post-battle time advances by battle duration** — turns elapsed × `TurnDuration`, a new Tuning Knob (5 game-minutes/turn, provisional, `0` = zero-elapsed), applied as catch-up sub-steps at return. AC-59 re-authored (rule now exists; blocked only on Needs implementation); Needs (#13) dependency row updated — decay catch-up math and the catch-up execution bound (300 sub-steps/turn; a 20-turn battle = 6,000 sub-steps inside the return beat, batched vs. amortized) land with the Needs GDD. ADR-0001 unchanged (fixed-dt kept both options open by design).
+- **Cross-ref sweep NOT done (not approved this session)**: ADR-0001's Open Questions still route the post-battle question to creative-director; `change-impact-2026-08-03` §5 and ADR-0004 Related Decisions still call the save-scum hole open. Small staleness — resolutions are recorded in the GDD + here; sweep them at the next ADR touch or via /propagate-design-change.
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
 
@@ -126,5 +133,5 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 - production/session-state/active.md (this file)
 
 ## Open Questions
-- Post-battle time: resume as zero-elapsed vs. advance by battle duration — route to creative-director BEFORE Needs & Simulation GDD (both stay possible under ADR-0001's fixed-dt sub-stepping)
+- ~~Post-battle time~~ — RESOLVED 2026-08-07 (user): advance by battle duration, `TurnDuration` = 5 game-minutes/turn, provisional (see Decisions Session 2026-08-07)
 - Working-hours assumption (full-time vs evenings) — timeline bands double if part-time

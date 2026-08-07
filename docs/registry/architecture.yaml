@@ -30,7 +30,9 @@
 #   Superseded entries:     Grep pattern="status: superseded"
 
 version: 1
-last_updated: ""
+last_updated: "2026-08-07"
+# Backfilled 2026-08-07 (user approval) from ADR-0001, ADR-0002, ADR-0003, ADR-0004.
+# `added` is the registry-entry date; decision dates and full rationale live in the ADRs.
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
 # Who is the authoritative owner of each piece of shared game state.
@@ -43,7 +45,105 @@ last_updated: ""
 # interface: how other systems access this state (read-only property, method call,
 #   signal, shared resource, etc.) — this is the contract other ADRs depend on.
 
-state_ownership: []
+state_ownership:
+  - state: time_authority_mode
+    status: active
+    owner_system: time-authority
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    interface: "TimeContext {Mode, DeltaSeconds, TurnIndex, TickSequence} passed by value into every Tick(); TimeAuthorityManager.CurrentMode / SwitchPending / PendingSwitchTarget read-only; Snapshot()/Restore() for saves"
+    write_access: time-authority-manager-only   # mode changes via RequestSwitch; the checkpoint restore path (ADR-0004) is the one sanctioned non-RequestSwitch entry into TurnBased
+    referenced_by:
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+      - docs/architecture/adr-0003-entity-data-ownership.md    # mode assertions on writers
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
+
+  - state: terrain_cells
+    status: active
+    owner_system: terrain-data-model
+    adr: docs/architecture/adr-0002-terrain-data-model.md
+    interface: "TerrainWorld facade — GetCell/GetChunkCells reads (copies/read-only spans only); writes via the facade write methods inside the mutation window; one TerrainChangeBatch published per mutating call; Revision for O(1) change detection"
+    write_access: per-authority-writer-set   # RealTime: Excavation, Construction, Repair & Rebuild; TurnBased: Combat Targeting & Resolution only; load window: Map Authoring / Restore (ADR-0002 rule 4)
+    referenced_by:
+      - docs/architecture/adr-0002-terrain-data-model.md
+      - docs/architecture/adr-0001-time-authority-mode-switch.md   # mutation window provider
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md   # checkpoint carries full grid
+    added: 2026-08-07
+    revised: ""
+
+  - state: entity_store_field_groups
+    status: active
+    owner_system: entity-layer   # ColonistStore, RaiderStore, ItemStore, DoorStore
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    interface: "Typed plain-C# stores keyed by EntityId; read access for everyone; writes only through per-(system x field group) writer interfaces granted at the composition root; ADR-0003's write-ownership table is the single authority on grants"
+    write_access: ownership-table-only   # every write debug-asserts mutation window + active mode (where authority-split) + id kind
+    referenced_by:
+      - docs/architecture/adr-0003-entity-data-ownership.md
+      - docs/architecture/adr-0001-time-authority-mode-switch.md   # reconcile duties
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md   # checkpoint restore = distinct sanctioned writer
+    added: 2026-08-07
+    revised: ""
+
+  - state: unit_health
+    status: active
+    owner_system: writer-per-authority   # Needs & Simulation under RealTime; Combat Targeting & Resolution under TurnBased
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    interface: "Authority-tagged health writer interfaces; store debug-asserts active mode; Hp reaching 0 sets IsDead in the same lethal write (no separate death writer); the store internally releases dead units from occupancy"
+    write_access: one-writer-per-mode   # the decided Combat-vs-Needs arbitration; neither system ever calls the other
+    referenced_by:
+      - docs/architecture/adr-0003-entity-data-ownership.md
+      - docs/architecture/adr-0001-time-authority-mode-switch.md   # mode exclusivity makes it sound
+    added: 2026-08-07
+    revised: ""
+
+  - state: unit_occupancy
+    status: active
+    owner_system: entity-layer   # UnitOccupancyIndex — derived bookkeeping, never serialized
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    interface: "CellCoord -> living unit EntityId(s); multi-occupant results in ascending EntityId order; exclusive under TurnBased (hard invariant), advisory under RealTime; rebuilt from stores on load (dead units filtered — ADR-0004)"
+    write_access: store-internal-only   # only the unit stores' position/death handling updates it, atomically with the store write
+    referenced_by:
+      - docs/architecture/adr-0003-entity-data-ownership.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
+
+  - state: stack_reservations
+    status: active
+    owner_system: stockpile-and-hauling   # StackReservationTable — sparse side table
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    interface: "Stack id -> reserving job + reserved qty; gates ItemStore.ConsumeFromStack (consume requires a live reservation); owner exposes ReleaseAllHeldBy(EntityId) for PostEncounterReconcile"
+    write_access: stockpile-and-hauling-only   # never an ItemStore field, never terrain's Flags bit
+    referenced_by:
+      - docs/architecture/adr-0003-entity-data-ownership.md
+      - docs/architecture/adr-0002-terrain-data-model.md   # firewall pre-assignment
+    added: 2026-08-07
+    revised: ""
+
+  - state: combat_transient_state
+    status: active
+    owner_system: combat-systems   # encounter-scoped side tables: Turn Order (initiative/order), Action Economy (AP), Targeting (locks/overwatch)
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    interface: "Encounter-scoped side tables keyed by EntityId, created at switch-in, discarded at battle end; checkpoint-grade Snapshot()/Restore() on the owners, invoked by the checkpoint writer only (Amendment 2026-08-03)"
+    write_access: owning-combat-system-only   # never a store field; never in a colony-mode save; serialized only into the battle checkpoint by its owners
+    referenced_by:
+      - docs/architecture/adr-0003-entity-data-ownership.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
+
+  - state: battle_checkpoint_slot
+    status: active
+    owner_system: battle-checkpoint-writer
+    adr: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    interface: "Single rolling non-selectable slot; full self-contained save tagged Mode == TurnBased with a writer-id header; one snapshot per resolved activation at the AwaitingPresentation -> NextActor beat, plus activation 0 post-swap; disk converges to newest (coalesce-newest)"
+    write_access: checkpoint-writer-only   # the sole legal author of a combat-mode save; write-side refusal of any other writer is AC-68's mechanism
+    referenced_by:
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+    revised: ""
 
 # Example:
 #
@@ -71,7 +171,127 @@ state_ownership: []
 #
 # pattern options: signal | direct_call | event_bus | shared_resource | rpc | none
 
-interfaces: []
+interfaces:
+  - contract: simulation_tick
+    status: active
+    pattern: direct_call
+    producer: time-authority   # the active authority dispatches
+    consumers:
+      - all-simulation-systems   # registered via Register(system, authority, phase, priority)
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    signal_signature: "ITickable.Tick(TimeContext) — deterministic (TickPhase, priority, registration) order; the ONLY sanctioned simulation-update path; _Process is presentation-only"
+    referenced_by:
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+      - docs/architecture/adr-0002-terrain-data-model.md
+      - docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+    revised: ""
+
+  - contract: mode_switch_request
+    status: active
+    pattern: direct_call
+    producer: raid-trigger   # sole requester of the switch IN; the Combat set is the sole requester of the switch back
+    consumers:
+      - time-authority   # RequestSwitch(target, SwitchTransitionData) -> SwitchResult; rejects, never queues
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    signal_signature: "SwitchTransitionData carries encounter FRAMING only (EncounterId, TriggerReason, BreachCells, ParticipantIds) — never entity state; checkpoint restore must NOT route through RequestSwitch (ADR-0004)"
+    referenced_by:
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
+
+  - contract: mode_transition_notification
+    status: active
+    pattern: signal   # direct manager event with declared handler order — NOT on the World Change Event Bus
+    producer: time-authority
+    consumers:
+      - combat-ui        # receives encounter context before the camera reframes
+      - view-layer       # view-freeze contract: hold self-driven animation on RealTime->TurnBased, resume on return
+      - simulation-systems-as-needed
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    signal_signature: "ModeTransitioned(ModeTransition) — ordered handlers; fires with reason RestoredFromCheckpoint on checkpoint load (ADR-0004)"
+    referenced_by:
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
+
+  - contract: terrain_change_events
+    status: active
+    pattern: event_bus   # the World Change Event Bus — a dumb synchronous dispatcher; no queueing, no replay
+    producer: terrain-data-model   # Terrain is the bus's ONE publisher, ever
+    consumers:
+      - pathfinding        # invalidate regions/paths
+      - job-assignment     # flag jobs on changed cells
+      - terrain-rendering  # dirty ChunkOf(cell)
+    adr: docs/architecture/adr-0002-terrain-data-model.md
+    signal_signature: "Publish(in TerrainChangeBatch) — ref struct, valid only during the call, Previous state included; PublishWorldReloaded() for non-incremental population; ALL handlers are idempotent bookkeeping only"
+    referenced_by:
+      - docs/architecture/adr-0002-terrain-data-model.md
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+    revised: ""
+
+  - contract: entity_change_notification
+    status: active
+    pattern: shared_resource   # Revision polling — deliberately NO entity event bus
+    producer: entity-layer   # every store + UnitOccupancyIndex exposes a monotonic Revision
+    consumers:
+      - pathfinding   # polls per dispatch
+      - views         # poll per frame, diff for spawn/despawn
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    signal_signature: "long Revision (+1 per mutating call, +1 on Restore; runtime-only, never serialized); consumers rescan what they cache; upgrade trigger: ~5x growth in colonists/path length/dig rate"
+    referenced_by:
+      - docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+    revised: ""
+
+  - contract: encounter_outcome_delivery
+    status: active
+    pattern: shared_resource   # one-slot inbox — breaks the Combat <-> Veterancy cycle
+    producer: combat-turn-order   # writes exactly once per encounter at battle end
+    consumers:
+      - identity-bookkeeping   # BattlesSurvived++ for survivors (MVP)
+      - notifications          # named death + death cell, CD-4 (MVP)
+      - veterancy              # sole writer of skill fields (VS)
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    signal_signature: "EncounterOutcomeReport {EncounterId, ParticipantIds, per-participant outcome, raid result} via EncounterOutcomeInbox; drained by PostEncounterReconcile under ADR-0001 phase/priority ordering; never serialized (provably empty at every checkpoint — ADR-0004)"
+    referenced_by:
+      - docs/architecture/adr-0003-entity-data-ownership.md
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
+
+  - contract: presentation_gating
+    status: active
+    pattern: shared_resource   # plain-C# interface satisfied by the view layer; stubbed in headless tests
+    producer: view-layer
+    consumers:
+      - time-authority   # TurnBasedAuthority gates turn advancement on IsComplete
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    signal_signature: "IPresentationGate.IsComplete — no Godot type ever enters the authority; paces combat-interior turn advancement only (distinct from ModeTransitioned)"
+    referenced_by:
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+    revised: ""
+
+  - contract: checkpoint_snapshot_into
+    status: active
+    pattern: direct_call   # caller-buffer obligation on ADR-0002/0003 stores — a contract obligation, not an aspiration
+    producer: battle-checkpoint-writer
+    consumers:
+      - terrain-data-model   # TerrainWorld gains a SnapshotInto(IBufferWriter<byte>)-style overload
+      - entity-layer         # stores + side-table owners likewise
+    adr: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    signal_signature: "SnapshotInto(caller buffer) for the per-activation checkpoint path (double-buffered pooled buffers, ~0.6 ms on the sim thread); the allocating Snapshot() remains the colony-save path only — calling it per activation re-creates the 2 MB/activation LOH regression"
+    referenced_by:
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+      - docs/architecture/adr-0002-terrain-data-model.md
+      - docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+    revised: ""
 
 # Example:
 #
@@ -100,7 +320,55 @@ interfaces: []
 # Register a budget when an ADR explicitly claims a frame time allocation.
 # The registry lets /architecture-review verify the total doesn't exceed the target.
 
-performance_budgets: []
+performance_budgets:
+  - target_fps: 60
+    total_frame_budget_ms: 16.6
+    platform: PC
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md   # stated as a constraint; canonical numbers live in .claude/docs/technical-preferences.md
+    added: 2026-08-07
+    revised: ""
+
+  - system: terrain-rendering
+    status: active
+    budget_ms: 0
+    adr: docs/architecture/adr-0002-terrain-data-model.md
+    notes: "Draw-call budget, not ms: <= 150 terrain draw calls for the visible 3-layer cutaway (measured 32 at octant 32, one style per tier); ~8 style variants per tier is the variety ceiling; provisional 500 draw-call whole-frame ceiling. cell_octant_size MUST equal TerrainWorld.ChunkSize (both 32) — locked invariant"
+    referenced_by:
+      - docs/architecture/adr-0002-terrain-data-model.md
+    added: 2026-08-07
+    revised: ""
+
+  - system: terrain-data-model
+    status: active
+    budget_ms: 0
+    adr: docs/architecture/adr-0002-terrain-data-model.md
+    notes: "Memory: 2 MB cell data at MVP (128x128x16), 16 MB full-vision (256x256x32); chunks 8 KB, off the Large Object Heap by construction; render/video memory 14.25-16.42 MB for the 3-layer cutaway (measured)"
+    referenced_by:
+      - docs/architecture/adr-0002-terrain-data-model.md
+    added: 2026-08-07
+    revised: ""
+
+  - system: all-simulation
+    status: active
+    budget_ms: 0
+    adr: docs/architecture/adr-0002-terrain-data-model.md   # policy asserted jointly by ADR-0001/0002/0003; measured by the Tier 0 spikes
+    notes: "ZERO steady-state allocation in the simulation path — a measured, enforceable standard (0.17 B/mutation, 0 Gen0 over 60k mutations; 0.00 B/sub-step over 20k sub-steps). Regressions are bugs. MutationWindow.Open() must return a readonly struct scope (a class scope boxes 24 B/dispatch)"
+    referenced_by:
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+      - docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+    revised: ""
+
+  - system: battle-checkpoint
+    status: active
+    budget_ms: 0.6
+    adr: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    notes: "Sim-thread cost per resolved activation: ~0.6 ms snapshot inside the post-resolution beat, zero steady-state allocation; gzip+write (~20-30 ms) on a background thread, never the sim thread; +~4 MB pooled buffers resident during battles. Gate: checkpoint cost never appears in the combat frame-time profile on target hardware — the shared promotion gate for ADR-0002 and ADR-0004"
+    referenced_by:
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+      - docs/architecture/adr-0002-terrain-data-model.md
+    added: 2026-08-07
+    revised: ""
 
 # Example:
 #
@@ -131,7 +399,96 @@ performance_budgets: []
 # Register an API decision when the choice is non-obvious and other ADRs might
 # make a different choice for the same purpose without knowing this was decided.
 
-api_decisions: []
+api_decisions:
+  - purpose: gameplay_pause
+    status: active
+    api: "RealTimeAuthority at zero sub-steps (speed 0)"
+    not: SceneTree.paused   # reserved for a possible future UI-pause layer; two competing pause mechanisms are forbidden
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    reason: "Engine pause is a pause primitive, not a scheduler; gameplay pause must stay inside the authority model so raids, timers, and determinism behave"
+    referenced_by:
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+    revised: ""
+
+  - purpose: game_speed
+    status: active
+    api: "Fixed-dt sub-stepping — speed multiplies the sub-step count N, dt constant (1/60 s)"
+    not: delta-scaling   # banned: destroys fixed-step determinism and would have closed off post-battle time catch-up
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    reason: "Determinism + the catch-up option; spike-proven: adding a speed touches zero ITickable implementations"
+    referenced_by:
+      - docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+    revised: ""
+
+  - purpose: mutation_window_scope
+    status: active
+    api: "MutationWindow.Open() returns a depth-counted readonly struct scope"
+    not: "IDisposable class scope"   # boxes 24 B on every dispatch — measured violation of the zero-allocation standard
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    reason: "Spike Correction 1; `using` on a known struct type does not box; the allocation assertion belongs in CI"
+    referenced_by:
+      - docs/architecture/adr-0002-terrain-data-model.md
+      - docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+    revised: ""
+
+  - purpose: entity_identity
+    status: active
+    api: "EntityId(long Value), 0 = None; monotonic per world via a serialized EntityIdSource; NEVER reused; one id space across all kinds"
+    not: "ulong ids, per-kind id spaces, id reuse/free-lists"
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    reason: "long crosses the Godot C# Variant boundary without conversion; the serialized counter IS the non-reuse guarantee; dangling ids legally resolve to nothing"
+    referenced_by:
+      - docs/architecture/adr-0002-terrain-data-model.md   # shared primitives namespace
+      - docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+    revised: ""
+
+  - purpose: terrain_chunk_mapping
+    status: active
+    api: "TerrainWorld.ChunkOf() / TerrainWorld.ChunkSize — the only sanctioned CellCoord -> chunk mapping"
+    not: "caller-side shift/mask constants"
+    adr: docs/architecture/adr-0002-terrain-data-model.md
+    reason: "Chunk size is a queryable tunable; hardcoded caller math breaks silently if it is ever retuned"
+    referenced_by:
+      - docs/architecture/adr-0002-terrain-data-model.md
+    added: 2026-08-07
+    revised: ""
+
+  - purpose: terrain_render_backend
+    status: active
+    api: "Two stacked GridMaps (wall map + floor map) at cell_octant_size = 32, both pure write targets fed from TerrainWorld"
+    not: "GridMap as authoritative store; MultiMesh (measured ~240x worse per-dig update, 2.6x more draw calls)"
+    adr: docs/architecture/adr-0002-terrain-data-model.md
+    reason: "Spike-measured 2026-07-25/26: 32 draw calls, ~2 us/dig, +2.17 MB video memory for the floor map; future per-cell visual layers = more stacked maps"
+    referenced_by:
+      - docs/architecture/adr-0002-terrain-data-model.md
+    added: 2026-08-07
+    revised: ""
+
+  - purpose: checkpoint_file_io
+    status: active
+    api: ".NET System.IO + GZipStream on a background writer thread; gzip to a same-volume temp file, fsync, atomic rename/File.Replace over the slot"
+    not: "Godot FileAccess; sim-thread writes; cross-volume temp files (rename atomicity silently breaks)"
+    adr: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    reason: "Plain-C# core has zero Godot references; the sim thread never blocks on disk; a kill at any instant leaves a valid old or new file. Save-directory path is resolved once at the Godot-side composition root and handed to the core as a string"
+    referenced_by:
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
+
+  - purpose: save_ordering
+    status: active
+    api: "In-file monotonic stamp (TickSequence + save ordinal); newest-valid-save load across slots"
+    not: filesystem-mtime   # fragile against clock changes and Steam Cloud restores
+    adr: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    reason: "mtime ordering is what would let a resurrected checkpoint outrank the battle-end save"
+    referenced_by:
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
 
 # Example:
 #
@@ -157,7 +514,139 @@ api_decisions: []
 # Register a pattern when an ADR explicitly bans it AND other ADRs might
 # unknowingly use it (i.e., it's a tempting but wrong approach for this project).
 
-forbidden_patterns: []
+forbidden_patterns:
+  - pattern: scene_tree_paused_in_simulation_path
+    status: active
+    description: "Gameplay pause is RealTimeAuthority at zero sub-steps; SceneTree.paused is reserved for a future UI-pause layer only."
+    why: "Two competing pause mechanisms desync timers, raids, and determinism."
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+
+  - pattern: simulation_logic_in_process_callbacks
+    status: active
+    description: "ITickable.Tick() is the only sanctioned simulation-update path; _Process/_PhysicsProcess are presentation-only."
+    why: "Sim logic in Node callbacks is not headlessly testable, escapes the authority model, and entangles save state with the scene tree."
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+
+  - pattern: delta_scaling_for_game_speed
+    status: active
+    description: "Speed multiplies the fixed-dt sub-step count; it never scales dt."
+    why: "Delta-scaling breaks fixed-step determinism and closes off post-battle time catch-up."
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+
+  - pattern: rng_outside_authority_execution
+    status: active
+    description: "Random draws occur only inside Tick() or authority-driven resolution — never in _Process, UI callbacks, or event handlers."
+    why: "Otherwise TickSequence guarantees nothing and same-seed replay/resume breaks. Constrains the Seeded RNG ADR."
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+
+  - pattern: state_advancing_bus_handlers
+    status: active
+    description: "World Change Event Bus handlers do idempotent bookkeeping only (invalidate, mark stale, dirty); ticking is the only channel that advances simulation state."
+    why: "State-advancing handlers create hidden update ordering and break the paused-systems-still-receive-events rule."
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+
+  - pattern: entity_state_in_switch_envelope
+    status: active
+    description: "SwitchTransitionData carries encounter framing only; any field duplicating Terrain or entity-store state is state conversion creeping back in."
+    why: "Field creep rebuilds the rejected two-representations architecture one convenience field at a time."
+    adr: docs/architecture/adr-0001-time-authority-mode-switch.md
+    added: 2026-08-07
+
+  - pattern: per_entity_sim_state_as_nodes
+    status: active
+    description: "Per-entity simulation state is plain data in typed stores; Godot Nodes are views that bind by EntityId and write nothing."
+    why: "Entity state on Nodes kills headless testing, ties lifecycle to the scene tree, and compromises the save format."
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+
+  - pattern: terrain_writes_outside_mutation_window
+    status: active
+    description: "TerrainWorld mutations happen only inside authority-driven execution or the load window — never from UI callbacks or bus handlers (debug-asserted; Publish-on-stack also asserted)."
+    why: "One mechanism catches both forbidden write paths; without it the single-write-path guarantee is convention only."
+    adr: docs/architecture/adr-0002-terrain-data-model.md
+    added: 2026-08-07
+
+  - pattern: cell_fields_beyond_architecture
+    status: active
+    description: "TerrainCell describes the architecture only; occupants, plans, zones, and combat state live with their firewall-table owners."
+    why: "The God-object firewall — cell-struct field creep is the named growth risk for the highest-fan-out system."
+    adr: docs/architecture/adr-0002-terrain-data-model.md
+    added: 2026-08-07
+
+  - pattern: retained_terrain_change_batch
+    status: active
+    description: "TerrainChangeBatch is pooled and valid only for the duration of Publish; handlers copy primitives out synchronously. The ref struct makes retention a compile error."
+    why: "The buffer is reused on the next mutation; a retained batch is silent corruption."
+    adr: docs/architecture/adr-0002-terrain-data-model.md
+    added: 2026-08-07
+
+  - pattern: gridmap_as_authoritative_terrain
+    status: active
+    description: "The terrain model is plain C#; GridMap (or any Node) is at most a render backend reading from it."
+    why: "Node-held state breaks headless tests, the serialization contract, and the zero-conversion mode switch."
+    adr: docs/architecture/adr-0002-terrain-data-model.md
+    added: 2026-08-07
+
+  - pattern: entity_writes_outside_writer_interfaces
+    status: active
+    description: "Store mutation exists only through per-(system x field group) writer interfaces granted at the composition root; every write debug-asserts window, mode (where authority-split), and id kind."
+    why: "Runtime-only enforcement fails silently in unexercised paths; compile-time unrepresentability keeps the ownership table true."
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+
+  - pattern: combat_transient_state_in_stores
+    status: active
+    description: "Anything meaningless outside an encounter (initiative, AP, target locks, overwatch) lives in encounter-scoped side tables, never in stores, never in a colony save; serialized only into the battle checkpoint by its owners."
+    why: "Store leakage puts battle state in colony saves; the Battle Persistence carve-out is NOT licence to move encounter fields into stores."
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+
+  - pattern: generic_misc_entity_store
+    status: active
+    description: "Every entity kind gets a typed store plus ownership-table rows; a kind without a table row cannot exist."
+    why: "The anti-God-object guard for the entity layer — a misc store erases ownership."
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+
+  - pattern: ui_or_views_writing_stores
+    status: active
+    description: "Views bind by EntityId and read-only poll Revision; input/UI submits designations and orders to owning systems, never direct writes."
+    why: "UI writes bypass the ownership table and the mutation window at once."
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+
+  - pattern: occupancy_updates_outside_store_internal
+    status: active
+    description: "UnitOccupancyIndex has a single write path — store-internal position/death handling, synchronous and atomic with the store write. No external writer exists."
+    why: "A second writer is the occupancy-diverges-from-positions bug class."
+    adr: docs/architecture/adr-0003-entity-data-ownership.md
+    added: 2026-08-07
+
+  - pattern: checkpoint_restore_via_request_switch
+    status: active
+    description: "Loading a battle checkpoint never routes through RequestSwitch; Restore reconstructs TurnBasedAuthority directly and fires ModeTransitioned with reason RestoredFromCheckpoint."
+    why: "Routing through RequestSwitch re-fires the switch-in autosave (overwriting the checkpoint with pre-battle state) and re-runs placement normalization (teleporting units mid-battle)."
+    adr: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+
+  - pattern: save_ordering_by_mtime
+    status: active
+    description: "Save recency is decided by the in-file monotonic stamp, never by filesystem mtime."
+    why: "Clock changes and Steam Cloud restores reorder mtime; a resurrected checkpoint could outrank the battle-end save."
+    adr: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+
+  - pattern: non_checkpoint_turnbased_saves
+    status: active
+    description: "A Mode == TurnBased save is valid iff authored by the battle-checkpoint writer (writer-id header, refused write-side); from any other writer it is corrupt by definition."
+    why: "AC-68's mechanism — without write-side refusal, a forged combat save is byte-indistinguishable from a checkpoint."
+    adr: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
 
 # Example:
 #
