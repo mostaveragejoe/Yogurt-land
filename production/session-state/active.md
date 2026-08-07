@@ -19,7 +19,7 @@ Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture
 - Gates: **godot-specialist PASS WITH NOTES** (notes folded in — same-volume rename semantics, thread-pool vs dedicated writer thread, `OS.RequestPermissions` non-issue on PC); **TD-ADR CONCERNS → resolved** (B1–B7 blocking + A1–A10 advisory ALL applied; headline fixes: snapshot beat ambiguity, activation-0 gap, quiesce-on-retirement race, ordering-by-mtime ban, AC-68 moved write-side, gzip thread ownership, `SnapshotInto` named as a contract obligation not an aspiration).
 - Promotion gate: shares ADR-0002's re-scoped criterion 5 — checkpoint writes at combat cadence must hold frame rate on target hardware; DO NOT promote ADR-0004 (or ADR-0002) before that run.
 - Companion edits: GDD AC-66 re-authored (snapshot-capture wording + coalesce-newest convergence clause) and Rule 9(b) gains the activation-0 sentence; technical-preferences ADR log entry pending→Proposed.
-- **OPEN — registry**: `design/registry/` update for ADR-0004 entities NOT done — BLOCKING-gated on explicit user approval; approve or decline next session.
+- **RESOLVED 2026-08-07 — registry**: reviewed `design/registry/` for ADR-0004 candidates (user-approved). Declined per the registry's inclusion rules — ADR-0004 is architecture and introduces no cross-GDD game-world facts (entities/items/formulas/constants): cadence is a design rule, perf figures belong in technical-preferences, content-scope items are code structures already cross-referenced by the ADR/GDD tables. No entries added; a dated REVIEW LOG note recording this determination was added to `design/registry/entities.yaml` (last_updated → 2026-08-07).
 
 ## PROPAGATION SESSION 2026-08-03 (/propagate-design-change time-authority-mode-switch)
 
