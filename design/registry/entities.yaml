@@ -37,7 +37,23 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: "2026-08-02"
+last_updated: "2026-08-07"
+
+# ─── REVIEW LOG ───────────────────────────────────────────────────────────────
+#   2026-08-07 — ADR-0004 (Battle Checkpoint Architecture) reviewed for registry
+#     candidates (user-approved review). NO ENTRIES ADDED. ADR-0004 is an
+#     architecture document and introduces no cross-GDD game-world facts of the
+#     kind this registry tracks (entities | items | formulas | constants):
+#       - Its checkpoint cadence ("one per resolved actor activation") is a design
+#         RULE owned solely by ADR-0004 + Time Authority GDD Rule 9b — no competing
+#         values across documents to reconcile.
+#       - Its performance figures (~4 MB pooled buffers, ~0.6 ms snapshot,
+#         ~21.9 ms write, ~30 KB gzip) are implementation numbers that belong in
+#         .claude/docs/technical-preferences.md, not this game-world registry.
+#       - Its content-scope items (side tables, RaiderStore, TurnBasedAuthority,
+#         terrain grid) are code structures, already cross-referenced by the ADR's
+#         Dependencies table and the GDD's AC-66/67/68.
+#     Determination: no registry update required for ADR-0004.
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
