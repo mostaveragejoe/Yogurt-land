@@ -374,7 +374,7 @@ Also validated here: ADR-0002's stair Z-linkage; A* is allocation-free (0.00 B/q
 - **Colonist arrival/embark source** (who spawns the initial ~10) → Map Authoring quick-spec (owns the load-window spawn path).
 - **The full colonist attribute list** (player-facing stats beyond these field groups) → Colonist Entity quick-spec (#9) — new attributes must join an existing field group or add a table row.
 - **View wiring and mode-switch view lifecycle** (how view Nodes obtain store read references — likely one game-root autoload owning the composition root; whether colony views' `_Process` runs or is suspended during TurnBased, without `SceneTree.paused`) → Views/rendering specs + the mode-switch spike (godot-specialist notes 1 and 5).
-- **Post-battle time semantics** (zero-elapsed vs. advance) — already routed to creative-director before the Needs GDD (open question in session state); does not change ownership, only Needs' decay math.
+- ~~Post-battle time semantics (zero-elapsed vs. advance) — already routed to creative-director before the Needs GDD~~ **Resolved 2026-08-07 (user decision): advance-by-battle-duration** — does not change ownership, only Needs' decay math; see `design/gdd/time-authority-mode-switch.md` Tuning Knobs.
 
 ## Related Decisions
 - ADR-0001 Time Authority (Proposed) — mutation window, mode exclusivity that makes writer-per-authority sound, `ParticipantIds`, `PostEncounterReconcile` as the outcome-processing site; companion edits listed in Migration Plan

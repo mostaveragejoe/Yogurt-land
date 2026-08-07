@@ -106,9 +106,11 @@ as an ADR-0003 correction.
   when the first combat view exists.
 - **Battle length** (CD-9's 8–15 min target / 20 min ceiling) — a design measure, not
   architectural.
-- **Post-battle time semantics** (zero-elapsed vs. advance-by-battle-duration) — still the open
-  creative-director question. The spike confirms fixed-dt sub-stepping keeps **both** options
-  open, as ADR-0001 claimed.
+- **Post-battle time semantics** (zero-elapsed vs. advance-by-battle-duration) — **resolved
+  2026-08-07 (user decision): advance-by-battle-duration**, see
+  `design/gdd/time-authority-mode-switch.md` Tuning Knobs (`TurnDuration`). The spike's finding
+  stands as the reason the decision was free to make either way: fixed-dt sub-stepping kept
+  **both** options open, as ADR-0001 claimed.
 - **Multi-encounter or save-inside-battle** — deliberately out of scope (CD-9, single-encounter
   invariant), and both are now asserted as refusals rather than untested assumptions.
 

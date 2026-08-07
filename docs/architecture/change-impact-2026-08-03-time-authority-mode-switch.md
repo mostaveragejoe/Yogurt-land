@@ -83,7 +83,7 @@ Rejected: **B** (delta vs. switch-in autosave — cheapest writes but non-self-c
 - **Save/Load (#6) quick-spec** — materially larger: non-selectable rolling slot with atomic replace; checkpoint-vs-manual-slot distinction in format and UX; latest-wins load semantics; async write machinery.
 - **Doors / destructibility contract** — no contract change; `IsBroken`/`IsDead` intermediates become serializable and the load path must not clean them up.
 - **ADR-0002 promotion gate** — criterion 5 re-scoped (see §2).
-- **Design hole routed to creative-director (NOT decided here)**: the GDD's Player Fantasy claims "the pre-battle moment is no longer reachable by any player action" — false while ordinary colony manual saves exist (a player can load a save from five minutes before the raid). The checkpoint closes *quitting*, not *reloading a colony save*. If the answer is single-slot/ironman manual saves, Save/Load #6's scope changes again.
+- ~~Design hole routed to creative-director (NOT decided here)~~ **Resolved 2026-08-07 (user decision)**: the GDD's Player Fantasy claim was narrowed to an honest scope statement — pre-raid reload via colony manual saves is accepted for MVP; the checkpoint closes *quitting*, not *reloading a colony save*. Optional ironman mode stays a Save/Load #6 candidate; see `design/gdd/time-authority-mode-switch.md` Player Fantasy.
 
 ## 6. Resolution decisions
 
@@ -99,7 +99,7 @@ Rejected: **B** (delta vs. switch-in autosave — cheapest writes but non-self-c
 
 1. **Author ADR-0004** — `/architecture-decision Battle Checkpoint Architecture` (inputs: §3, §4, ADR-0001's two resume-path traps, the two invariants). Then re-run `/propagate-design-change design/gdd/time-authority-mode-switch.md` to verify coverage.
 2. **Author the Seeded RNG ADR** with the resumability requirement — now blocking for Save/Load #6.
-3. **Route the manual-save/pre-raid-reload design hole to creative-director** (§5) before Save/Load #6 is specced.
+3. ~~Route the manual-save/pre-raid-reload design hole to creative-director (§5) before Save/Load #6 is specced.~~ **Done 2026-08-07** — resolved by user decision, see §5 above.
 4. **Do not promote ADR-0002** until the re-scoped criterion 5 (checkpoint writes at combat cadence, on target hardware) is measured.
 5. **Run `/architecture-review`** after ADR-0004 and the Seeded RNG ADR land, to re-verify the traceability matrix.
 

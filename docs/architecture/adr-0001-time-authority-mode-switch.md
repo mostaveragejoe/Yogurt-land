@@ -225,7 +225,7 @@ Paused systems still receive events; ALL handlers are idempotent bookkeeping onl
 - Plain-C# core + serialization contract reinforce each other: headless unit tests with a standard .NET runner, no Godot runtime, no GoDotTest dependency — partially answers the open Testing question in technical-preferences.md.
 - Engine-version insulation by construction: the core references no Godot API, so all of 4.4–4.7's breaking changes (Jolt, glow reorder, dual-focus, Quaternion init) are irrelevant to it.
 - ~~**CD-9 banked**: saves occur only in RealTime mode. `TurnBasedAuthority` needs NO snapshot support in MVP. A save file whose Mode is `TurnBased` is corrupt, not a supported state. Do not build combat-state serialization "just in case."~~ *[retracted 2026-08-03 — Battle Persistence]*: `TurnBasedAuthority` DOES need checkpoint-grade snapshot support (state-machine position + current actor + encounter framing); a TurnBased-tagged save is valid iff written by the battle-checkpoint system, corrupt from any other writer. Scope and mechanism: ADR-0004.
-- Fixed-dt sub-stepping gives speed control AND keeps post-battle time catch-up possible (N normal sub-steps, never one giant delta) — the CD's pending zero-elapsed-vs-battle-duration question stays open architecturally.
+- Fixed-dt sub-stepping gives speed control AND keeps post-battle time catch-up possible (N normal sub-steps, never one giant delta) — **resolved 2026-08-07 (user decision)**: colony time advances by battle duration (turns elapsed × `TurnDuration`) as catch-up sub-steps; see `design/gdd/time-authority-mode-switch.md` Tuning Knobs.
 - Adding 3x speed later requires zero changes to any `ITickable`.
 
 ### Negative
@@ -300,7 +300,6 @@ Also regression-locked: inactive authority receives **zero** ticks (colony fully
 5. Six months in: `SwitchTransitionData` has gained no field duplicating Terrain or Colonist Entity state.
 
 ## Open Questions (routed, not decided here)
-- **To creative-director, before the Needs & Simulation GDD**: when a battle ends, does the colony resume as if zero time passed, or does colony time advance by the battle's represented duration (as N catch-up sub-steps)? Both remain architecturally possible under fixed-dt sub-stepping; delta-scaling would have closed the second option, which is (part of) why it is banned.
 - **To the Squad Preparation quick-spec**: participant selection and placement at transition — fills the `ParticipantIds`/`BreachCells` envelope defined here.
 - **To ADR-0002/0003**: physics-body specifics (Jolt default since 4.6) if colonist movement ever touches physics bodies; not relevant to this ADR's core.
 
