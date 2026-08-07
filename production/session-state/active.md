@@ -3,7 +3,7 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: ADR-0005 AUTHORED + both CD questions RULED 2026-08-07 — CD-19 post-battle time (turn-derived w/ cap; USER ruling, overrides CD rec) + CD-20 save-scum (lock + re-roll, Commitment opt-in; adopts CD rec), recorded in systems-index/ADR-0001/technical-preferences. Next: /propagate-design-change time-authority-mode-switch (GDD restatement + Rule 8/AC-10 + AC-44), then Save/Load #6 + Needs & Simulation GDD (#13) both unblocked
+Task: /propagate-design-change time-authority-mode-switch RUN 2026-08-07 — GDD revised (CD-19/CD-20 landed, incl. TD-caught Rule 9 fidelity fix), impact report written (change-impact-2026-08-07). TD-CHANGE-IMPACT: CONCERNS, corrections adopted into the report. OPEN: 4 resolution decisions PENDING USER (report §3 — amend ADR-0001/0004/0005?; re-roll semantics; corruption-fallback re-roll?; out-of-save metadata owner). Amendments blocked until answered; Raid Trigger #18 must not implement reload vs ADR-0005 as written
 <!-- /STATUS -->
 
 ## ADR-0005 SESSION 2026-08-07 (/architecture-decision seeded-rng, review mode full)
@@ -13,6 +13,13 @@ Task: ADR-0005 AUTHORED + both CD questions RULED 2026-08-07 — CD-19 post-batt
 - Registries updated (user-approved): `docs/registry/architecture.yaml` first 4 stances (rng_stream_state ownership; simulation_randomness API decision; ad_hoc_rng_source + bare_combat_root_stream_draw forbidden); `design/registry/entities.yaml` +2 constants (rng_stream_registry, rng_stream_layout_version). Companions: technical-preferences (2 forbidden patterns + ADR log + Next line), systems-index #4 → Designed.
 - **Promotion**: NOT gated on the target-hardware run (RNG not on the frame-time profile). Validation criteria 1–9 are implementation-time (Save/Load #6 / first consumer).
 - **User decision 2026-08-07**: next = route the 2 open CD questions (post-battle time semantics → blocks Needs & Simulation GDD; colony-save save-scum hole → should precede Save/Load #6). CD recommendations only — final rulings are the USER's.
+
+## PROPAGATION RUN 2026-08-07 (/propagate-design-change time-authority-mode-switch — CD-19/CD-20)
+
+- **GDD revised** (commit `b695c5a` + fidelity fix): Rule 8 catch-up step; Rule 9 lock window + re-roll + Commitment Mode + **non-selectable quit slot (TD-caught fidelity fix — the first edit paraphrased CD-20's binding clause away)**; Player Fantasy restatement; EC-8 narrowed; EC-12; AC-69–73; AC-10/44/59 revised; OQ #1 closed.
+- **TD-CHANGE-IMPACT: CONCERNS → adopted into the report.** Final classifications: ADR-0002/0003 Not Affected (clemency clause noted as load-bearing); **ADR-0001 Needs Review** (catch-up = "constrained dispatch" concept missing: threat accumulation during catch-up could fire a second raid mid-return-sequence; single re-plan; AC-27 wording); **ADR-0004 Needs Review** (third slot class — RealTime-tagged non-selectable quit slot — inexpressible in its taxonomy; §2 prose stale; its routed hole + correction #3 now resolved by CD-20); **ADR-0005 Needs Review, substantive** (exact-state restore would REPLAY the same raid — directly contradicts CD-20; VC-8 + "WorldSeed never regenerated" forbid the naive fixes; divergence must scope to colony-save-reload ONLY, never checkpoint restore). **Unowned requirement**: per-colony OUT-OF-SAVE metadata (per-load reload epoch — else same-slot double-reload re-rolls identically = foreknowledge; "has raid #N resolved"). **AC-72's "never replaying" is unachievable by independent re-draw** — wording must follow the semantics decision.
+- **4 PENDING USER DECISIONS** (report §3; recommended first): (1) amend all 3 ADRs per TD vs. original draft scope; (2) re-roll = independent re-derivation vs. guaranteed-distinct; (3) corruption-fallback re-roll = NO (same unresolved raid) vs. yes; (4) metadata owner = Save/Load #6 + ADR-0005 pins derivation vs. new ADR-0006.
+- Report: `docs/architecture/change-impact-2026-08-07-time-authority-mode-switch.md` (full analysis, follow-ups, standing #18 warning).
 
 ## CD RULINGS 2026-08-07 (both routed questions decided; recommendations by creative-director agents (Opus), RULINGS by user)
 
