@@ -128,3 +128,13 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 ## Open Questions
 - Post-battle time: resume as zero-elapsed vs. advance by battle duration — route to creative-director BEFORE Needs & Simulation GDD (both stay possible under ADR-0001's fixed-dt sub-stepping)
 - Working-hours assumption (full-time vs evenings) — timeline bands double if part-time
+
+## Session Extract — /architecture-review 2026-08-07
+- Verdict: **FAIL** (one missing Foundation ADR + bookkeeping debt; no ADR-0001..0004 decision was challenged)
+- Requirements: 203 extracted (21 concept / 44 xcut / 68 terrain / 70 timeauth) — 0 previously registered; TR-IDs NOT issued pending slug-scheme ratification
+- Headline: **ADR-0005 Seeded RNG does not exist** (claimed as authored 2026-08-07; absent from all branches). `docs/registry/architecture.yaml` and `tr-registry.yaml` are both untouched templates.
+- New TR-IDs registered: None (slug scheme needs ratification first — see report §2.2)
+- GDD revision flags: art-bible.md (style-variant ceiling absent), time-authority-mode-switch.md (no-pre-battle-rewind absolutism), terrain-data-model.md (never received the 2026-08-03 propagation), game-concept.md (Unity/URP residue)
+- Top blockers: (1) author ADR-0005; (2) resolve two-vs-three GridMap render backend; (3) file ADR-0004 routed corrections 3 + 4; (4) `File.Replace` throws on every battle's first checkpoint — use `File.Move(..., overwrite: true)`
+- Engine: 4/4 ADRs clean on deprecated APIs, but the reference library is stamped 4.6 with no 4.6→4.7 section and no `modules/gridmap.md`; `project.godot` renderer still `[TO BE CONFIGURED]`
+- Report: docs/architecture/architecture-review-2026-08-07.md
