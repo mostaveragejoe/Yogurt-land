@@ -3,6 +3,9 @@
 ## Status
 **Proposed**
 
+> **Engine Specialist Review (godot-specialist)**: CONCERNS (non-blocking) 2026-08-07 → all 3 folded in same day (registry lifecycle pinned to composition root; stream objects pinned as reference types against the struct-boxing trap; main-thread confinement stated). Confirmed: Godot's `RandomNumberGenerator` is PCG32-based internally but does not expose the increment (PCG's stream selector) and lives in `GodotSharp` — doubly disqualified; hand-rolled PCG32 in `Hollowdeep.Core` is correct. No 4.4–4.7.1 breaking changes or deprecations apply to this domain.
+> **TD Review (TD-ADR)**: CONCERNS 2026-08-07 → C1–C6 all applied same day: checkpoint captures the ENTIRE registry, not just Combat streams (C1); `SnapshotInto` caller-buffer obligation discharged (C2); counter-based generator recorded as a genuinely-considered alternative so the "arbitrary draw counts" reinterpretation is decided, not assumed (C3); draw-site assert mirrors BOTH MutationWindow clauses and the legitimate non-`Tick()` draw sites are named (C4); bare `RngOwner.Combat` root-stream draws banned from day one + stream-layout version guard (C5); `NextRange` debiasing method and reference-type stream objects pinned as part of the serialized format contract (C6).
+
 ## Date
 2026-08-07
 
@@ -81,23 +84,33 @@ PCG32 stream: State = seed0 ; Increment = seed1 | 1              — force odd (
 |---|---|---|---|
 | `ColonistIdentity` | MVP | Colonist Entity & Attributes (#9) | Draws exactly one `ulong` per spawn to populate `AppearanceSeed` (ADR-0003, CD-4, frozen field). That seed then independently drives as many procedural-appearance sub-rolls as the view layer wants (hairstyle, palette, etc.) — those view-side rolls are **not** simulation RNG draws, carry no determinism obligation of their own beyond "same `AppearanceSeed` → same visual" (already ADR-0003's rule: "views derive, never store"), and do not touch this stream's draw count. |
 | `RaidTrigger` | MVP | Raid Trigger (#18) | Raider composition, threat scaling rolls. |
-| `Combat` | MVP | Combat set (#19–#23, not yet designed) | One encounter-wide stream for MVP. **Extensibility rule**: when the Combat GDDs are written, they may register additional named sub-streams via distinct `SubKey` values under `RngOwner.Combat` (e.g. `SubKey: "Targeting"`, `SubKey: "AIDecision"`) **without requiring a new ADR** — each sub-key derives an independent, non-overlapping stream by construction (§2), so splitting Combat's single stream later is purely additive and never perturbs the original. |
+| `Combat` | MVP | Combat set (#19–#23, not yet designed) | **The bare `RngOwner.Combat` root stream is never drawn from — MVP Combat draws only from named `SubKey` streams from day one** (even if MVP starts with a single `SubKey: "Encounter"`). **Extensibility rule**: when the Combat GDDs are written, they may register additional named sub-streams via distinct `SubKey` values under `RngOwner.Combat` (e.g. `SubKey: "Targeting"`, `SubKey: "AIDecision"`) **without requiring a new ADR** — each sub-key derives an independent, non-overlapping stream by construction (§2). *Adding* a sub-stream never perturbs any existing stream; **moving existing draws between streams is NOT additive** — it changes the source streams' sequences and would silently desync any in-flight battle checkpoint across a patch, which is why the stream-layout version guard (§5) exists and why the root-stream ban keeps the day-one layout cheap to split later. (TD-ADR C5) |
 | `MapGeneration` | Alpha | World/Mountain Generation (#35) | Reserved now; unused until Alpha. Terrain itself draws no RNG (ADR-0002) — this stream belongs to the procgen *producer*, not `TerrainWorld`. |
 
 New `SubKey`s under an existing owner are that owning system's namespace to manage; new `RngOwner` values require this ADR's registry table to be extended (a documentation change, not a re-architecture).
 
 ### 4. Draw-site enforcement
 
-All draws go through `SeededRngRegistry.GetStream(RngStreamKey)`, returning an `IRngStream` (`NextUInt32()`, `NextFloat01()`, `NextRange(min, max)`). Every draw call **debug-asserts the mutation window is open** — reusing the exact `MutationWindow` primitive already established by ADR-0002 (`TerrainWorld`) and ADR-0003 (entity stores), rather than inventing a parallel enforcement mechanism. This gives ADR-0001's "RNG draws outside authority-driven execution" forbidden pattern a concrete, testable teeth in Debug builds.
+All draws go through `SeededRngRegistry.GetStream(RngStreamKey)`, returning an `IRngStream` (`NextUInt32()`, `NextFloat01()`, `NextRange(min, max)`). Every draw call debug-asserts **both clauses of the established MutationWindow discipline** — reusing the exact primitive from ADR-0002 (`TerrainWorld`) and ADR-0003 (entity stores), including its second clause, not just its first (TD-ADR C4):
 
-### 5. Serialization — `Snapshot()` / `Restore()`
+1. **The mutation window is open**, AND
+2. **`Publish` is not on the call stack** — bus handlers run *inside* the window, so without this clause a Notifications or Pathfinding event handler could draw RNG and pass the assert; "never in event handlers" is ADR-0001's rule verbatim, and this clause is what enforces it.
 
-`SeededRngRegistry` implements cross-cutting contract #2's `Snapshot()`/`Restore()` pair with a schema version:
+**Precision on scope (deliberate, not drift)**: the mutation window is intentionally *broader* than ADR-0001's "inside `Tick()`" phrasing — it is also open during the sanctioned load window. Two MVP streams legitimately draw outside `Tick()`: `ColonistIdentity` during load-window embark spawn (ADR-0003's spawn path), and `MapGeneration` during map authoring/load. The window is the correct enforcement primitive precisely because it already covers exactly the places sanctioned writes occur; this ADR enforces "draws only where authority-driven writes are legal," which contains ADR-0001's Tick-only rule rather than restating it.
+
+**Thread confinement (godot-specialist)**: `SeededRngRegistry` and all streams are **main-thread-only**, confined to authority-driven execution — the same implicit contract `MutationWindow` already carries. Non-main-thread engine callbacks (Jolt physics, threaded renderer) must never reach a draw site; ADR-0004's background checkpoint writer never touches the registry (it consumes an already-captured snapshot buffer).
+
+### 5. Serialization — `Snapshot()` / `SnapshotInto()` / `Restore()`
+
+`SeededRngRegistry` implements cross-cutting contract #2's snapshot/restore pair with a schema version:
 
 - **`Snapshot()`** captures `(RngOwner, SubKey, State, Increment)` for every stream that has been **touched at least once** since world creation — i.e., every stream that has ever drawn. Untouched streams are not serialized; they lazily re-derive from `WorldSeed` + key on first future access, which is safe precisely because a stream that has never drawn has no advanced state to lose.
+- **The checkpoint captures the ENTIRE registry — every touched stream across every owner — never just the `Combat`-owned streams** (TD-ADR C1). ADR-0004's content-scope item 3 *names* the combat portion; it does not *scope* the write: ADR-0004 §1 defines the checkpoint as a full self-contained save, and a combat-only RNG capture would rewind `RaidTrigger`/`ColonistIdentity` to their pre-battle draw positions on resume — the next raid's composition would repeat, a silent desync.
+- **`SnapshotInto(IBufferWriter<byte>)` is the checkpoint-path overload** (TD-ADR C2), discharging ADR-0004 §1 item 7's caller-buffer obligation for this ADR's state: zero allocation on the 150–300-writes-per-battle path. The allocating `Snapshot()` remains the colony-save path only — the same split ADR-0004 imposes on the terrain and entity stores.
+- **The snapshot carries a stream-layout version** (TD-ADR C5): a version stamp (backed by the registered-key-set layout this ADR's table defines) that a patch must bump when it *moves draws between streams* (as opposed to adding a new stream, which is safe). On load, a layout mismatch against a battle checkpoint **fails loudly** (the corrupt-checkpoint fallback path of ADR-0004 §5) instead of silently resuming a battle whose future draw sequence can no longer match the pre-patch control run. Colony saves are unaffected by layout bumps — streams restore by key; only in-flight-battle determinism needs the guard.
 - **`Restore()`** rehydrates each captured stream's exact `(State, Increment)` — continuing to draw from a restored stream is bit-identical to continuing an unbroken run that was never saved.
 - `WorldSeed` itself is serialized once as top-level colony data (same category as the `EntityIdSource` counter, per the save/load spike) — chosen at new-game, never regenerated on load.
-- This is the format ADR-0004's checkpoint content-scope item 3 consumes directly: "combat RNG streams... resumable at arbitrary draw counts" is satisfied by capturing whichever `Combat`-owned streams have drawn by the checkpoint beat.
+- **"Resumable at arbitrary draw counts" is satisfied by exact state capture** — a decided reinterpretation, not an assumption (TD-ADR C3; see Alternative 3): no consumer needs random access to draw offset N without drawing; the checkpoint restores exact state and continues.
 
 ### Key Interfaces
 
@@ -106,16 +119,24 @@ struct RngStreamKey { RngOwner Owner; string? SubKey; }   // stable, hashable, a
 
 interface IRngStream {
     uint NextUInt32();
-    float NextFloat01();
-    int NextRange(int minInclusive, int maxExclusive);
+    float NextFloat01();                              // (NextUInt32() >> 8) * 2^-24 — 24-bit mantissa construction, pinned
+    int NextRange(int minInclusive, int maxExclusive); // Lemire debiased multiply w/ rejection, pinned (see format note)
 }
 
 class SeededRngRegistry {
-    IRngStream GetStream(RngStreamKey key);   // lazy-derives on first access; debug-asserts mutation window on every draw
-    RngSnapshot Snapshot();                   // touched streams only
-    void Restore(RngSnapshot snapshot);       // exact state rehydration
+    IRngStream GetStream(RngStreamKey key);   // lazy-derives on first access; every draw asserts both MutationWindow clauses
+    RngSnapshot Snapshot();                   // colony-save path only (allocates); touched streams + layout version
+    void SnapshotInto(IBufferWriter<byte> w); // checkpoint path — zero-allocation caller-buffer overload (ADR-0004 item 7)
+    void Restore(RngSnapshot snapshot);       // exact state rehydration; loud-fail on layout-version mismatch (battle checkpoints)
 }
 ```
+
+**Format-contract notes (TD-ADR C6 + godot-specialist)** — these are part of the serialized format, not free implementation choices:
+
+- **`NextRange` debiasing is pinned to Lemire's debiased integer multiply (with its rejection branch).** Rejection-based methods consume a *variable* number of 32-bit draws depending on inputs — two "equivalent" debiasing implementations are NOT interchangeable, because they advance the stream differently. Changing the method is a stream-layout change (§5 version bump), not a refactor.
+- **`NextFloat01` is pinned to the 24-bit-mantissa construction** shown above, for the same reason.
+- **`IRngStream` implementations are `sealed` reference types** — one small class instance per stream, allocated once at first derivation (one-shot, like ADR-0002's snapshot allocation; zero steady-state allocation thereafter). A mutable struct behind the interface would either box per call (allocation, breaking Validation Criterion 6) or advance a boxed *copy* whose state never persists back — the exact class-vs-struct trap ADR-0001 already paid for at promotion (`MutationWindow` correction 1). The struct optimization is banned here for the opposite reason it was mandated there.
+- **`SeededRngRegistry` is a composition-root-owned, per-world instance** (godot-specialist) — created at new-game/load alongside `TerrainWorld` and the entity stores, discarded with the world, **never a static singleton**: a stale static registry surviving into a new game would silently defeat the per-`WorldSeed` reproducibility guarantee this ADR exists to deliver.
 
 ## Alternatives Considered
 
@@ -131,7 +152,13 @@ class SeededRngRegistry {
 - **Cons**: Microsoft does not guarantee the algorithm is stable across .NET versions; internal state is not exposed for serialization.
 - **Rejection Reason**: Directly violates the "explicit-serializable-state" constraint from the 2026-08-03 propagation session — this generator cannot satisfy checkpoint resumability or save/load determinism at all, regardless of implementation effort.
 
-### Alternative 3: Sequential stream indices assigned by registration order
+### Alternative 3: Counter-based generator (Philox / key+counter construction)
+- **Description**: A stateless-per-draw generator where output = f(key, counter) — each stream is a key, each draw indexes a counter. "Resumable at arbitrary draw counts" is satisfied *literally*: serialization is just the counter, and any draw offset is reachable by arithmetic without drawing.
+- **Pros**: The on-the-nose reading of the 2026-08-03 propagation requirement; trivially parallelizable; random access to any point in the sequence.
+- **Cons**: Heavier per-draw (multi-round mixing functions vs. PCG's single multiply-xor-rotate); random access is a capability **no consumer needs** — every identified use (checkpoint resume, save/load, regression re-runs) restores exact state and continues forward; a second, less familiar algorithm class to implement and verify.
+- **Rejection Reason**: Exact-state capture (16 bytes/stream) delivers the *requirement behind the phrasing* — bit-identical continuation from any point — with cheaper draws and the stream mechanism PCG already provides. This alternative exists in the record precisely so the reinterpretation of "arbitrary draw counts" as exact-state-capture is a **decided** trade-off, not an unexamined assumption (TD-ADR C3).
+
+### Alternative 4: Sequential stream indices assigned by registration order
 - **Description**: Key streams by an incrementing integer assigned in the order each consumer first requests one, instead of a stable name.
 - **Pros**: Marginally simpler — no hashing step.
 - **Cons**: Inserting or removing a consumer anywhere in the registration sequence silently reseeds every stream that follows it. This is a non-local, silent desync bug class: a save made before the change would produce different combat/raid outcomes after a patch that merely added an unrelated new RNG consumer earlier in the list.
@@ -153,6 +180,7 @@ class SeededRngRegistry {
 ### Risks
 - **`KeyHash` collision** between two distinct `RngStreamKey`s producing an identical derived increment — bounded: 64-bit hash space against a handful of named streams is astronomically unlikely (birthday bound); a startup assertion can verify all currently-registered streams have distinct increments.
 - **Accidental key reuse** — a future consumer reusing an existing `(Owner, SubKey)` pair for a semantically different purpose would silently share a stream and desync draw order between two unrelated features. Mitigated the same way `EntityId`/TR-ID append-only registries are: this ADR's table (§3) is the source of truth for assigned keys, extended by documentation, not overwritten.
+- **Cross-patch layout drift** — a patch that moves draws between streams (or changes `NextRange`/`NextFloat01` internals) silently breaks deterministic resume for any battle checkpoint written pre-patch. Mitigated by the stream-layout version (§5): mismatch on battle-checkpoint load fails loudly into ADR-0004's corrupt-checkpoint fallback rather than silently desyncing; colony saves restore by key and are unaffected.
 - **PCG32's statistical quality is weaker under adversarial scrutiny than a CSPRNG** — accepted: this is a single-player colony sim with no PvP wagering or anti-cheat-sensitive RNG surface. If that ever changes, this ADR's algorithm choice would need revisiting; explicitly out of scope for MVP.
 
 ## GDD Requirements Addressed
@@ -176,12 +204,14 @@ Nothing ships yet — no RNG draw call sites exist anywhere in the current codeb
 
 ## Validation Criteria
 1. Deterministic derivation: the same `(WorldSeed, RngStreamKey)` always derives the identical `(State, Increment)` across separate process runs.
-2. Draw-sequence determinism: the same seed + identical call sequence produces a bit-identical output sequence (regression-lockable, same pattern as the mode-switch/save-load spikes' same-seed tests).
+2. Draw-sequence determinism: the same seed + identical call sequence produces a bit-identical output sequence — including through `NextRange`'s rejection branch and `NextFloat01` (regression-lockable, same pattern as the mode-switch/save-load spikes' same-seed tests).
 3. Snapshot/Restore round-trip: capture mid-sequence state, restore into a fresh registry instance, continue drawing — output is bit-identical to an unbroken continuous run. This is the same test ADR-0004's Validation Criterion 2 and GDD AC-67 require.
 4. Stream independence: registering a new named stream (simulating a future Combat sub-stream) does not change the derived `(State, Increment)` of any existing stream.
-5. Debug-assert fires when a draw is attempted outside the mutation window; does not fire inside it.
-6. Zero-allocation: N draws across all registered streams produce 0 bytes allocated and 0 Gen0 collections (same measured-standard pattern as the terrain and mode-switch spikes).
+5. Draw-site assert fires on BOTH violation classes: a draw outside the mutation window, AND a draw from inside a bus `Publish` (a handler-draw test); neither fires for a legitimate draw inside `Tick()` or the load window.
+6. Zero-allocation: N draws across all registered streams produce 0 bytes allocated and 0 Gen0 collections (same measured-standard pattern as the terrain and mode-switch spikes); `SnapshotInto` on the checkpoint path is likewise allocation-free.
 7. Startup collision assertion: all currently-registered streams have pairwise-distinct increments.
+8. Full-registry checkpoint scope: a checkpoint written mid-battle and restored resumes with `RaidTrigger`/`ColonistIdentity` streams at their exact captured positions — a post-battle raid roll after restore matches the unquit control run (the TD-ADR C1 desync class, tested directly).
+9. Layout guard: restoring a battle checkpoint whose stream-layout version mismatches the running build produces the loud corrupt-checkpoint fallback (ADR-0004 §5), never a silent resume.
 
 ## Related Decisions
 - ADR-0001 (Accepted) — the forbidden-pattern rule this ADR's draw-site enforcement implements
