@@ -29,7 +29,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 | 6 | Save/Load & World Serialization (inferred) | Persistence | MVP | Not Started | ADR-only (contract now, format later) | — | Cross-cutting: shape of all state-holding systems |
 | 7 | Terrain Rendering & Cutaway (inferred, TD; absorbs Camera & Z-Level Visibility) | Core | MVP | Not Started | Quick-spec | — | Terrain Data Model, World Change Event Bus |
 | 8 | Pathfinding & Navigation (inferred) | Core | MVP | Not Started | Quick-spec (spike + ADR carry it) | — | Terrain Data Model, World Change Event Bus |
-| 9 | Colonist Entity & Attributes (inferred) | Core | MVP | Not Started | Quick-spec + ADR-003 | — | Terrain Data Model |
+| 9 | Colonist Entity & Attributes (inferred) | Core | MVP | **Designed** (quick-spec authored 2026-08-07 via `/quick-design`; conforms to ADR-0003, no ADR change) | Quick-spec + ADR-003 | [colonist-entity-attributes-2026-08-07.md](../quick-specs/colonist-entity-attributes-2026-08-07.md) | Terrain Data Model |
 | 10 | Job Assignment & Priority (inferred) | Gameplay | MVP | Not Started | Full GDD (coupled with #13) | — | Colonist Entity, World Change Event Bus |
 | 11 | Stockpile & Hauling (inferred, TD split) | Economy | MVP **(user-mandated, non-negotiable)** | Not Started | Quick-spec | — | Terrain Data Model, Material Catalog, Job Assignment |
 | 12 | Spatial Query / LOS & Cover (inferred, TD) | Core | MVP | Not Started | Quick-spec | — | Terrain Data Model |
