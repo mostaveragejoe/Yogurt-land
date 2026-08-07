@@ -27,7 +27,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Depends On** | ADR-0001 (Accepted, amended 2026-08-03 — snapshot contract and resume path delegated here); ADR-0002 (Accepted, amended — `TerrainSnapshot` reuse, buffer strategy); ADR-0003 (Accepted, amended — side-table serialization, occupancy rebuild); **Seeded RNG ADR (pending)** for item 3 of the content scope — this ADR reserves the slot, that ADR defines the stream format |
+| **Depends On** | ADR-0001 (Accepted, amended 2026-08-03 — snapshot contract and resume path delegated here); ADR-0002 (Accepted, amended — `TerrainSnapshot` reuse, buffer strategy); ADR-0003 (Accepted, amended — side-table serialization, occupancy rebuild); **ADR-0005 Seeded RNG (Accepted 2026-08-07)** for item 3 of the content scope — this ADR reserves the slot, ADR-0005 defines the stream format |
 | **Enables** | Save/Load quick-spec (#6); all battle-checkpoint stories; GDD AC-67's determinism test |
 | **Blocks** | Save/Load quick-spec (#6) — it must not be specced before this ADR and the Seeded RNG ADR exist |
 | **Ordering Note** | The non-RNG scope is implementable before the Seeded RNG ADR lands; AC-67 (deterministic resume) needs both. Do not promote ADR-0002 until checkpoint cadence is measured on target hardware. *[Superseded 2026-08-07 — both ADRs are now Accepted; the target-hardware run is a pre-vertical-slice verification item. See the Promotion note under Status.]* |
@@ -197,7 +197,7 @@ Nothing ships yet — the save/load spike validated the colony path only. Save/L
 ## Related Decisions
 - ADR-0001/0002/0003 — Amendments 2026-08-03 (Battle Persistence); this ADR discharges the obligations they delegate
 - `docs/architecture/change-impact-2026-08-03-time-authority-mode-switch.md` — decision record this ADR implements (§3, §4)
-- Seeded RNG ADR (pending) — owns stream format; blocking for Save/Load #6
+- ADR-0005 Seeded RNG (Accepted 2026-08-07) — owns stream format; both this ADR and ADR-0005 now unblock Save/Load #6
 - Cross-cutting contract #2 (serialization) — mode-tagging rule as amended
 - Open design hole routed to creative-director: colony manual saves still allow pre-raid reload; decide before Save/Load #6
 

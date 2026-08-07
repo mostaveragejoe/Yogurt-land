@@ -122,6 +122,8 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 | 1 | ADR-001 Time Authority | ADR (**Accepted** 2026-07-26) | MVP | Foundation | technical-director, godot-specialist | S |
 | 2 | ADR-002 Terrain Data Model | ADR (**Accepted** 2026-08-07; criterion 5 frame-rate run is a pre-vertical-slice verification item) | MVP | Foundation | technical-director, godot-specialist | S |
 | 3 | ADR-003 Entity Data Ownership | ADR (**Accepted** 2026-07-26) | MVP | Foundation | technical-director, lead-programmer | S |
+| 3b | ADR-004 Battle Checkpoint Architecture | ADR (**Accepted** 2026-08-07; authored 2026-08-03 via Battle Persistence propagation) | MVP | Foundation | technical-director, godot-specialist | S |
+| 3c | ADR-005 Seeded RNG | ADR (**Accepted** 2026-08-07; unblocks Save/Load #6) | MVP | Foundation | technical-director, godot-csharp-specialist | S |
 | 4 | Cross-cutting contracts annex + serialization contract | Contract page | MVP | Foundation | technical-director | S |
 | 5 | Dev Tools / Debug Console | Build (Tier 0) | Tier 0 | — | gameplay-programmer | S |
 | — | **Tier 0 SPIKE GATE: fun spike → terrain spike → mode-switch spike → pathfinding spike → save/load spike** | `/prototype` | — | — | prototyper | — |
@@ -171,7 +173,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 |--------|-------|
 | Total index entries | 35 |
 | Design docs started | 2 (Terrain Data Model — **Approved**, /design-review re-review 2026-08-02; Time Authority / Mode-Switch — **Designed**, CD-GDD-ALIGN REVISED 2026-08-02, pending /design-review) |
-| ADRs written | 4/4 + contracts annex — **ADR-0001–0004 all Accepted** (0002/0004 promoted 2026-08-07; shared criterion-5 target-hardware run is a pre-vertical-slice verification item) |
+| ADRs written | 5/5 + contracts annex — **ADR-0001–0005 all Accepted** (0002/0004/0005 promoted 2026-08-07; shared ADR-0002/0004 criterion-5 target-hardware run is a pre-vertical-slice verification item). Save/Load #6 unblocked. |
 | Tier 0 spikes complete | 0/6 |
 | MVP systems designed | 0/25 |
 | Vertical Slice systems designed | 0/4 |

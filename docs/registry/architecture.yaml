@@ -30,7 +30,7 @@
 #   Superseded entries:     Grep pattern="status: superseded"
 
 version: 1
-last_updated: ""
+last_updated: "2026-08-07"
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
 # Who is the authoritative owner of each piece of shared game state.
@@ -43,7 +43,18 @@ last_updated: ""
 # interface: how other systems access this state (read-only property, method call,
 #   signal, shared resource, etc.) — this is the contract other ADRs depend on.
 
-state_ownership: []
+state_ownership:
+  - state: rng_streams
+    status: active
+    owner_system: RngService
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    interface: "RngService.GetStream(RngStreamId) -> IRngStream (narrow per-stream draw handle, granted at the composition root). No draw-any-stream method exists. RngService is the sole owner and serializer of all RNG state."
+    write_access: RngService-only   # streams advance only through granted IRngStream handles
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md   # checkpoint content item 3
+    added: 2026-08-07
+    revised: ""
 
 # Example:
 #
@@ -71,7 +82,21 @@ state_ownership: []
 #
 # pattern options: signal | direct_call | event_bus | shared_resource | rpc | none
 
-interfaces: []
+interfaces:
+  - contract: rng_draw_access
+    status: active
+    pattern: direct_call        # narrow per-stream handle, granted at composition root
+    producer: RngService
+    consumers:
+      - Spawn system            # ISpawnRng
+      - Combat systems          # ICombatRng (draws assert Mode == TurnBased)
+      - Raider Decision-Making  # IRaiderAiRng
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    signal_signature: "IRngStream.NextULong() -> ulong; IRngStream.NextInt(int minInclusive, int maxExclusive) -> int"
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng.md
+    added: 2026-08-07
+    revised: ""
 
 # Example:
 #
@@ -131,7 +156,18 @@ performance_budgets: []
 # Register an API decision when the choice is non-obvious and other ADRs might
 # make a different choice for the same purpose without knowing this was decided.
 
-api_decisions: []
+api_decisions:
+  - purpose: seeded_prng
+    status: active
+    api: "xoshiro256** (hand-implemented in Hollowdeep.Core), seeded via SplitMix64 with domain tags"
+    not: "System.Random (unstable across .NET versions, non-serializable) OR Godot RandomNumberGenerator (zero-Godot core rule; PCG32-family)"
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    reason: "Full 32-byte state serializes for arbitrary-draw-count resume; integer-only draws are cross-platform deterministic; the zero-Godot core rule bans the engine generator."
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-07
+    revised: ""
 
 # Example:
 #
@@ -157,7 +193,41 @@ api_decisions: []
 # Register a pattern when an ADR explicitly bans it AND other ADRs might
 # unknowingly use it (i.e., it's a tempting but wrong approach for this project).
 
-forbidden_patterns: []
+forbidden_patterns:
+  - pattern: system_random_or_godot_rng_in_sim
+    status: active
+    description: "The simulation must not use System.Random or Godot RandomNumberGenerator. All gameplay draws go through RngService / IRngStream."
+    why: "System.Random is not stable across .NET versions and does not serialize; Godot RNG couples the core to the engine (zero-Godot rule). Both break deterministic save/resume."
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    added: 2026-08-07
+
+  - pattern: float_draw_in_sim_path
+    status: active
+    description: "No floating-point RNG draw in Hollowdeep.Core or any Tick()-reachable path. Gameplay draws are integer-only. A float helper, if needed, lives in the presentation assembly only."
+    why: "Floating-point results are not bit-identical across platforms (x64/ARM), which breaks determinism. Keeping floats out of core makes the invariant structural and grep-enforceable."
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    added: 2026-08-07
+
+  - pattern: single_global_rng_stream
+    status: active
+    description: "No single shared RNG stream for all systems. Each system draws from an independent stream keyed by RngStreamId."
+    why: "A shared stream couples draw order across systems: adding one draw shifts every later result, making determinism fragile under normal development."
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    added: 2026-08-07
+
+  - pattern: draw_any_stream
+    status: active
+    description: "A system must not draw from a stream it was not granted. RngService hands out narrow per-stream handles (IRngStream) at the composition root; no draw-any-stream method exists."
+    why: "A stray cross-stream draw silently shifts another system's determinism. This mirrors ADR-0003's per-(system x field group) writer-interface segregation."
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    added: 2026-08-07
+
+  - pattern: rng_derivation_without_domain_tag
+    status: active
+    description: "Every RNG seed derivation must pass a domain tag (DOMAIN_STREAM vs DOMAIN_ENTITY). Stream seeds and per-entity seeds must never share an un-tagged mixer."
+    why: "Without domain separation, SplitMix64(master, id) and SplitMix64(master, entityId) collide over small integers — entity #1's seed equals the Combat stream seed."
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    added: 2026-08-07
 
 # Example:
 #

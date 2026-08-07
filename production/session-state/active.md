@@ -3,7 +3,7 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: ALL FOUR FOUNDATION ADRs (0001–0004) ACCEPTED as of 2026-08-07. Criterion 5 (terrain frame rate on target hardware) is now a pre-vertical-slice verification item, not a promotion gate. Next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec, and terrain-data-model GDD. OPEN: ADR-0004 registry update still skipped (needs user approval).
+Task: ALL FIVE FOUNDATION ADRs (0001–0005) ACCEPTED as of 2026-08-07. ADR-0005 Seeded RNG authored + promoted this session (xoshiro256**, RngService central ownership, per-stream IRngStream grants, domain-separated seeding; both review gates cleared, TD-ADR 5 findings applied). Registry (architecture.yaml) now populated (first time). Save/Load #6 UNBLOCKED. Open ADR obligation: only the ADR-0002/0004 criterion-5 target-hardware run (pre-vertical-slice verification item). Next: terrain-data-model GDD, #8 Colonist Entity quick-spec, Save/Load #6. RUN /architecture-review in a FRESH session (0004 + 0005 landed).
 <!-- /STATUS -->
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH

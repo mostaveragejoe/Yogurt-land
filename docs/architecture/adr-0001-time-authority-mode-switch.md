@@ -307,7 +307,7 @@ Also regression-locked: inactive authority receives **zero** ticks (colony fully
 ## Related Decisions
 - ADR-0002 Terrain Data Model (pending — single source of truth across the switch)
 - ADR-0003 Entity Data Ownership (pending — per-entity sim state as plain data; write-ownership table)
-- Seeded RNG ADR (pending — constrained by the draws-only-inside-Tick rule)
+- ADR-0005 Seeded RNG (Accepted 2026-08-07 — constrained by the draws-only-inside-Tick rule)
 - `design/gdd/systems-index.md` — Cross-Cutting Contracts annex; CD-9 (save half overturned by Battle Persistence 2026-08-02; battle-length half stands)
 - ADR-0004 Battle Checkpoint Architecture (pending — checkpoint content scope, cadence, Option A write mechanism, the `RestoredFromCheckpoint` resume path, ordering invariants)
 - `design/gdd/game-concept.md` — mode-switch named as permanent integration tax

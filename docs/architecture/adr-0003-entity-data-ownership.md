@@ -379,6 +379,6 @@ Also validated here: ADR-0002's stair Z-linkage; A* is allocation-free (0.00 B/q
 ## Related Decisions
 - ADR-0001 Time Authority (Accepted) — mutation window, mode exclusivity that makes writer-per-authority sound, `ParticipantIds`, `PostEncounterReconcile` as the outcome-processing site; companion edits listed in Migration Plan
 - ADR-0002 Terrain Data Model (Accepted) — firewall table pre-assignments honored (occupancy, reservations, doors; zones stay Stockpile & Hauling's sparse cell-sets); `IsPassableTerrain` composed with door/occupancy inputs under the mode-aware rule; enforcement patterns reused (writer tables, debug sweeps, single write paths, `Revision`)
-- Seeded RNG ADR (pending) — entity spawn (appearance seeds, raider composition) draws from per-system streams inside authority-driven execution
+- ADR-0005 Seeded RNG (Accepted 2026-08-07) — entity spawn (appearance seeds, raider composition) draws from per-system streams inside authority-driven execution; per-entity appearance seed via pure `DeriveEntitySeed(entityId, purpose)` from the entity domain
 - `design/gdd/systems-index.md` — #9 mandate, circular-dependency resolutions, CD-3/CD-4/CD-9 notes, High-Risk seam entry
 - `design/gdd/game-concept.md` — MVP caps that size this architecture; Pillar 4 (colony works autonomously — orders flow through owning systems, never direct writes)

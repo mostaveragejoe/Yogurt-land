@@ -414,6 +414,6 @@ GridMap at octant 32 wins **both** axes: 2.6× fewer draw calls and ~240× cheap
 ## Related Decisions
 - ADR-0001 Time Authority (Accepted) — mutation-window provider; writer-set-per-authority rule; passive-store behavior; companion edits listed in Migration Plan
 - ADR-0003 Entity Data Ownership (pending) — the entity/cell boundary defined by the firewall table; door boundary; occupancy index; item/stack reservations
-- Seeded RNG ADR (pending) — terrain itself draws no RNG; map generation (Alpha) will
+- ADR-0005 Seeded RNG (Accepted 2026-08-07) — terrain itself draws no RNG; map generation (Alpha) will use the reserved `MapGen` stream inside its world-gen window
 - `design/gdd/systems-index.md` — cell-record mandate, God-object risk entry, cross-cutting contracts #2 and #3, CD-1/CD-5/CD-7 notes
 - `design/art/art-bible.md` §1 — lighting carries no gameplay semantics: no light data in cells
