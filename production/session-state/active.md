@@ -3,7 +3,7 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture-decision; Proposed; godot-specialist PASS WITH NOTES + TD-ADR CONCERNS all applied) — next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec. OPEN: registry update skipped (needs user approval)
+Task: /design-system terrain-data-model invoked 2026-08-07 — found the GDD already Approved (two independent /design-review rounds, all findings resolved pre-2026-08-06 consolidation); no authoring performed, stale checklist item corrected in systems-index.md. Next: run `/design-review design/gdd/time-authority-mode-switch.md` in a FRESH session (it's authored/"Designed" but never independently reviewed). Also still open from before: Seeded RNG ADR (blocking Save/Load #6), #8 Colonist Entity quick-spec, ADR-0004 registry update (needs user approval), ADR-0001/0003 promotion to Accepted (recommended, awaiting user go-ahead).
 <!-- /STATUS -->
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
