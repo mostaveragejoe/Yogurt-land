@@ -37,7 +37,7 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: "2026-08-02"
+last_updated: "2026-08-07"
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -252,6 +252,96 @@ constants:
       Raising the ceiling weakens the no-mid-battle-save justification. Will be referenced_by the
       combat-set GDDs."
     added: 2026-08-02
+    revised: ""
+
+  # ADR-0004 checkpoint facts (registered 2026-08-07, user-approved). Source is the ADR,
+  # not a GDD — these are architecture-owned facts (the tiered doc plan includes ADR-only
+  # docs); the time-authority GDD cites them via Rule 9(b) and AC-66/67/68.
+  - name: checkpoint_snapshot_beat
+    status: active
+    source: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    referenced_by:
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+      - design/gdd/time-authority-mode-switch.md
+    value: "AwaitingPresentation -> NextActor transition, plus an activation-0 write immediately post-swap"
+    unit: state-machine transition
+    notes: "The pinned battle-checkpoint snapshot beat (ADR-0004 s2). NOT at the end of
+      ResolvingAction — at the NextActor boundary the presentation gate is provably idle, so
+      presentation state can never enter a snapshot and the serialized state IS the resume point
+      (start of the activation after the last resolved one). The activation-0 write closes the
+      pre-first-activation quit re-roll window. Companion invariant: no checkpoint between
+      battle-end declaration and the reconcile drain. Will be referenced_by the save-load
+      quick-spec (#6) and the combat-set GDDs once those exist."
+    added: 2026-08-07
+    revised: ""
+
+  - name: checkpoint_content_scope
+    status: active
+    source: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    referenced_by:
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+      - design/gdd/time-authority-mode-switch.md
+    value: "8 items — full self-contained save, same schema family as colony saves, tagged Mode == TurnBased"
+    unit: content list
+    notes: "The 8 items (ADR-0004 s1): (1) encounter side tables serialized by their owners
+      (Turn Order, Action Economy, Targeting) — checkpoint only, never colony saves; (2)
+      TurnBasedAuthority state incl. state machine + current/next actor; (3) combat RNG streams
+      (slot reserved; format owned by the pending Seeded RNG ADR); (4) encounter framing
+      (EncounterId, BreachCells, ParticipantIds); (5) RaiderStore in its entirety; (6) un-reaped
+      IsDead colonists + IsBroken doors (the load path never reaps; occupancy rebuild filters
+      dead); (7) terrain full grid, same schema + material manifest as colony saves; (8) derived
+      state is NEVER checkpointed — rebuilt via Restore -> WorldReloaded. Any doc restating this
+      list must match it item-for-item; the time-authority GDD's Save/Load dependency row is the
+      other copy. Will be referenced_by the save-load quick-spec (#6)."
+    added: 2026-08-07
+    revised: ""
+
+  - name: checkpoint_buffer_pool
+    status: active
+    source: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    referenced_by:
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    value: "2 x 2 MB double-buffered pooled snapshot buffers (MVP); ~4 MB resident during battles"
+    unit: MB
+    notes: "Allocated at the composition root, never lazily at first battle (avoidable LOH
+      fragmentation event). Backpressure is coalesce-newest: a buffer is always exactly one of
+      free | pending | in-flight; the sim never blocks; the writer releases its finished buffer
+      before claiming the pending one. Filled via the SnapshotInto caller-buffer obligation on
+      ADR-0002/0003 stores — the allocating Snapshot() remains the colony-save path only. Grows
+      with map size (full-vision terrain is 16 MB). Post-battle release-vs-retain policy is
+      Save/Load #6's call. Will be referenced_by the save-load quick-spec (#6)."
+    added: 2026-08-07
+    revised: ""
+
+  - name: save_ordering_stamp
+    status: active
+    source: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    referenced_by:
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    value: "in-file monotonic stamp (TickSequence + save ordinal); filesystem mtime is BANNED"
+    unit: ordering rule
+    notes: "Decides newest-valid-save for Continue across all slots (during a battle that is the
+      checkpoint; after it, the battle-end autosave). mtime is fragile against clock changes and
+      Steam Cloud restores, and is what would let a resurrected retired checkpoint outrank the
+      battle-end save. Distinct from coalesce-newest (s3 write backpressure) — two mechanisms,
+      two names. Will be referenced_by the save-load quick-spec (#6)."
+    added: 2026-08-07
+    revised: ""
+
+  - name: checkpoint_writer_provenance
+    status: active
+    source: docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    referenced_by:
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+      - design/gdd/time-authority-mode-switch.md
+    value: "writer-id field in the save header; the battle-checkpoint writer is the only legal author of a Mode == TurnBased save"
+    unit: provenance rule
+    notes: "AC-68's mechanism. Enforcement is primarily WRITE-side — the save API refuses a
+      TurnBased tag from any writer other than the battle-checkpoint writer — with the load-side
+      header check as backstop. The checkpoint lives in a dedicated non-selectable slot. Without
+      the header a checkpoint is byte-indistinguishable from any other TurnBased-tagged save and
+      AC-68/AC-54a are untestable. Will be referenced_by the save-load quick-spec (#6)."
+    added: 2026-08-07
     revised: ""
 
 # Example:

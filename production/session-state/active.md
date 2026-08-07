@@ -3,7 +3,7 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture-decision; Proposed; godot-specialist PASS WITH NOTES + TD-ADR CONCERNS all applied) — next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec. OPEN: registry update skipped (needs user approval)
+Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture-decision; Proposed; godot-specialist PASS WITH NOTES + TD-ADR CONCERNS all applied); registry update DONE 2026-08-07 (user-approved) — next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec
 <!-- /STATUS -->
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
@@ -19,7 +19,7 @@ Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture
 - Gates: **godot-specialist PASS WITH NOTES** (notes folded in — same-volume rename semantics, thread-pool vs dedicated writer thread, `OS.RequestPermissions` non-issue on PC); **TD-ADR CONCERNS → resolved** (B1–B7 blocking + A1–A10 advisory ALL applied; headline fixes: snapshot beat ambiguity, activation-0 gap, quiesce-on-retirement race, ordering-by-mtime ban, AC-68 moved write-side, gzip thread ownership, `SnapshotInto` named as a contract obligation not an aspiration).
 - Promotion gate: shares ADR-0002's re-scoped criterion 5 — checkpoint writes at combat cadence must hold frame rate on target hardware; DO NOT promote ADR-0004 (or ADR-0002) before that run.
 - Companion edits: GDD AC-66 re-authored (snapshot-capture wording + coalesce-newest convergence clause) and Rule 9(b) gains the activation-0 sentence; technical-preferences ADR log entry pending→Proposed.
-- **OPEN — registry**: `design/registry/` update for ADR-0004 entities NOT done — BLOCKING-gated on explicit user approval; approve or decline next session.
+- **RESOLVED 2026-08-07 — registry**: user APPROVED; `design/registry/entities.yaml` gains 5 ADR-0004 constants entries (checkpoint_snapshot_beat, checkpoint_content_scope, checkpoint_buffer_pool, save_ordering_stamp, checkpoint_writer_provenance). Source = the ADR (architecture-owned facts); time-authority GDD in referenced_by where it cites them. YAML parse-validated.
 
 ## PROPAGATION SESSION 2026-08-03 (/propagate-design-change time-authority-mode-switch)
 
