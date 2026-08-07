@@ -22,7 +22,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 | # | System Name | Category | Priority | Status | Doc Type | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|----------|------------|------------|
 | 1 | Terrain Data Model | Core | MVP | **Approved** (/design-review re-review 2026-08-02: APPROVED, conditional edits applied same day) | Full GDD + ADR-002 | [terrain-data-model.md](terrain-data-model.md) | (none — Foundation) |
-| 2 | Time Authority / Mode-Switch (inferred, elaborated) | Core | MVP | **Designed** (/design-review 2026-08-02: NEEDS REVISION → revised same day, 5 blocking + 9 recommended applied; pending re-review — see reviews/time-authority-mode-switch-review-log.md) | Full GDD + ADR-001 | [time-authority-mode-switch.md](time-authority-mode-switch.md) | (none — Foundation) |
+| 2 | Time Authority / Mode-Switch (inferred, elaborated) | Core | MVP | **Approved** (/design-review third pass 2026-08-07: NEEDS REVISION → REVISED → APPROVED, 4 blocking (B1–B4) applied + verified; propagation gate satisfied (ADR-0001/0003 amended 2026-08-03, ADR-0004 authored) — see reviews/time-authority-mode-switch-review-log.md) | Full GDD + ADR-001 | [time-authority-mode-switch.md](time-authority-mode-switch.md) | (none — Foundation) |
 | 3 | World Change Event Bus (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
 | 4 | Seeded RNG / Determinism (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
 | 5 | Material Catalog (inferred) | Economy | MVP | Not Started | Quick-spec | — | (none — Foundation) |
@@ -170,7 +170,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 | Metric | Count |
 |--------|-------|
 | Total index entries | 35 |
-| Design docs started | 2 (Terrain Data Model — **Approved**, /design-review re-review 2026-08-02; Time Authority / Mode-Switch — **Designed**, CD-GDD-ALIGN REVISED 2026-08-02, pending /design-review) |
+| Design docs started | 2 (Terrain Data Model — **Approved**, /design-review re-review 2026-08-02; Time Authority / Mode-Switch — **Approved**, /design-review third pass 2026-08-07) |
 | ADRs written | 3/3 + contracts annex — **ADR-0001 & ADR-0003 Accepted**; ADR-0002 Proposed (frame-rate clause on target hardware) |
 | Tier 0 spikes complete | 0/6 |
 | MVP systems designed | 0/25 |
