@@ -24,7 +24,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 | 1 | Terrain Data Model | Core | MVP | **Approved** (/design-review re-review 2026-08-02: APPROVED, conditional edits applied same day) | Full GDD + ADR-002 | [terrain-data-model.md](terrain-data-model.md) | (none — Foundation) |
 | 2 | Time Authority / Mode-Switch (inferred, elaborated) | Core | MVP | **Designed** (/design-review 2026-08-02: NEEDS REVISION → revised same day, 5 blocking + 9 recommended applied; pending re-review — see reviews/time-authority-mode-switch-review-log.md) | Full GDD + ADR-001 | [time-authority-mode-switch.md](time-authority-mode-switch.md) | (none — Foundation) |
 | 3 | World Change Event Bus (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
-| 4 | Seeded RNG / Determinism (inferred, TD) | Core | MVP | Not Started | ADR-only | — | (none — Foundation) |
+| 4 | Seeded RNG / Determinism (inferred, TD) | Core | MVP | **Proposed** (ADR-0005 authored 2026-08-07, full review: godot-specialist PASS WITH NOTES + TD-ADR CONCERNS applied) | ADR-only | [adr-0005](../../docs/architecture/adr-0005-seeded-rng-determinism.md) | (none — Foundation) |
 | 5 | Material Catalog (inferred) | Economy | MVP | Not Started | Quick-spec | — | (none — Foundation) |
 | 6 | Save/Load & World Serialization (inferred) | Persistence | MVP | Not Started | ADR-only (contract now, format later) | — | Cross-cutting: shape of all state-holding systems |
 | 7 | Terrain Rendering & Cutaway (inferred, TD; absorbs Camera & Z-Level Visibility) | Core | MVP | Not Started | Quick-spec | — | Terrain Data Model, World Change Event Bus |
@@ -171,7 +171,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 |--------|-------|
 | Total index entries | 35 |
 | Design docs started | 2 (Terrain Data Model — **Approved**, /design-review re-review 2026-08-02; Time Authority / Mode-Switch — **Designed**, CD-GDD-ALIGN REVISED 2026-08-02, pending /design-review) |
-| ADRs written | 3/3 + contracts annex — **ADR-0001 & ADR-0003 Accepted**; ADR-0002 Proposed (frame-rate clause on target hardware) |
+| ADRs written | 5 + contracts annex — **ADR-0001 & ADR-0003 Accepted**; ADR-0002, ADR-0004, ADR-0005 Proposed (ADR-0002/0004 gated on the target-hardware frame-rate run; ADR-0005 Seeded RNG authored 2026-08-07) |
 | Tier 0 spikes complete | 0/6 |
 | MVP systems designed | 0/25 |
 | Vertical Slice systems designed | 0/4 |
