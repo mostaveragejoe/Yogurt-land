@@ -1,7 +1,9 @@
 # ADR-0005: Seeded RNG / Determinism
 
 ## Status
-Proposed
+**Proposed** (2026-08-07)
+
+*(Gates: godot-specialist — sound, no blocking issue; findings folded in (unchecked-arithmetic requirement, named-field serialization, reference test vectors, Alternative E, FMA note, stream pooling). TD-ADR (full mode) — CONCERNS: B1/B2/B4 and A1–A6 applied same day; B3 (reload seed policy) discharged at the ADR level — both policies one-knob cheap, identical-replay placeholder default, design pick routed to Raid Trigger #18's GDD (see §Reload seed policy). Companion edits + registry update pending user approval.)*
 
 ## Date
 2026-08-07
@@ -21,10 +23,10 @@ Proposed
 
 | Field | Value |
 |-------|-------|
-| **Depends On** | ADR-0001 (Accepted) — draws only inside `Tick()` or authority-driven resolution; this ADR's load-window draws (colonist embark, future map generation) need a two-word companion amendment to that rule (§Migration Plan). ADR-0003 (Accepted) — entity spawn draws (`AppearanceSeed`); `EntityIdSource` is this ADR's direct precedent for `EncounterIdSource`. |
+| **Depends On** | ADR-0001 (Accepted) — draws only inside `Tick()` or authority-driven resolution; this ADR's load-window draws (colonist embark, future map generation) need a two-word companion amendment to that rule (§Migration Plan). ADR-0003 (Accepted) — entity spawn draws (`AppearanceSeed`); `EntityIdSource` is this ADR's direct precedent for `EncounterIdSource`. ADR-0004 (Proposed) — the `RestoredFromCheckpoint` resume path and load-window restore writer this ADR's combat streams ride, and the serializer of encounter framing (content item 4) that `EncounterIdSource` joins (TD-ADR B2/A5, 2026-08-07). |
 | **Enables** | ADR-0004's AC-67 validation criterion (blocking — checkpoint RNG-stream resume needs this ADR's format); Save/Load quick-spec #6 (blocking, per systems-index dependency map); Raid Trigger GDD (#18, breach-point + composition draws); Colonist Entity quick-spec (#9, `AppearanceSeed` draw); Map Authoring / procgen (Alpha #35, post-MVP) |
 | **Blocks** | Save/Load quick-spec #6; ADR-0004 promotion to Accepted (AC-67 needs this ADR's stream format) |
-| **Ordering Note** | Fourth and last Foundation-layer ADR (systems-index #4). Written against ADR-0001/0003 as Accepted and ADR-0004 as Proposed; if either is revised, this ADR is re-checked at the same revision point. |
+| **Ordering Note** | Fourth and last Foundation-layer ADR (systems-index #4). Written against ADR-0001/0003 as Accepted and ADR-0004 as Proposed; the ADR-0004 relationship is deliberately mutual — this ADR fills ADR-0004's reserved content slot while riding its restore machinery. If any of the three is revised, this ADR is re-checked at the same revision point. |
 
 ## Context
 
@@ -88,7 +90,10 @@ public sealed class RngStream          // mutable class — matches the house pa
     public bool NextBool(float probability = 0.5f);
 
     public PcgState Snapshot();        // the 16 bytes, by value
-    public void Restore(PcgState state);
+    public void Restore(PcgState state); // debug-asserts state.Increment is odd — PcgState's
+                                        // public fields could otherwise install an even
+                                        // increment and silently degrade the stream
+                                        // (TD-ADR A4, 2026-08-07)
 
     // Every Next* method debug-asserts the ADR-0001 mutation window is open
     // (Tick() / authority-driven resolution / the load window — see the
@@ -101,15 +106,19 @@ public sealed class RngStream          // mutable class — matches the house pa
 ```csharp
 public enum RngStreamId : byte
 {
-    RaidTrigger,          // breach-point selection, raider composition (CD-2)
-    ColonistIdentity,     // AppearanceSeed draw at embark (CD-4)
-    MapGeneration,        // reserved — Alpha #35, post-MVP
-    CombatResolution,     // encounter-scoped — see below
-    CombatRaiderAi,       // encounter-scoped — see below
+    RaidTrigger      = 0, // breach-point selection, raider composition (CD-2)
+    ColonistIdentity = 1, // AppearanceSeed draw at embark (CD-4)
+    MapGeneration    = 2, // reserved — Alpha #35, post-MVP
+    CombatResolution = 3, // encounter-scoped — see below
+    CombatRaiderAi   = 4, // encounter-scoped — see below
 }
-// New stream kinds later = a new enum value + one ownership-table row (below) —
-// the same no-generic-grab-bag guard ADR-0003 applies to entity stores, applied
-// to RNG: no "misc RNG" stream exists.
+// Values are EXPLICIT and NEVER renumbered — the id participates in stream
+// derivation, so renumbering silently re-seeds every stream and breaks the
+// "replay one fight from (MasterSeed, EncounterId)" guarantee across versions
+// (TD-ADR A2, 2026-08-07; same append-only discipline as ADR-0002's material
+// manifest). New stream kinds later = a new appended enum value + one
+// ownership-table row (below) — the same no-generic-grab-bag guard ADR-0003
+// applies to entity stores, applied to RNG: no "misc RNG" stream exists.
 
 public static class RngSeeder
 {
@@ -130,21 +139,40 @@ public static class RngSeeder
 
 ### The RNG Stream Ownership Table (the core deliverable)
 
-| Stream | Purpose | Derivation | Serialized in | Owner |
-|---|---|---|---|---|
-| `RaidTrigger` | Breach-point selection, raider composition | Persistent — `DerivePersistent` at world creation | Colony-mode save | Raid Trigger (#18) |
-| `ColonistIdentity` | `AppearanceSeed`, one draw per colonist at embark | Persistent — `DerivePersistent` at world creation | Colony-mode save | Colonist Entity (#9) / Map Authoring embark path |
-| `MapGeneration` | World generation (reserved, not drawn from in MVP) | Persistent — `DerivePersistent` at world creation | Colony-mode save | Map Authoring / procgen (Alpha #35, post-MVP) |
-| `CombatResolution` | Hit/damage rolls | Encounter-scoped — `DeriveEncounterScoped` at switch-in | **Battle checkpoint only** — never a colony-mode save (ADR-0003 firewall) | Combat: Targeting & Resolution (#22) |
-| `CombatRaiderAi` | Raider AI stochastic decisions | Encounter-scoped — `DeriveEncounterScoped` at switch-in | **Battle checkpoint only** — never a colony-mode save | Combat: Raider Decision-Making (#23) |
+| Stream | Purpose | Derivation | Drawn under | Serialized in | Sole drawer |
+|---|---|---|---|---|---|
+| `RaidTrigger` | Breach-point selection, raider composition | Persistent — `DerivePersistent` at world creation | RealTime (threat-accumulation `Tick`, per ADR-0001's worked-example row) | Colony-mode save | Raid Trigger (#18) |
+| `ColonistIdentity` | `AppearanceSeed`, one draw per colonist at embark | Persistent — `DerivePersistent` at world creation | Load window (embark spawn path) | Colony-mode save | Map Authoring embark path (#14) — Colonist Entity (#9) is a passive store (ADR-0003) that never ticks and never draws; it merely *stores* the resulting `AppearanceSeed` |
+| `MapGeneration` | World generation (reserved, not drawn from in MVP) | Persistent — `DerivePersistent` at world creation | Load window | Colony-mode save | Map Authoring / procgen (Alpha #35, post-MVP) |
+| `CombatResolution` | Hit/damage rolls | Encounter-scoped — `DeriveEncounterScoped` at switch-in | TurnBased only | **Battle checkpoint only** — never a colony-mode save (ADR-0003 firewall) | Combat: Targeting & Resolution (#22) |
+| `CombatRaiderAi` | Raider AI stochastic decisions | Encounter-scoped — `DeriveEncounterScoped` at switch-in | TurnBased only | **Battle checkpoint only** — never a colony-mode save | Combat: Raider Decision-Making (#23) |
 
-Each system is granted read/draw access to **only its own named stream(s)** at the composition root — mirrors ADR-0003's per-(system × field group) writer-interface segregation, applied to RNG instead of store writes. A system holding a reference to a stream it doesn't own in this table is unrepresentable, the same discipline as the entity-store ownership table.
+The **Drawn under** column is load-bearing, not descriptive (TD-ADR B4, 2026-08-07): like ADR-0002 rule 4's writer table and ADR-0003's per-authority ownership columns, it makes "one drawer at any moment" expressible and assertable — a stream drawn from under the wrong authority fires the same mode assertion the entity stores use. Each system is granted read/draw access to **only its own named stream(s)** at the composition root — mirrors ADR-0003's per-(system × field group) writer-interface segregation, applied to RNG instead of store writes. A system holding a reference to a stream it doesn't own in this table is unrepresentable, the same discipline as the entity-store ownership table.
 
-**Encounter-scoped derivation happens inside the authority-driven Reaction-phase seam** — the same seam ADR-0001/0003 already use for pre-switch placement normalization — so the derivation step itself runs under the mutation window, and the derived streams are handed to Combat's systems before the first `Tick()` of the encounter. The `CombatResolution`/`CombatRaiderAi` `RngStream` instances are `Restore()`d in place at each new encounter rather than freshly constructed — a bounded, non-steady-state allocation at most once per battle, the same pooling posture ADR-0003 already applies to its own encounter-scoped side tables.
+**Serialization completeness note** (TD-ADR A1): the battle checkpoint is a full self-contained save (ADR-0004 §1), so it carries `MasterSeed`, the persistent stream states, and `EncounterIdSource` via its colony-save schema half automatically — ADR-0004 content item 3's slot covers the two combat streams *specifically*, not the only RNG bytes in the file. Per ADR-0003's binding side-table wording ("serialized only into the battle checkpoint **by its owning systems**"), each combat system snapshots **its own** stream via the checkpoint writer's invocation — there is no central "RNG module" serializer, and ADR-0004 item 3's "Seeded RNG owner" phrasing is corrected to say so (companion edit, TD-ADR A6).
 
-### `EncounterId` gets a defined allocator (a gap this ADR closes)
+**Presentation randomness has a sanctioned home outside this table** (TD-ADR A3): a `PresentationRng` — OS-entropy-seeded, never serialized, never drawn inside `Tick()` — exists for views, ambient audio (#33), and idle/VFX variation. It is *outside* the determinism guarantee by design; the `rng_outside_authority_execution` forbidden pattern governs the simulation streams in this table, not presentation noise (registry description scoped accordingly — companion edit). Without a named legal generator, view code would inevitably violate the rule with the first idle animation jitter.
 
-`SwitchTransitionData.EncounterId` (ADR-0001) has been a bare `int` with no specified source since ADR-0001 was written. Encounter-scoped stream derivation needs `EncounterId` to be **unique and never reused** across a playthrough, or two different battles could derive the same combat RNG stream. Fix: an `EncounterIdSource` — a serialized monotonic counter, owned by Raid Trigger (the sole `RequestSwitch`-into-combat requester, ADR-0001 Rule 2), never reused. This mirrors `EntityIdSource` (ADR-0003) exactly, including the non-reuse guarantee and the "serialized counter IS the guarantee" mechanism.
+**Encounter-scoped derivation happens inside the authority-driven Reaction-phase seam at switch-in** — the same seam ADR-0001/0003 already use for pre-switch placement normalization — so the derivation step itself runs under the mutation window, and the derived streams are handed to Combat's systems before the first `Tick()` of the encounter. The two `RngStream` instances are allocated once at the composition root and `Restore()`d in place at each new encounter — zero allocation per battle (TD-ADR A4 correction: in-place restore allocates nothing; the once-ever object construction is the only allocation, consistent with ADR-0003's encounter-scoped side-table posture).
+
+**Checkpoint restore never re-derives (TD-ADR B1 — the rule that keeps AC-67 true).** Derivation happens at *switch-in only*. On a `RestoredFromCheckpoint` resume (ADR-0004 §4) there is no `RequestSwitch`, no Reaction-phase seam, and **no derivation**: the combat streams are `Restore()`d from the checkpoint's serialized `PcgState`s inside the load window, via ADR-0004's sanctioned restore writer. Re-deriving from `(MasterSeed, EncounterId)` at restore would reset both streams to draw count zero and falsify AC-67's determinism-vs-unquit-control guarantee — the checkpoint's 16 bytes per stream ARE the mid-battle position; that is the entire point of carrying them.
+
+### `EncounterId` gets a defined allocator (a gap this ADR closes; specification per TD-ADR B2, 2026-08-07)
+
+`SwitchTransitionData.EncounterId` (ADR-0001) has been a bare `int` with no specified source since ADR-0001 was written. Encounter-scoped stream derivation needs `EncounterId` to be **unique and never reused** across a playthrough, or two different battles could derive the same combat RNG stream. Fix — `EncounterIdSource`, fully specified:
+
+- **Type**: the field **widens `int` → `long`** (companion amendment to ADR-0001) — same rationale as `EntityId.Value` (ADR-0003): `long` crosses the Godot C# Variant boundary without conversion, and a monotonic counter never approaches `long.MaxValue`. `RngSeeder.DeriveEncounterScoped(..., long encounterId)` and the widened field now agree.
+- **Owner**: **Time Authority** — NOT Raid Trigger. ADR-0004 content item 4 already makes Time Authority the serializer of encounter framing (`EncounterId`, `BreachCells`, `ParticipantIds`); a serialized Foundation-layer counter cannot be owned by a Feature-layer system (#18). The `TimeAuthorityManager` allocates the id at `RequestSwitch` acceptance and stamps it into the stored encounter framing; the requester (Raid Trigger, the sole switch-into-combat requester per ADR-0001's worked-example table and the registry's `mode_switch_request` contract) never supplies or sees the counter.
+- **Serialized in**: **both the colony-mode save and the battle checkpoint**, riding Time Authority's snapshot alongside `{Mode, TurnIndex, TickSequence}` — "the serialized counter IS the guarantee" (ADR-0003's `EntityIdSource` mechanism) only holds if the counter survives every load path; a colony-save-only counter would reissue an id after a mid-battle relaunch and correlate two battles' rolls.
+- **Never reused**, monotonic from 1 — mirrors `EntityIdSource` exactly.
+
+### Reload seed policy (TD-ADR B3; discharges CD-GDD-ALIGN M1's routed obligation)
+
+CD-GDD-ALIGN M1 (2026-08-02) routed one design question here jointly with Raid Trigger #18: after a colony-save reload, does the next raid roll identically or re-roll? This ADR's architectural answer is that **both policies are one-knob cheap, and neither requires revising this ADR**; the design pick is #18's GDD call, where CD-2 and CD-15 live.
+
+- **Identical replay — the placeholder default, by construction.** The serialized `RaidTrigger` stream resumes at its saved position, so the next raid rolls identically: same timing, breach point, composition. Best for bug reproduction; grants exact retry foreknowledge (the CD-15 ceiling concern M1 flagged) — a concern accepted-for-now under the same MVP reload-freedom ruling of 2026-08-07, pending #18's explicit pick.
+- **The knob: `ReseedOnLoad` (default off).** When on, a serialized monotonic **load ordinal** (bumped at every load; serialized like `EncounterIdSource`) mixes into the `RaidTrigger` stream derivation at load — post-reload raids differ while staying inside #18's threat band (the band is #18's threat model, never RNG's concern). Kills foreknowledge; opens reload-fishing. Turning it on later is a knob flip plus one already-specified counter, not a format migration.
+- **Corrupt-checkpoint fallback interaction** (ADR-0004 §5): a battle restarted from the switch-in autosave re-derives from the same `(MasterSeed, EncounterId)` — the same initial dice tape, consistent with identical replay. Not worth counter-machinery: reaching that path requires disk failure or tampering, which ADR-0004 already places outside the design threat model.
 
 ### Draw-legality companion amendment to ADR-0001
 
@@ -172,7 +200,7 @@ creation. The one external-entropy admission point in the entire game.
 ```
 
 ### Key Interfaces
-`PcgState` (16-byte value struct — the entire resumable position) · `RngStream` (mutable class; `NextUInt32/NextUInt64/NextInt/NextFloat01/NextBool`; `Snapshot()/Restore()`) · `RngStreamId` enum (ownership-table key) · `RngSeeder.DerivePersistent/DeriveEncounterScoped` · `EncounterIdSource` (monotonic, serialized, never reused — companion addition to ADR-0001)
+`PcgState` (16-byte value struct — the entire resumable position; named-field serialization only) · `RngStream` (mutable class; `NextUInt32/NextUInt64/NextInt/NextFloat01/NextBool`; `Snapshot()/Restore()`, odd-increment asserted) · `RngStreamId` enum (ownership-table key; explicit never-renumbered values) · `RngSeeder.DerivePersistent/DeriveEncounterScoped` · `EncounterIdSource` (`long`, monotonic, never reused; owned and serialized by Time Authority in both save kinds — companion amendment to ADR-0001) · `PresentationRng` (non-sim, non-serialized, outside the determinism guarantee)
 
 ## Alternatives Considered
 
@@ -241,22 +269,24 @@ creation. The one external-entropy admission point in the entire game.
 
 ## Migration Plan
 None — greenfield. **Companion edits at adoption** (same changeset as this ADR):
-1. **ADR-0001** — two edits: (a) the RNG rule gains "…or the load window" (mirrors ADR-0002 rule 5's existing load-window carve-out for terrain mutations). (b) `SwitchTransitionData.EncounterId` gains its defined allocation source: `EncounterIdSource`, monotonic, serialized, owned by Raid Trigger, never reused (mirrors `EntityIdSource`, ADR-0003).
-2. **ADR-0004** — content scope item 3 ("Combat RNG streams… format owned by the Seeded RNG ADR") is discharged; cross-reference this ADR.
-3. **`.claude/docs/technical-preferences.md`** — Architecture Decisions Log gains the ADR-0005 entry. Forbidden Patterns gains: an RNG stream reused across encounters; a stream held by a system that doesn't own it in the ownership table; a raw draw converted to float via a culture-aware or platform-variant path.
+1. **ADR-0001** — two edits: (a) the RNG rule gains "…or the load window" (mirrors ADR-0002 rule 5's existing load-window carve-out for terrain mutations). (b) `SwitchTransitionData.EncounterId` **widens `int` → `long`** and gains its defined allocation source: `EncounterIdSource` — allocated by `TimeAuthorityManager` at `RequestSwitch` acceptance, monotonic, never reused, serialized by Time Authority in both colony saves and battle checkpoints (mirrors `EntityIdSource`, ADR-0003; ownership per ADR-0004 content item 4 — TD-ADR B2).
+2. **ADR-0004** — content scope item 3 ("Combat RNG streams… format owned by the Seeded RNG ADR") is discharged; cross-reference this ADR. Item 3's "Serialized by: Seeded RNG owner" wording is corrected to "each stream's owning combat system" per ADR-0003's binding side-table wording (TD-ADR A6).
+3. **`.claude/docs/technical-preferences.md`** — Architecture Decisions Log gains the ADR-0005 entry. Forbidden Patterns gains: an RNG stream reused across encounters or re-derived at checkpoint restore; a stream held by a system that doesn't own it in the ownership table; a raw draw converted to float via a culture-aware or platform-variant path.
 4. **`design/gdd/systems-index.md`** — #4 status updates from "Not Started" to reflect this ADR's authoring.
+5. **`docs/registry/architecture.yaml`** (TD-ADR A5) — the `rng_outside_authority_execution` forbidden-pattern entry gains the load-window extension and the presentation-scope clarification (`revised:` stamped, old value in a comment, per registry rules); new entries: `rng_streams` state ownership, the stream-grant interface contract, the PCG32 API decision, and the restore-never-rederives forbidden pattern.
 
 ## Validation Criteria
 1. Same `MasterSeed` + same recorded inputs → byte-identical stream state and draw sequence, re-run twice in the same process and across a save/load round-trip (CI).
 2. N persistent streams derived from one `MasterSeed` via `DerivePersistent` show no detectable cross-correlation over the first 10⁶ draws each (statistical smoke test — not a full randomness test-suite pass, MVP scope); `NextUInt32` output matches PCG32's published reference test vectors.
 3. A combat encounter's `CombatResolution`/`CombatRaiderAi` streams, re-derived from `(MasterSeed, EncounterId)` in isolation, reproduce the exact draw sequence of that encounter as it ran embedded in a full playthrough (the "replay one fight" guarantee).
-4. `Snapshot()`/`Restore()` round-trips every stream (persistent and encounter-scoped) byte-identically; a checkpoint-restored battle continues drawing identically to an unquit control run (AC-67's technical half, ADR-0004).
-5. `RngStream.Next*` fires the mutation-window debug assertion when called outside `Tick()`/authority-driven resolution/the load window (post-companion-amendment).
-6. Six months in: no system holds a reference to a stream it doesn't own in the ownership table; no "misc RNG" grab-bag stream exists.
+4. `Snapshot()`/`Restore()` round-trips every stream (persistent and encounter-scoped) byte-identically; a checkpoint-restored battle continues drawing identically to an unquit control run (AC-67's technical half, ADR-0004) — and the test explicitly asserts the restore path performed **zero derivations** (a re-derivation on restore is the B1 failure mode: draw counts reset to zero, determinism silently broken).
+5. `RngStream.Next*` fires the mutation-window debug assertion when called outside `Tick()`/authority-driven resolution/the load window (post-companion-amendment); `Restore` fires its assertion on an even `Increment`.
+6. A save → load → save cycle preserves `EncounterIdSource` such that a post-load battle receives a never-before-issued `EncounterId` (extends the save/load spike's `EntityIdSource` test to the new counter).
+7. Six months in: no system holds a reference to a stream it doesn't own in the ownership table; no "misc RNG" grab-bag stream exists; no view or audio code draws from a simulation stream (`PresentationRng` exists precisely so this stays true).
 
 ## Related Decisions
 - ADR-0001 Time Authority (Accepted) — companion amendment: load-window RNG legality, `EncounterId` allocation via `EncounterIdSource`
 - ADR-0003 Entity Data Ownership (Accepted) — entity spawn draws (`AppearanceSeed`); `EntityIdSource` is this ADR's direct precedent for `EncounterIdSource`
 - ADR-0004 Battle Checkpoint Architecture (Proposed) — content scope item 3, discharged by this ADR; AC-67 depends on it
-- `design/gdd/systems-index.md` #4, CD-2, CD-4
+- `design/gdd/systems-index.md` #4, CD-2, CD-4, CD-15; Gate Record CD-GDD-ALIGN M1 (reload seed policy — discharged in §Reload seed policy, design pick routed to #18)
 - Save/Load quick-spec #6 — blocked on this ADR

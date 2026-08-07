@@ -3,8 +3,16 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: 2026-08-07 decisions session DONE (registry backfilled; OQ #1 + save-scum stance resolved and recorded) — next: Seeded RNG ADR (blocking Save/Load #6), then the Colonist Entity quick-spec
+Task: ADR-0005 Seeded RNG AUTHORED 2026-08-07 (/architecture-decision; Proposed; godot-specialist PASS folded + TD-ADR CONCERNS B1/B2/B4+A1-A6 applied; B3 discharged as defer-to-#18 with identical-replay default) — OPEN: companion edits (ADR-0001/0004, technical-preferences, systems-index) + registry update AWAIT USER APPROVAL (widget dismissed). Next after that: Colonist Entity quick-spec; Save/Load #6 now unblocked once companions land
 <!-- /STATUS -->
+
+## ADR-0005 SESSION 2026-08-07 (/architecture-decision seeded-rng, review mode full)
+
+- **ADR-0005 written**: `docs/architecture/adr-0005-seeded-rng-determinism.md` — **Proposed**. PCG32 XSH-RR (16-byte `PcgState`), per-system streams from one `MasterSeed` (SplitMix64 over (seed, id)); stream ownership table WITH per-authority "Drawn under" column; encounter-scoped combat streams from `(MasterSeed, RngStreamId, EncounterId)`, checkpoint-only serialization by their owning systems; persistent streams in colony saves; `PresentationRng` named as the legal non-sim generator; explicit never-renumbered enum values.
+- **User decisions in-session (widget 1)**: PCG32 over xoshiro256**; fresh sub-stream per encounter; ADR-0001 companion amendment for load-window draws.
+- Gates: **godot-specialist PASS** (folded: unchecked-arithmetic, named-field serialization, reference test vectors, Alternative E, FMA note, stream pooling); **TD-ADR CONCERNS → B1/B2/B4 + A1–A6 applied** (headline fixes: restore-never-rederives rule (B1); `EncounterIdSource` fully specified — `long`, owned+serialized by Time Authority in BOTH save kinds, allocated at RequestSwitch acceptance (B2); "Drawn under" authority column + Map Authoring as ColonistIdentity's drawer (B4)).
+- **B3 (reload seed policy, CD-GDD-ALIGN M1 obligation)**: discharged at ADR level — identical replay is the placeholder default by construction, `ReseedOnLoad` knob (off) named, **design pick routed to Raid Trigger #18's GDD**. User widget was dismissed unanswered — #18 authoring should surface this choice again.
+- **OPEN — awaiting user approval (widget dismissed)**: (1) companion edits — ADR-0001 (RNG rule "+ load window"; EncounterId int→long + allocator), ADR-0004 (item 3 discharge + "owning combat systems" wording), technical-preferences (log entry + 3 forbidden patterns), systems-index (#4 status); (2) registry update (5 new/revised entries incl. scoping `rng_outside_authority_execution`). Approve or decline next session.
 
 ## DECISIONS SESSION 2026-08-07 (three user decisions, all recorded to file)
 
