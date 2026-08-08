@@ -24,33 +24,600 @@
 #
 # STATUS VALUES: active | deprecated | superseded-by: TR-[system]-NNN
 
-version: 1
-last_updated: ""
+version: 2
+last_updated: "2026-08-08"
 
-requirements: []
+# First real population: /architecture-review 2026-08-08.
+# 97 requirements extracted from the two foundation GDDs.
+#   system: terrain -> design/gdd/terrain-data-model.md (46)
+#   system: time    -> design/gdd/time-authority-mode-switch.md (51)
 
-# --- EXAMPLE ENTRIES (remove when first real entries are added) ---
-#
-# - id: TR-combat-001
-#   system: combat
-#   gdd: design/gdd/combat-system.md
-#   requirement: "Player takes damage from enemies based on attack power minus defence"
-#   created: 2026-03-10
-#   revised: ""
-#   status: active
-#
-# - id: TR-combat-002
-#   system: combat
-#   gdd: design/gdd/combat-system.md
-#   requirement: "Combo window timing is 0.4 seconds between hits"
-#   created: 2026-03-10
-#   revised: "2026-04-01"
-#   status: active
-#
-# - id: TR-combat-003
-#   system: combat
-#   gdd: design/gdd/combat-system.md
-#   requirement: "Old damage formula using raw stats"
-#   created: 2026-03-10
-#   revised: ""
-#   status: superseded-by: TR-combat-001
+requirements:
+
+  # === TERRAIN (design/gdd/terrain-data-model.md) ===
+
+  - id: TR-terrain-001
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Every in-bounds cell on every Z-level independently stores a floor and a wall, packed into an 8-byte cell record."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-002
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "The colony store and the battle map are a single shared representation with no second representation and no state conversion at the RealTime<->TurnBased switch."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-003
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "The cell record holds architecture only (floor, wall, WallHp, IsStairFloor, claim bit) and never occupants, designations, zones, or combat state (firewall table)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-004
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "All terrain mutation goes through a single write facade with ClearWall/SetWall/SetFloor/ClearFloor/ApplyWallDamage/ApplyWallRepair plus a claim bit."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-005
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Walls carry HP and are destructible; floors carry no HP and cannot be destroyed at runtime (floor loss deferred to #34)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-006
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Cell classification resolves to CellState {SolidRock, Open, Stair, Void, Anomalous}, with Anomalous (Wall!=0 & Floor=0) an explicit debug-asserted return, never a fall-through."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-007
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "IsPassableTerrain is a per-cell derived fact (Floor!=0 & Wall=0) Terrain exposes; Pathfinding composes it with doors and occupancy."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-008
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Diggability has no skill/tool/per-colonist eligibility gate; any wall cell is a legal dig target for any colonist (tier changes duration only)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-009
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Dig progress lives in a sparse side table keyed by CellCoord owned by Excavation, never a cell field; WallHp untouched during mining."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-010
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Mining accumulation and combat damage are independent code paths; a WallRemoved event invalidates any in-flight dig job and drops its progress entry."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-011
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Work-position adjacency is the diagonal-inclusive 8-cell Moore neighbourhood on the same Z-level, independent of passability and corner-cutting."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-012
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Work-position enumeration discards out-of-bounds candidates before any cell read (single-cell reads throw on OOB coordinates)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-013
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Dig Stairs Down publishes exactly one atomic batch containing SetFloor(stair)@Z plus ClearWall@Z+1; preconditions checked at designation and execution."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-014
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "IsStairFloor is retained and queryable even when a wall is built over a stair floor (dormant linkage is data-distinguishable from solid rock)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-015
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Exactly one terrain-modifying job may claim a cell at a time; a new designation cancels/replaces the pending one, latest-wins, no rollback."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-016
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "The claim bit and Job Assignment's claim table satisfy the invariant 'claim bit set == key present in the table' (debug-asserted)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-017
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Designation invalidation is driven by the batched change-event contract, including mid-battle while the colony is paused (paused systems still receive events)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-018
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Terrain publishes batched change events (WallDamaged/WallRemoved/WallPlaced/FloorPlaced) with previous-state capture; TerrainChange.Previous carries material tier at publish (CD-1)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-019
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Map authoring guarantees every excavatable cell carries a non-zero floor at load time; no runtime operation turns a floored cell into a void."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-020
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Every authored/procgen map satisfies the connectivity constraint that no region is reachable only from below (stairs are down-only), checkable per map."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-021
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Terrain is a passive store that never ticks: no time-authority registration, no Tick(); behaviour identical in both modes, only the legal writer set changes."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-022
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "The legal writer set is authority-scoped: RealTime=Excavation/Construction/Repair; TurnBased=Combat only; load window=Map Authoring/Restore (writer-per-authority assertion)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-023
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Every write debug-asserts the mutation window is open; writes from UI-callback or bus-handler contexts fire the assertion and do not apply."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-024
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Wall damage/repair arithmetic is performed in widened (long) arithmetic and rejects negative inputs before any arithmetic (RejectedInput; no state change, no publish)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-025
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Repair never lowers HP: if WallHp > MaxHp(tier) after a catalog rebalance, the call returns AlreadyAtMax with HP untouched, no load-time normalization."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-026
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Zero-delta operations (D=0, R at max, damage to a no-wall cell) are no-ops that publish nothing (no empty batches)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-027
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Wall max HP and tier are looked up from the Material Catalog (#5), never stored per cell; Terrain stores runtime ushort type ids only."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-028
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Displacement resolves to the nearest free cell by scanning candidate offsets in fixed ascending (Z,Y,X) order at expanding radius, first match wins (shared with ADR-0003 normalization)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-029
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Displacement skips void/impassable candidates and, when no free cell is found within the scan radius, cancels the build and publishes a Notifications event with the cell coordinate."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-030
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Bulk batch application is validate-all-then-apply: one invalid entry rejects the whole batch, applies nothing, publishes nothing, reports the first offending index."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-031
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "TerrainChangeBatch is a ref struct whose retention beyond Publish is a compile-time error (compile-fail test); the bus has no replay and terrain keeps no journal."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-032
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Save/load round-trips terrain cell data plus the claim bit and (via Excavation) in-flight dig progress under the serialization CI gate, so a half-dug wall resumes exactly."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-033
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Snapshot()/Restore produces byte-identical output for identical mutation sequences and matching change streams; restore is a distinct sanctioned load-window writer."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-034
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Terrain cell data fits 2 MB at MVP (128x128x16) and 16 MB at full-vision ceiling (256x256x32); chunks are 8 KB and stay off the Large Object Heap."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-035
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Terrain is chunked at size 32, locked to equal GridMap cell_octant_size (1:1 chunk<->octant); caller-side chunk math forbidden (facade owns ChunkOf/ChunkSize)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-036
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Terrain draw calls for the 3-layer cutaway stay <=150 (whole-frame <=500); style variants capped ~8 per tier (draw calls scale with distinct style combos per octant)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-037
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Full-map walkability sweep at MVP world size completes in <=0.5 ms (measured 0.290 ms)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-038
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "The simulation/mutation path has zero steady-state allocation: <=0.5 B/mutation and exactly 0 Gen0 collections over 60,000 mutations."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-039
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Concentrated AoE terrain change of 75 cells in one octant completes in <=30 us (measured 21.5 us); a multi-octant rebuild gate is TBD at measurement."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-040
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "The terrain core assembly is plain C# with zero Godot dependency, CI-grep-enforced (produces no visuals/audio directly)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-041
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Damage is visible in exactly three discrete states (intact/damaged/critical); the count is fixed here because it multiplies MeshLibrary size (HP breakpoints owned by #7)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-042
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "Damage visualisation is implemented as a third stacked overlay GridMap (not a per-cell shader parameter), because the render backend offers no per-instance data channel."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-043
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "The floor MeshLibrary includes a distinguishable stair item; dormant stairs need a persistent designation-layer + 3D indicator; the stair item counts toward per-octant style-combo draw-call scaling."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-044
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "A pre-render-backend Godot 4.7.1 verification gate confirms (a) GridMap still has no per-instance data channel, (b) octant rebake is still octant-granular, and measures the overlay map's draw-call cost, before render-backend implementation."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-045
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "60 fps on target hardware for the stacked GridMaps remains unverified (spike ran software Vulkan); last gate before ADR-0002 Accepted (non-blocking for the C# core)."
+    created: 2026-08-08
+    status: active
+  - id: TR-terrain-046
+    system: terrain
+    gdd: design/gdd/terrain-data-model.md
+    requirement: "The encounter-era breach log (CD-1 ordering) is owned by Combat #22 and routed via ADR-0003's EncounterOutcomeReport; Terrain cannot satisfy ordering."
+    created: 2026-08-08
+    status: active
+
+  # === TIME AUTHORITY / MODE SWITCH (design/gdd/time-authority-mode-switch.md) ===
+
+  - id: TR-time-001
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Exactly one time authority (real-time OR turn-based) is active at any moment over one shared world; the inactive authority's systems receive nothing (full colony pause during combat)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-002
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Every simulation system registers with a single time-authority manager and is ticked by exactly one active authority; registration is authority-scoped."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-003
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Mode switching converts NO state; terrain and entities the battle reads are the identical live objects the colony used (same instance, unchanged Revision, same values)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-004
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Speed control (pause/1x/2x/3x) multiplies the fixed sub-step count and never changes step size; delta is never scaled."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-005
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Fixed-dt sub-stepping: SubStepsDelivered = min(SubStepsRequested, SubStepCap) per physics frame, clamped so the sim degrades gracefully and never death-spirals."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-006
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Dropped time is never re-simulated (no catch-up burst); whole-step time beyond the cap is discarded, but the sub-step residual persists in the accumulator across frames/freeze."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-007
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "RealTimeAuthority owns exactly one time accumulator; each physics frame adds engineDelta x speed; SubStepsRequested = floor(accumulator / SubStepDuration)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-008
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "GameSecondsPerRealSecond = SubStepsDelivered x SubStepDuration x EngineFrameRate; progress-integrating systems must use the multiplicative (pause-safe) form."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-009
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "A startup assertion verifies SubStepDuration x EngineFrameRate = 1 (SubStepDuration == 1/EngineFrameRate +-1e-9), since the two live in different config locations."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-010
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "A startup config-load assertion verifies SubStepCap >= 1 AND SubStepCap >= max speed multiplier, failing loudly before the first dispatch."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-011
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "A startup guard reads the engine's real physics-steps-per-frame clamp at runtime (never hardcoded) and asserts it is >= SubStepCap."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-012
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Only Raid Trigger (#18) requests the switch into combat; only the Combat set (#19-23) requests it back; no player-facing manual switch; a CI/static gate enforces RequestSwitch call sites."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-013
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "RequestSwitch is atomic between dispatches and single-encounter-invariant; a second request while an encounter is pending/active returns RejectedEncounterActive with no second encounter."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-014
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "RequestSwitch called from inside an active Tick()/transition handler returns DeferredMidDispatch; the swap applies only at the next between-dispatch boundary."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-015
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "A single trigger referencing multiple non-contiguous breach cells produces exactly one EncounterId (SwitchTransitionData.BreachCells carries all cells)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-016
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "The canonical return sequence is fixed: resolve -> authority swap -> PostEncounterReconcile -> battle-end autosave -> speed forced 0 -> survey -> player regains dial; every exit funnels through it."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-017
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "PostEncounterReconcile runs exactly once, first, on return: dispatch outcome report, release dead colonists' reservations, cancel orphaned jobs/paths, reap dead/broken/withdrawn; zero orphans, untouched entries survive."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-018
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "The after-action survey's only guaranteed cross-reconcile carrier is the drained EncounterOutcomeReport (one-slot inbox); nothing it needs may live only in encounter side tables."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-019
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Three silent autosave moments with strict ordering: switch-in (Mode==RealTime, before swap), rolling battle checkpoint per resolved activation, battle-end (after reconcile); none raise slot UI."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-020
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Battle checkpoint: a single non-selectable rolling slot tagged Mode==TurnBased, the only legal combat-mode save writer; 'activation 0' checkpoint written immediately post-swap; snapshot at AwaitingPresentation->NextActor, never mid-activation."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-021
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Loading always resumes from the latest autosave; a mid-battle relaunch resumes at the start of the activation following the last resolved one; no pre-battle rewind exists."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-022
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "A TurnBased-tagged save written by any writer other than the battle-checkpoint system is corrupt by definition and rejected on load; the manual-save control is inert for the entire combat duration."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-023
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Battle checkpoint content scope (Option A, 8 items): encounter side tables (via owners), TurnBased authority state incl. state-machine+current/next actor, combat RNG streams, encounter framing, full RaiderStore, un-reaped IsDead/IsBroken, full terrain grid; derived state never checkpointed; load never reaps; occupancy rebuild filters dead."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-024
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "The checkpoint write mechanism never blocks the sim on disk: double-buffered pooled snapshot, coalesce-newest backpressure, async gzip + atomic same-volume replace, in-file monotonic save ordering (never mtime)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-025
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Deterministic resumption requires the checkpoint to carry combat RNG stream state resumable at arbitrary draw counts; restored battle bit-deterministic vs an unquit control."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-026
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Full determinism: given fixed seed + input sequence across a RealTime->TurnBased->RealTime cycle plus save/load round-trip, TickSequence/TurnIndex/entity state are bit-identical; TickSequence monotonic and gapless across the swap."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-027
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "RNG draws occur only inside authority-driven execution (Tick/resolution); reload resumes the same battle with nothing re-rolled (constrained by the pending Seeded RNG ADR)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-028
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Pause (speed 0) = RealTime systems active but stepping zero times; combat freeze = colony systems inactive; the two frozen states must be programmatically distinguishable via CurrentMode + SubStepsDelivered."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-029
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "A raid cannot fire while paused by construction; threat accumulates only inside real-time steps and speed 0 delivers none; no 'check while paused' path exists."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-030
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "SceneTree.paused / GetTree().Paused is forbidden in the simulation path; a grep/static gate covers all C# outside src/core, with an allowlist entry reserved for the future UI-pause layer."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-031
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "The menu/settings overlay is a presentation-only third axis independent of speed dial and turn state; never touches the sim path, force-closes on switch-in, and resumes exactly the prior speed/turn state with TickSequence unbroken."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-032
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "During combat, colony order-writers are rejected by the mutation-window/writer-set guard; combat changes world state only through existing writer surfaces under the combat-mode writer set; no combat-exclusive mutation category."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-033
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Notifications generated during combat queue silently and flush only on return, field-for-field identical, none dropped/duplicated/mutated, in declared flush order; no pop-ups interrupt a battle."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-034
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Colony orders in flight (uncommitted input) at the freeze are dropped silently with zero world effect and zero exception; committed jobs freeze with their owner and resume."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-035
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Zero-elapsed preconditions: switch-in autosave and same-dispatch speed change are honored for the remainder of that dispatch (still RealTime), then irrelevant since return forces speed 0; swap atomic between dispatches."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-036
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Zero-agency edge cases resolve safely by construction: zero-defender battle uses the identical return path; zero-drafted-colonist raid still switches; leaving speed 0 post-battle blocks any new raid."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-037
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "The manager owns {Mode, TurnIndex, TickSequence} with fixed increment rules; two systems registering at identical (TickPhase, priority) are rejected by debug assertion (deterministic dispatch order)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-038
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "TurnBased-registered systems must not read TimeContext.DeltaSeconds (DeltaSeconds==0 rule, debug-asserted)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-039
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Pathfinding (#8) registers under BOTH authorities (colony paths and combat reachability) - the notable dual-registration case."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-040
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Pre-switch placement normalization: co-located units decide against cells already claimed by earlier decisions in the same pass (decision-order list, not live occupancy); lowest-precedence occupant keeps its cell; deterministic, executed before the swap."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-041
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "View-freeze contract: on ModeTransitioned RealTime->TurnBased every presentation node stops self-driven animation and holds pose, resuming on return; ModeTransitioned is a direct event distinct from IPresentationGate."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-042
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Simulation update flows only through ITickable.Tick() driven by the active authority; _Process is presentation-only and keeps running after Tick() stops; no sim logic in _Process/_PhysicsProcess."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-043
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Performance budgets (CI gates): dispatch <=0.70 us/sub-step; RealTime->TurnBased swap <=0.40 us; PostEncounterReconcile <=35 us reference with near-linear scaling (4x ratio <=6, raider-axis <=8x)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-044
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Zero steady-state allocation: dispatch <=0.05 B/sub-step and Gen0==0 over >=20,000 sub-steps; reconcile Gen0==0 per pass; MutationWindow.Open() must be a readonly struct scope (never a boxing IDisposable class)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-045
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Quit-to-desktop mid-battle presents a blocking confirmation from constant QuitConfirmText, with the affirmative (quit) NOT holding default focus; no such dialog appears during colony play."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-046
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "The quit path flushes-and-joins the async checkpoint write before exit so the suspended battle is durably persisted."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-047
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "A corrupt/missing checkpoint on load triggers a loud fallback recovery path (not silent)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-048
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "The primitive types CellCoord/EntityId live in a shared foundation-primitives namespace defined jointly with ADR-0002; this is a Foundation system with no upstream dependencies."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-049
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Terrain and entity stores are passive under this system: never ticked, only their legal writer set changes per authority (health writer split: Needs in RealTime, Combat in TurnBased)."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-050
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "The speed dial UI displays the requested multiplier only, is hidden during combat, reads 0 on every return; a delivered-vs-requested divergence signal MUST exist when the sim under-delivers."
+    created: 2026-08-08
+    status: active
+  - id: TR-time-051
+    system: time
+    gdd: design/gdd/time-authority-mode-switch.md
+    requirement: "Battle-length budget invariant: no mid-battle manual save (AC-12); 8-15 min target / 20 min ceiling is Combat's to achieve; SubStepCap default 8 with speeds {0,1,2,3}, every speed <= SubStepCap."
+    created: 2026-08-08
+    status: active

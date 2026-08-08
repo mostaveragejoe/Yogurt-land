@@ -128,3 +128,15 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 ## Open Questions
 - Post-battle time: resume as zero-elapsed vs. advance by battle duration — route to creative-director BEFORE Needs & Simulation GDD (both stay possible under ADR-0001's fixed-dt sub-stepping)
 - Working-hours assumption (full-time vs evenings) — timeline bands double if part-time
+
+## Session Extract — /architecture-review 2026-08-08
+- Verdict: CONCERNS
+- Requirements: 97 total — 74 covered, 22 partial, 1 gap
+- New TR-IDs registered: 97 (TR-terrain-001..046, TR-time-001..051) — tr-registry.yaml first real population (v2)
+- GDD revision flags: None (GDDs already carry the engine-verification gates)
+- Top ADR gap: Seeded RNG ADR (missing) — blocks TR-time-025, AC-67 determinism, Save/Load #6, ADR-0004 RNG content
+- Cross-ADR conflicts: none open (2026-08-03 Battle Persistence amendment resolved the 3 former contradictions coherently; AC-66 coalesce-newest re-authoring verified consistent)
+- Dependency flags: ADR-0003 (Accepted) depends on ADR-0002 (Proposed) — status inversion; ADR-0002 & ADR-0004 share one target-hardware criterion-5 promotion gate
+- Engine (godot-specialist): 2 actionable challenges — (1) ADR-0004 use File.Move(overwrite:true) not File.Replace (POSIX atomicity); (2) ADR-0002 third damage-overlay GridMap is a style-variety draw-call multiplier, needs its own spike (not "free" like floor+wall). max_physics_steps_per_frame name/default still unverified in 4.7.1.
+- Pre-gate checklist: all 5 items ❌ (tests/unit, tests/integration, tests.yml, accessibility-requirements, ux/interaction-patterns) — /gate-check not yet reachable; needs /test-setup + /ux-design
+- Report: docs/architecture/architecture-review-2026-08-08.md · Index: docs/architecture/architecture-traceability.md · Registry: docs/architecture/tr-registry.yaml
