@@ -148,3 +148,9 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 - Closes the architecture-review gap TR-time-025 (+ RNG halves of TR-time-026/027); unblocks Save/Load #6. Re-run /architecture-review in a FRESH session to refresh coverage (do not run it in this authoring session).
 - Registry: docs/registry/architecture.yaml populated (api_decisions, forbidden_patterns, state_ownership, interfaces). technical-preferences.md: ADR-0005 log entry + forbidden pattern added; Next line updated.
 - Promotion: no target-hardware gate on ADR-0005 itself; co-dependent with ADR-0004 on the combat-group boundary, promote together.
+
+## Session Extract — ADR engine corrections 2026-08-08
+- Applied the 2 godot-specialist challenges from the architecture review to the ADRs:
+- ADR-0004: atomic replace now specifies `File.Move(temp, slot, overwrite: true)` as the cross-platform default (single rename(2) on Unix); `File.Replace` reserved for Windows only (it is NOT atomic on POSIX — backup-file step). Updated in 3 places: Verification Required row, the mechanism bullet, the Risks entry.
+- ADR-0002: (1) clarified `SetItemMeshTransform` is a `MeshLibrary` per-item call, not per-cell (GridMap has no per-instance override); (2) added the damage-overlay caveat — a third damage-state overlay GridMap is a style-variety draw-call multiplier vs the ~8-variants-per-tier ceiling, NOT a free flat layer like floor+wall, and needs its own draw-call spike; added as an explicit render-quick-spec open item folded into the TR-terrain-044 verification gate.
+- Remaining to PASS: target-hardware criterion-5 run (needs real hardware) to promote ADR-0002/0004/0005. Then re-run /architecture-review in a fresh session.
