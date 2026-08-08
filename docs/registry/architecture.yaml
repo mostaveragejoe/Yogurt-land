@@ -30,7 +30,7 @@
 #   Superseded entries:     Grep pattern="status: superseded"
 
 version: 1
-last_updated: ""
+last_updated: "2026-08-08"
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
 # Who is the authoritative owner of each piece of shared game state.
@@ -43,7 +43,18 @@ last_updated: ""
 # interface: how other systems access this state (read-only property, method call,
 #   signal, shared resource, etc.) — this is the contract other ADRs depend on.
 
-state_ownership: []
+state_ownership:
+  - state: rng_streams
+    status: active
+    owner_system: seeded-rng
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    interface: "SeededRngStore — granted per-system mode-tagged draw handles (NextInt/NextDouble per RngStream); RootSeed injected at the composition root; SnapshotInto/Restore by RngStreamGroup"
+    write_access: seeded-rng-only   # a draw is a write to SeededRngStore; only granted handles draw
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md   # checkpoints the combat-transient group's State
+    added: 2026-08-08
+    revised: ""
 
 # Example:
 #
@@ -71,7 +82,22 @@ state_ownership: []
 #
 # pattern options: signal | direct_call | event_bus | shared_resource | rpc | none
 
-interfaces: []
+interfaces:
+  - contract: rng_draw
+    status: active
+    pattern: direct_call     # granted, mode-tagged stream handle; no signal/bus for RNG
+    producer: seeded-rng
+    consumers:
+      - combat            # draws RngStream.Combat (asserts Mode==TurnBased)
+      - raid-trigger      # draws RngStream.RaidSchedule (asserts Mode==RealTime)
+      - needs-simulation  # draws RngStream.NeedsJitter (asserts Mode==RealTime)
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    signal_signature: "SeededRngStore.NextInt(RngStream, int maxExclusive) / NextDouble(RngStream); combat group via SnapshotInto(IBufferWriter<byte>, RngStreamGroup) into ADR-0004's pooled buffer at the AwaitingPresentation->NextActor beat"
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng.md
+      - docs/architecture/adr-0004-battle-checkpoint-architecture.md
+    added: 2026-08-08
+    revised: ""
 
 # Example:
 #
@@ -131,7 +157,17 @@ performance_budgets: []
 # Register an API decision when the choice is non-obvious and other ADRs might
 # make a different choice for the same purpose without knowing this was decided.
 
-api_decisions: []
+api_decisions:
+  - purpose: random_number_generation
+    status: active
+    api: "PCG-XSH-RR 64/32, ported in Hollowdeep.Core, owned by SeededRngStore"
+    not: "System.Random / Godot RandomNumberGenerator"   # explicitly banned for this purpose
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    reason: "Version-stable across .NET/OS/CPU (System.Random is not a stable contract); state-based resume in O(1) at arbitrary draw counts; native per-stream sequence selector for independent streams; zero Godot dependency"
+    referenced_by:
+      - docs/architecture/adr-0005-seeded-rng.md
+    added: 2026-08-08
+    revised: ""
 
 # Example:
 #
@@ -157,7 +193,17 @@ api_decisions: []
 # Register a pattern when an ADR explicitly bans it AND other ADRs might
 # unknowingly use it (i.e., it's a tempting but wrong approach for this project).
 
-forbidden_patterns: []
+forbidden_patterns:
+  - pattern: stock_or_engine_rng_in_core
+    status: active
+    description: "No System.Random, Godot RandomNumberGenerator, Guid.NewGuid, or time-based
+      seeding anywhere in src/core. All randomness goes through SeededRngStore (PCG-XSH-RR).
+      RootSeed is injected from the Godot composition root as a plain value."
+    why: "System.Random's algorithm is not a stable cross-version contract, so it cannot back
+      a save format; Godot RandomNumberGenerator is a Godot dependency banned in the core;
+      entropy sources are non-deterministic and break bit-reproducible resume (AC-67 / TR-time-026)."
+    adr: docs/architecture/adr-0005-seeded-rng.md
+    added: 2026-08-08
 
 # Example:
 #

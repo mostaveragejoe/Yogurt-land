@@ -3,7 +3,7 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: GDD Authoring
-Task: ADR-0004 Battle Checkpoint Architecture AUTHORED 2026-08-03 (/architecture-decision; Proposed; godot-specialist PASS WITH NOTES + TD-ADR CONCERNS all applied) — next: Seeded RNG ADR (blocking Save/Load #6), then #8 Colonist Entity quick-spec. OPEN: registry update skipped (needs user approval)
+Task: ADR-0005 Seeded RNG AUTHORED 2026-08-08 (/architecture-decision; Proposed; godot-csharp-specialist 2 blocking fixes + TD-ADR CONCERNS B1–B5/A1–A6 all applied; registry + technical-preferences updated; committed). Prior: architecture-review 2026-08-08 (CONCERNS). Next: promote ADR-0002/0004/0005 on the shared target-hardware run; Save/Load #6 (now unblocked); #8 Colonist Entity quick-spec.
 <!-- /STATUS -->
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
@@ -140,3 +140,11 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 - Engine (godot-specialist): 2 actionable challenges — (1) ADR-0004 use File.Move(overwrite:true) not File.Replace (POSIX atomicity); (2) ADR-0002 third damage-overlay GridMap is a style-variety draw-call multiplier, needs its own spike (not "free" like floor+wall). max_physics_steps_per_frame name/default still unverified in 4.7.1.
 - Pre-gate checklist: all 5 items ❌ (tests/unit, tests/integration, tests.yml, accessibility-requirements, ux/interaction-patterns) — /gate-check not yet reachable; needs /test-setup + /ux-design
 - Report: docs/architecture/architecture-review-2026-08-08.md · Index: docs/architecture/architecture-traceability.md · Registry: docs/architecture/tr-registry.yaml
+
+## Session Extract — /architecture-decision seeded-rng 2026-08-08
+- ADR-0005 Seeded RNG written (Proposed): docs/architecture/adr-0005-seeded-rng.md
+- Decisions: PCG-XSH-RR 64/32; named independent streams from one RootSeed (splitmix64-derived, forced-odd Inc); SeededRngStore owner with mode-tagged per-system draw handles; RootSeed from Godot composition root (no entropy in core); combat stream re-derived per encounter from (RootSeed, Combat, EncounterId) for cross-save determinism; combat mid-battle State captured at ADR-0004's AwaitingPresentation→NextActor beat; State-only little-endian serialization (Inc re-derived); two groups mirror the checkpoint-vs-colony-save firewall.
+- Reviews: godot-csharp-specialist — 2 BLOCKING fixes folded (force odd Inc; output reads pre-advance state) + refinements (little-endian, State-only, mutable-struct guardrails, unchecked). TD-ADR CONCERNS → all B1–B5 + A1–A6 applied (B2 combat re-derivation and B3 capture-beat were the determinism-critical ones).
+- Closes the architecture-review gap TR-time-025 (+ RNG halves of TR-time-026/027); unblocks Save/Load #6. Re-run /architecture-review in a FRESH session to refresh coverage (do not run it in this authoring session).
+- Registry: docs/registry/architecture.yaml populated (api_decisions, forbidden_patterns, state_ownership, interfaces). technical-preferences.md: ADR-0005 log entry + forbidden pattern added; Next line updated.
+- Promotion: no target-hardware gate on ADR-0005 itself; co-dependent with ADR-0004 on the combat-group boundary, promote together.
