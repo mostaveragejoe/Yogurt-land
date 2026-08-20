@@ -128,7 +128,7 @@ production/           # Sprint plans, milestones, releases
   releases/
   epics/              # Epic and story files (from /create-epics + /create-stories)
   playtests/          # Playtest reports
-  session-state/      # Ephemeral session state (gitignored)
+  session-state/      # Session checkpoint (active.md is committed — see note below)
   session-logs/       # Session audit trail (gitignored)
 ```
 
@@ -137,6 +137,14 @@ production/           # Sprint plans, milestones, releases
 > structure when you do create them, because the **rules system** enforces
 > standards based on file paths. Code in `src/gameplay/` gets gameplay rules,
 > code in `src/ai/` gets AI rules, and so on.
+
+> **Note on `session-state/active.md`:** it is **committed**, not gitignored —
+> only `session-logs/` is ignored. `active.md` is the project's decision
+> checkpoint (see `.claude/docs/context-management.md`), and the environment a
+> session runs in may be reclaimed at any time, so the file has to survive in
+> git or the decisions in it are lost. Commit it alongside the work it
+> describes. Treat it as ephemeral in the sense that any session may rewrite
+> it — not in the sense that it may be discarded.
 
 ---
 
