@@ -2,8 +2,8 @@
 
 <!-- STATUS -->
 Epic: Pre-Production
-Feature: GDD Authoring
-Task: ADR-0005 Seeded RNG AUTHORED 2026-08-08 (/architecture-decision; Proposed; godot-csharp-specialist 2 blocking fixes + TD-ADR CONCERNS B1–B5/A1–A6 all applied; registry + technical-preferences updated; committed). Prior: architecture-review 2026-08-08 (CONCERNS). Next: promote ADR-0002/0004/0005 on the shared target-hardware run; Save/Load #6 (now unblocked); #8 Colonist Entity quick-spec.
+Feature: Quick-spec batch (design order #8-#11)
+Task: Pathfinding & Navigation quick-spec DRAFTED 2026-08-20 (commit 282e8a9) + reusable quick-spec tier template + systems-index/stage bookkeeping. Next: Material Catalog quick-spec (#9), then Colonist Entity (#8), then Terrain Rendering (#11).
 <!-- /STATUS -->
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
@@ -154,3 +154,23 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 - ADR-0004: atomic replace now specifies `File.Move(temp, slot, overwrite: true)` as the cross-platform default (single rename(2) on Unix); `File.Replace` reserved for Windows only (it is NOT atomic on POSIX — backup-file step). Updated in 3 places: Verification Required row, the mechanism bullet, the Risks entry.
 - ADR-0002: (1) clarified `SetItemMeshTransform` is a `MeshLibrary` per-item call, not per-cell (GridMap has no per-instance override); (2) added the damage-overlay caveat — a third damage-state overlay GridMap is a style-variety draw-call multiplier vs the ~8-variants-per-tier ceiling, NOT a free flat layer like floor+wall, and needs its own draw-call spike; added as an explicit render-quick-spec open item folded into the TR-terrain-044 verification gate.
 - Remaining to PASS: target-hardware criterion-5 run (needs real hardware) to promote ADR-0002/0004/0005. Then re-run /architecture-review in a fresh session.
+
+
+## Session Extract — quick-spec batch + bookkeeping 2026-08-20
+
+- **Pathfinding & Navigation quick-spec DRAFTED** (`design/quick-specs/pathfinding-navigation.md`, commit `282e8a9`). First document at the quick-spec tier. Resolved the three items the pathfinding spike routed to it:
+  - **Region index = per-layer regions, terrain-only, stair cells as portals.** Doors and occupancy deliberately excluded from the index so a door toggle never dirties it. A dig marks only its own layer stale. Rebuild is lazy (first query reading a stale layer triggers it), capped at one layer per dispatch, never inside the mutation window. Full-world flood fill was 4.16 ms / 25.1% of frame; per-layer ~0.26 ms.
+  - **Degradation rule (the load-bearing one):** a stale layer with the rebuild budget already spent degrades to authoritative A*, so the index is exact regardless of freshness. Lazy rebuild therefore cannot influence a simulation decision or desync a replay — determinism does not depend on rebuild timing.
+  - **Paths are caller-held derived state, never serialized** → Pathfinding needs no row in ADR-0003's write-ownership table. Consistent with the save/load spike (derived state contributed 0 bytes).
+  - RealTime congestion cost term deferred **with a named adoption trigger**.
+- **ADR-0003 DEFECT FOUND, not yet fixed**: its RealTime composite-walkability formula makes a closed door block, contradicting its own bracketed note *and* the spike's verified behavior (RT auto-opens doors; that is what prevents traffic deadlock). The quick-spec states the verified rule and flags the ADR (§4 flag, §8 item 4) rather than silently overriding an **Accepted** ADR. **Amendment still owed to ADR-0003.**
+- **Quick-spec tier template created**: `.claude/docs/templates/quick-spec.md`. Encodes the tier's rules so the remaining three specs do not re-derive them — mandatory "Behavior under each time authority" section, gate-level honesty (Logic BLOCKING / Visual-UI ADVISORY / sibling-blocked criteria must not gate a system's own Done), performance bands set above cited measurements, and a named trigger required for every deferral. Named without a `-template` suffix to match the dominant convention in that directory.
+- **Tooling gap recorded**: `/quick-design` targets the same `design/quick-specs/` directory but is a *different document type* — dated, change-oriented, and it explicitly bypasses `/design-review`. Its own redirect rules send anything that "adds a new system that belongs in the systems index" to `/design-system`. So it is the wrong instrument for these four MVP systems, and no skill produces the tier the routing policy defines. The template is the stopgap; a `/quick-spec` skill is the real fix if this recurs.
+- **Bookkeeping corrected in `design/gdd/systems-index.md`**:
+  - Enumeration rows: #4 Seeded RNG → Specified (ADR-0005); #6 Save/Load → Partial (checkpoint half in ADR-0004; colony-save format still to author); #8 Pathfinding → Drafted + link; #2 Time Authority now records that the `/propagate-design-change` gate blocking its third `/design-review` pass **cleared 2026-08-03**.
+  - Progress Tracker was materially wrong: "Tier 0 spikes complete 0/6" → **5/5 GATE COMPLETE**; "ADRs written 3/3" → **5**; design docs 2 → **3**; MVP systems designed → 3/25 documented, plus 2 ADR-specified (ADR-only is a complete tier per the routing policy, not a gap).
+  - Design order: ADR-0004 and ADR-0005 added as **unnumbered** rows placed *below* the spike-gate row (unnumbered so existing "design order #N" references stay valid; below the gate so position does not imply they preceded it). Items 6/7/10 statuses set; item 2's stale "final numbers await terrain spike" corrected.
+  - Next Steps: spike checkbox ticked; four live items now listed — quick-spec batch, ADR-0003 amendment, target-hardware run, `/test-setup` + `/ux-design`.
+- **`production/stage.txt`: `Concept` → `Pre-Production`.** Its git history shows it was written at engine-config time (`4bdc320`), never by `/gate-check`, so this was stale bookkeeping rather than a gate verdict being overwritten. `/project-stage-detect` treats the file as an explicit override, so the stale value was suppressing correct auto-detection for every stage-aware skill. The heuristic (engine configured, 7 `.cs` files < 10) gives Pre-Production. Written with no trailing newline to match `/gate-check`'s `echo -n` convention.
+- **Unchanged / still open**: the target-hardware criterion-5 run (needs real hardware — lavapipe gave 3-4 fps, no signal); all 5 `/gate-check` pre-gate artifacts still missing so the phase gate remains unreachable; `design/registry/` update for ADR-0004 entities still awaiting the user's approve-or-decline; post-battle time semantics still routed to creative-director and still needed before the Needs & Simulation GDD; colony-save save-scum hole still needs a creative-director ruling before the Save/Load spec.
+- **Minor, untouched**: a skill references `.claude/docs/templates/patch-notes-template.md`, which does not exist in that directory.
