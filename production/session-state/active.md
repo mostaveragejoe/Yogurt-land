@@ -3,7 +3,7 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: Quick-spec batch (design order #8-#11)
-Task: Pathfinding & Navigation quick-spec DRAFTED 2026-08-20 (commit 282e8a9) + reusable quick-spec tier template + systems-index/stage bookkeeping. Next: Material Catalog quick-spec (#9), then Colonist Entity (#8), then Terrain Rendering (#11).
+Task: Material Catalog quick-spec DRAFTED 2026-08-20 (2 of 4 done: Pathfinding + Material Catalog). Next: Colonist Entity & Attributes (#8), then Terrain Rendering & Cutaway (#11).
 <!-- /STATUS -->
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
@@ -174,3 +174,26 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 - **`production/stage.txt`: `Concept` → `Pre-Production`.** Its git history shows it was written at engine-config time (`4bdc320`), never by `/gate-check`, so this was stale bookkeeping rather than a gate verdict being overwritten. `/project-stage-detect` treats the file as an explicit override, so the stale value was suppressing correct auto-detection for every stage-aware skill. The heuristic (engine configured, 7 `.cs` files < 10) gives Pre-Production. Written with no trailing newline to match `/gate-check`'s `echo -n` convention.
 - **Unchanged / still open**: the target-hardware criterion-5 run (needs real hardware — lavapipe gave 3-4 fps, no signal); all 5 `/gate-check` pre-gate artifacts still missing so the phase gate remains unreachable; `design/registry/` update for ADR-0004 entities still awaiting the user's approve-or-decline; post-battle time semantics still routed to creative-director and still needed before the Needs & Simulation GDD; colony-save save-scum hole still needs a creative-director ruling before the Save/Load spec.
 - **Minor, untouched**: a skill references `.claude/docs/templates/patch-notes-template.md`, which does not exist in that directory.
+
+
+## Session Extract — Material Catalog quick-spec 2026-08-20
+
+- **Material Catalog quick-spec DRAFTED** (`design/quick-specs/material-catalog.md`). Second document at the quick-spec tier; used `.claude/docs/templates/quick-spec.md`.
+- **Two user decisions taken this session:**
+  1. **Catalog owns the numbers, systems own the rules.** `MaxWallHp`, `DigCost`, `BuildCost`, `YieldQty` and `Value` all live in the catalog; Excavation keeps the dig *accumulation rule*, Terrain keeps the HP clamp, Repair keeps CD-7 billing. Rationale: every tier-ordered number in ONE table so the tier-ordering invariant is checkable in one place.
+  2. **CD-6 / Pillar 5 = distributional with monotonic expected value.** Deeper strata re-weight toward higher tiers without eliminating lower ones; NOT strict tier gating by stratum (rejected as gamey and colliding with the art bible's "The Wild Deepens, the Built Doesn't").
+- **Load-bearing rules:**
+  - **C1 — immutable after load, NO writer interface exists at all.** Mutation made unrepresentable rather than governed; this is why §4 is a two-row table and why no mutation-window assertion is needed.
+  - **C3 — tier ordering is a hard LOAD FAILURE**, not a convention. `MaxWallHp`/`DigCost`/`Value` strictly increasing, `BuildCost` non-decreasing, or the catalog refuses to load naming the offending material and field. Framed as Pillar 3: an inverted table does not mistune the game, it makes CD-1's after-action report an active lie. This is the cross-check the terrain GDD explicitly handed to #5 with a "this is how invariants die" warning.
+  - **C5 — CD-6 made mechanical**: EV(s+1) > EV(s) strictly, PLUS materials never vanish downward (once weighted at stratum s, still weighted below s). Both are pure functions of the weight table, so both are load-validated and unit-testable with no game running (AC-6, AC-7).
+  - **C6 — a material may be naturally-occurring or not.** Zero weight in every stratum is legal and excluded from the EV check.
+  - **C8 — the catalog draws no randomness.** It exposes the weight table; consumers sample with their own `SeededRngStore` stream (ADR-0005).
+- **OPEN QUESTION FOUND — is reinforced mined or manufactured?** The concept doc supports both readings ("deeper strata hold richer materials" vs "construction tech scales from dirt to reinforced stone to engineered defenses"). C6 makes the catalog indifferent so no schema change is needed either way, but the answer decides whether `BuildCost` is a scalar or a recipe. **Routed to Construction (#16) + creative-director; trigger = before #16 is authored.** Recorded in the registry entry for `reinforced` as `naturally_occurring: "UNRESOLVED"`.
+- **Deliberate honesty calls:** §6 states first-pass placeholder numbers (HP 100/300/800, Value 1/3/8) rather than omitting them — CD-6's named failure mode is untuned tables, and a table with no numbers cannot be checked or argued with; handed to `/balance-check`. §7b states AC-10/AC-11 as **design budgets, explicitly unmeasured** — the terrain spike's figures include catalog lookups but never isolated them, so there was no measurement to set a band above.
+- **REGISTRY POPULATED** (user approved) — `design/registry/entities.yaml`, previously empty `items:`/`entities:`:
+  - `items:` dirt / granite / reinforced with full number rows.
+  - `formulas:` `stratum_expected_material_value` (CD-6's EV expression).
+  - `constants:` `material_tier_ordering` (the Pillar 3 invariant).
+  - Also **corrected a stale ownership note** in the formulas section that assigned dig cost to Excavation & Construction — third place that claim lived.
+- **DIG-TIME OWNERSHIP — still owed to the terrain GDD.** `design/gdd/terrain-data-model.md`'s Tuning Knobs table still reads as though Excavation owns the dig-time *number*. Substance agrees with the new decision, wording does not. Registry corrected; **the Approved GDD is not**. Trigger: its next `/design-review`, or before #15/#16 — whichever is first.
+- **Quick-spec batch status: 2 of 4.** Remaining: Colonist Entity & Attributes (#8, highest fan-out), Terrain Rendering & Cutaway (#11, folds in the ADR-0002 damage-overlay draw-call open item).

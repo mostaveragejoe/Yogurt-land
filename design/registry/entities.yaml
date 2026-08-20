@@ -37,7 +37,7 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: "2026-08-02"
+last_updated: "2026-08-20"
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -77,7 +77,77 @@ entities: []
 # Attribute fields: value_gold, weight, stackable, category, and any stat
 #   modifiers that another system (e.g., economy, crafting) might reference.
 
-items: []
+items:
+  # The three MVP material tiers. One stable key space spans BOTH terrain wall/floor
+  # types AND item stacks (ADR-0003 SpawnStack(material, ...) and the save/load spike's
+  # "item stacks by stable material key") - so these entries are the canonical identity
+  # for a material wherever it appears: in a cell, in a stack, or in a save manifest.
+  # Numbers below are FIRST-PASS PLACEHOLDERS pending /balance-check.
+  - name: dirt
+    status: active
+    source: design/quick-specs/material-catalog.md
+    referenced_by:
+      - design/quick-specs/material-catalog.md
+      - design/gdd/terrain-data-model.md
+      - design/gdd/game-concept.md
+    category: construction_material
+    stackable: true
+    tier: 0
+    tier_name: Dirt
+    max_wall_hp: 100
+    dig_cost: 40
+    build_cost: 1
+    yield_qty: 1
+    value: 1
+    naturally_occurring: true
+    added: 2026-08-20
+    revised: ""
+
+  - name: granite
+    status: active
+    source: design/quick-specs/material-catalog.md
+    referenced_by:
+      - design/quick-specs/material-catalog.md
+      - design/gdd/terrain-data-model.md
+      - design/gdd/game-concept.md
+    category: construction_material
+    stackable: true
+    tier: 1
+    tier_name: Granite
+    max_wall_hp: 300
+    dig_cost: 120
+    build_cost: 2
+    yield_qty: 1
+    value: 3
+    naturally_occurring: true
+    added: 2026-08-20
+    revised: ""
+
+  - name: reinforced
+    status: active
+    source: design/quick-specs/material-catalog.md
+    referenced_by:
+      - design/quick-specs/material-catalog.md
+      - design/gdd/terrain-data-model.md
+      - design/gdd/game-concept.md
+    category: construction_material
+    stackable: true
+    tier: 2
+    tier_name: Reinforced
+    max_wall_hp: 800
+    dig_cost: 320
+    build_cost: 4
+    yield_qty: 1
+    value: 8
+    naturally_occurring: "UNRESOLVED"
+    notes: "OPEN QUESTION (material-catalog quick-spec §8 item 1): the concept doc supports
+      both readings - Pillar 5's 'deeper strata hold richer materials' implies mined, while
+      'construction tech scales from dirt to reinforced stone to engineered defenses' implies
+      manufactured. C6 makes the catalog indifferent (a material with zero weight in every
+      stratum is legal and excluded from the EV check). If manufactured, build_cost becomes a
+      recipe rather than a scalar. Routed to Construction (#16) + creative-director."
+    added: 2026-08-20
+    revised: ""
 
 # Example:
 #
@@ -108,8 +178,13 @@ items: []
 
 formulas:
   # NOTE: none of these carry a balance NUMBER. Terrain owns the function, never the
-  # arguments — the magnitudes (tier HP, dig cost, repair rate) are registered later by
-  # Material Catalog, Excavation & Construction, and Repair & Rebuild respectively.
+  # arguments. Ownership of the magnitudes, corrected 2026-08-20 (user decision, recorded in
+  # design/quick-specs/material-catalog.md §8 item 2): Material Catalog owns tier HP, dig cost,
+  # build cost, yield and value — every tier-ordered number lives in ONE table so the
+  # tier-ordering invariant is checkable in one place. Excavation & Construction owns the dig
+  # ACCUMULATION RULE that consumes dig_cost, not the number. Repair & Rebuild owns repair rate
+  # and CD-7 material billing. (The terrain GDD's Tuning Knobs table still reads as though
+  # Excavation owns the dig-time number — clarification owed there.)
   - name: wall_damage_application
     status: active
     source: design/gdd/terrain-data-model.md
@@ -207,6 +282,26 @@ formulas:
     added: 2026-07-26
     revised: ""
 
+  - name: stratum_expected_material_value
+    status: active
+    source: design/quick-specs/material-catalog.md
+    referenced_by:
+      - design/quick-specs/material-catalog.md
+    variables:
+      - "weight(s,m): authored weight of material m in stratum s (>= 0)"
+      - "Value(m): scalar worth of material m, strictly increasing by tier"
+    expression: "EV(s) = sum_m ( weight(s,m) / sum_m weight(s,m) ) * Value(m)"
+    output_range: [0, 8]
+    notes: "CD-6's mechanical form - Pillar 5's 'descent creates escalating material reward'
+      made testable. Validated at catalog LOAD, not at runtime: EV(s+1) > EV(s) strictly for
+      every adjacent stratum pair, computed over naturally-occurring materials only (C6).
+      Paired with a second load validation that materials never vanish downward - once a
+      material has non-zero weight at stratum s it keeps non-zero weight below s, which is
+      what keeps the mountain geological rather than a layer cake. Both fail LOUDLY at load.
+      output_range upper bound tracks max Value; widen it when a 4th material lands."
+    added: 2026-08-20
+    revised: ""
+
 # Example:
 #
 # formulas:
@@ -252,6 +347,26 @@ constants:
       Raising the ceiling weakens the no-mid-battle-save justification. Will be referenced_by the
       combat-set GDDs."
     added: 2026-08-02
+    revised: ""
+
+  - name: material_tier_ordering
+    status: active
+    source: design/quick-specs/material-catalog.md
+    referenced_by:
+      - design/quick-specs/material-catalog.md
+      - design/gdd/terrain-data-model.md
+      - design/gdd/game-concept.md
+    value: "Dirt(0) < Granite(1) < Reinforced(2)"
+    unit: tier_ordinal
+    notes: "A Pillar 3 (Scars Teach) requirement, not a tuning convention. The terrain GDD
+      handed this cross-check to Material Catalog with an explicit warning that it was split
+      across two owners with nobody checking direction. Enforced at catalog LOAD: max_wall_hp,
+      dig_cost and value must be STRICTLY increasing by tier and build_cost non-decreasing, or
+      the catalog fails to load naming the offending material and field. Never a warning, never
+      a clamp, never a silent reorder. If a rebalance inverted the ordering the game would not
+      be mistuned - it would teach the player something false, and CD-1's after-action report
+      would become an active lie."
+    added: 2026-08-20
     revised: ""
 
 # Example:
