@@ -15,6 +15,13 @@ config/features=PackedStringArray("4.7", "C#")
 
 project/assembly_name="TerrainSpikeRender"
 
+[display]
+
+; vsync pins every frame to the display refresh, which would make the criterion-5 fps
+; number a property of the monitor rather than the renderer. Also disabled at runtime in
+; RenderBench._Ready so a stale config cannot silently invalidate a run.
+window/vsync/vsync_mode=0
+
 [rendering]
 
 renderer/rendering_method="forward_plus"

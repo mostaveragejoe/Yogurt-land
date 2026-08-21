@@ -26,6 +26,24 @@ public partial class RenderBench : Node3D
     private long _buildMs;
     private int _nodeCount;
 
+    // --- Criterion-5 frame-rate clause (added 2026-08-20 for the target-hardware run) ---
+    // The original harness read TimeFps ONCE at frame 60 and quit at 62. That cannot see a
+    // hitch, cannot separate warmup from steady state, and reports a mean where the criterion
+    // ("holds 60 fps") is really a tail requirement. Sustained window + percentiles instead.
+    private int _warmupFrames = 300;      // discarded: shader/pipeline warmup, first rebuilds
+    private int _measureFrames = 1800;    // ~30 s at 60 fps
+    private int _digsPerFrame = 8;        // dig-driven chunk rebuilds, as criterion 5 requires
+    private double[] _frameMs;
+    private int _measured;
+    private bool _sampled;
+    private int _gen0Start, _gen1Start, _gen2Start;
+    private long _allocStart;
+    private int _digCursor;
+    // Dig churn band: alternately clear and restore walls so the load is sustainable for the
+    // whole window instead of exhausting the region and silently measuring an idle scene.
+    private const int DigBandX = 20, DigBandY = 20, DigBandW = 40, DigBandH = 40;
+    private readonly HashSet<ChunkCoord> _frameDirty = new();
+
     // MultiMesh backend bookkeeping: one MultiMesh per (chunk, material).
     private readonly Dictionary<(ChunkCoord chunk, ushort mat), MultiMeshInstance3D> _mmi = new();
     private GridMap _gridMap;
@@ -39,9 +57,34 @@ public partial class RenderBench : Node3D
             if (a.StartsWith("backend=")) _backend = a["backend=".Length..];
             if (a.StartsWith("octant=")) _octant = int.Parse(a["octant=".Length..]);
             if (a.StartsWith("styles=")) _styles = int.Parse(a["styles=".Length..]);
+            if (a.StartsWith("warmup=")) _warmupFrames = int.Parse(a["warmup=".Length..]);
+            if (a.StartsWith("frames=")) _measureFrames = int.Parse(a["frames=".Length..]);
+            if (a.StartsWith("digs=")) _digsPerFrame = int.Parse(a["digs=".Length..]);
         }
 
+        // vsync would pin every frame to the display refresh and make the fps number a
+        // property of the monitor, not the renderer. Disabled here as well as in
+        // project.godot so a stale editor config cannot silently invalidate the run.
+        DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
+        Engine.MaxFps = 0;
+
+        _frameMs = new double[_measureFrames];
+
         GD.Print($"=== RENDER BACKEND BENCH: {_backend} ===");
+        // Criterion 5 is a TARGET-HARDWARE clause. The 2026-07-25 run was software Vulkan
+        // (lavapipe, 3-4 fps) and therefore meaningless. Name the adapter in the log so a
+        // reader can tell at a glance whether the numbers below are admissible.
+        string adapter = RenderingServer.GetVideoAdapterName();
+        bool software = adapter.Contains("llvmpipe", StringComparison.OrdinalIgnoreCase)
+                     || adapter.Contains("lavapipe", StringComparison.OrdinalIgnoreCase)
+                     || adapter.Contains("softpipe", StringComparison.OrdinalIgnoreCase)
+                     || adapter.Contains("SwiftShader", StringComparison.OrdinalIgnoreCase);
+        GD.Print($"RESULT video_adapter={adapter}");
+        GD.Print($"RESULT software_rasterizer={software}");
+        if (software)
+            GD.PrintErr("FRAME-RATE CLAUSE VOID: software rasterizer detected. Draw-call and "
+                      + "memory numbers remain valid (hardware-independent); every timing "
+                      + "number below is NOT admissible for ADR-0002 criterion 5.");
         BuildWorld();
         BuildSceneRig();
 
@@ -290,9 +333,115 @@ public partial class RenderBench : Node3D
     public override void _Process(double delta)
     {
         _frame++;
-        if (_frame == 60) Sample();
-        if (_frame == 61) DigRebuildBench();
-        if (_frame >= 62) GetTree().Quit();
+
+        // Warm up UNDER LOAD: the first chunk rebuilds and shader compiles are the slowest
+        // frames in the run, and including them would understate steady-state performance
+        // exactly where the criterion cares about it.
+        if (_frame <= _warmupFrames) { DriveDigLoad(); return; }
+
+        if (!_sampled)
+        {
+            Sample();                       // draw calls, memory, screenshot, model check
+            _sampled = true;
+            _gen0Start = GC.CollectionCount(0);
+            _gen1Start = GC.CollectionCount(1);
+            _gen2Start = GC.CollectionCount(2);
+            _allocStart = GC.GetTotalAllocatedBytes(precise: false);
+            return;                         // Sample() itself is expensive - never timed
+        }
+
+        if (_measured < _measureFrames)
+        {
+            DriveDigLoad();
+            _frameMs[_measured++] = delta * 1000.0;
+            return;
+        }
+
+        ReportFrameStats();
+        DigRebuildBench();
+        GetTree().Quit();
+    }
+
+    /// <summary>
+    /// Sustained dig-driven churn for the measurement window. Alternates clearing and
+    /// restoring walls across a fixed band so the scene never runs out of diggable cells.
+    /// </summary>
+    private void DriveDigLoad()
+    {
+        const int bandCells = DigBandW * DigBandH;
+        _frameDirty.Clear();
+
+        // ONE mutation window per frame, not one per dig. A real dispatch batches its writes,
+        // and this prototype's MutationWindow.Open() returns an IDisposable CLASS, which boxes
+        // 24 B per call (the production contract requires a readonly struct - see
+        // technical-preferences). Opening per dig would inject digs*24 B/frame of
+        // prototype-only garbage into the Gen0 number this bench exists to measure.
+        using (_window.Open())
+        {
+            for (int i = 0; i < _digsPerFrame; i++)
+            {
+                int idx = _digCursor++;
+                int o = idx % bandCells;
+                bool restore = ((idx / bandCells) & 1) == 1;
+                int x = DigBandX + o % DigBandW;
+                int y = DigBandY + o / DigBandW;
+                var c = new CellCoord(x, y, TopLayer);
+
+                if (restore) _world.SetWall(c, _granite, 0);
+                else _world.ClearWall(c);
+
+                ApplyRenderForDig(x, y, TopLayer, restore, c);
+            }
+        }
+
+        // MultiMesh rebuilds dirty chunks once per frame, not once per dig - otherwise the
+        // backend is charged for redundant rebuilds no real implementation would perform.
+        if (_backend is not ("gridmap" or "gridmap_two"))
+            foreach (ChunkCoord ch in _frameDirty) RebuildChunk(ch);
+    }
+
+    private void ApplyRenderForDig(int x, int y, int z, bool restore, CellCoord c)
+    {
+        var pos = new Vector3I(x, -z, y);
+        if (_backend == "gridmap")
+            _gridMap.SetCellItem(pos, restore ? _granite : _floor);
+        else if (_backend == "gridmap_two")
+            _gridMap.SetCellItem(pos, restore ? _granite : -1);   // floor map untouched
+        else
+            _frameDirty.Add(_world.ChunkOf(c));
+    }
+
+    /// <summary>
+    /// Criterion 5's frame-rate clause. Reported as percentiles because "holds 60 fps" is a
+    /// tail property: a 60 fps mean with a 40 ms spike on every chunk rebuild is a visible
+    /// hitch and a failure, and a single mean would hide it.
+    /// </summary>
+    private void ReportFrameStats()
+    {
+        if (_measured == 0) { GD.PrintErr("no frames measured - frames= must be > 0"); return; }
+
+        var sorted = (double[])_frameMs.Clone();
+        Array.Sort(sorted, 0, _measured);
+
+        double sum = 0;
+        for (int i = 0; i < _measured; i++) sum += _frameMs[i];
+        double mean = sum / _measured;
+        double P(double q) => sorted[Math.Clamp((int)(q * _measured), 0, _measured - 1)];
+        double p50 = P(0.50), p95 = P(0.95), p99 = P(0.99), worst = sorted[_measured - 1];
+
+        int gen0 = GC.CollectionCount(0) - _gen0Start;
+        int gen1 = GC.CollectionCount(1) - _gen1Start;
+        int gen2 = GC.CollectionCount(2) - _gen2Start;
+        long alloc = GC.GetTotalAllocatedBytes(precise: false) - _allocStart;
+
+        GD.Print($"RESULT measured_frames={_measured} warmup_frames={_warmupFrames} digs_per_frame={_digsPerFrame}");
+        GD.Print($"RESULT frame_ms_mean={mean:F3} p50={p50:F3} p95={p95:F3} p99={p99:F3} worst={worst:F3}");
+        GD.Print($"RESULT fps_mean={1000.0 / mean:F1} fps_at_p99={1000.0 / p99:F1}");
+        GD.Print($"RESULT gen0_collections={gen0} gen1={gen1} gen2={gen2}");
+        GD.Print($"RESULT bytes_per_frame={(double)alloc / _measured:F1}");
+        GD.Print($"RESULT VERDICT_frame_rate_clause={(p99 <= 16.6 ? "PASS" : "FAIL")} (p99 {p99:F3} ms vs 16.6 ms budget)");
+        GD.Print($"RESULT VERDICT_gen0_clause={(gen0 == 0 ? "PASS" : "REVIEW")} (criterion 5 wants no steady-state GC during dig-heavy play)");
+        GD.Print("NOTE checkpoint clause (ADR-0004 Option A, per-activation cadence) is NOT measured by this bench - no implementation exists.");
     }
 
     private void Sample()
