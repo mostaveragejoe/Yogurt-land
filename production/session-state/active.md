@@ -197,3 +197,20 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
   - Also **corrected a stale ownership note** in the formulas section that assigned dig cost to Excavation & Construction — third place that claim lived.
 - **DIG-TIME OWNERSHIP — still owed to the terrain GDD.** `design/gdd/terrain-data-model.md`'s Tuning Knobs table still reads as though Excavation owns the dig-time *number*. Substance agrees with the new decision, wording does not. Registry corrected; **the Approved GDD is not**. Trigger: its next `/design-review`, or before #15/#16 — whichever is first.
 - **Quick-spec batch status: 2 of 4.** Remaining: Colonist Entity & Attributes (#8, highest fan-out), Terrain Rendering & Cutaway (#11, folds in the ADR-0002 damage-overlay draw-call open item).
+
+## Session Extract — governed-doc debt paydown 2026-08-20
+
+Both debts carried by the two quick-specs are now **CLOSED at source**. Neither was a design change — both were documents disagreeing with decisions already made and already validated.
+
+- **ADR-0003 (Accepted) — RealTime composite-walkability formula CORRECTED.** Its RealTime line read `walkable = IsPassableTerrain(c) ∧ ¬DoorStore.BlocksMovement(c)`, making a closed door block in RealTime. That contradicted **three** things already inside the same ADR: its own bracketed note ("colonists auto-open doors in transit"), its spike-results section ("under RealTime colonists path through closed doors"), and validation criterion 5 — which requires the auto-open behaviour and **passed 44/44**. So the formula was the defect; the behaviour was always right.
+  - Corrected in place to `walkable = IsPassableTerrain(c)`, with doors contributing a `DoorTransitSurcharge` traversal cost instead of blocking.
+  - Added a `Correction 2026-08-20` block explaining **why it mattered**: doors blocking in RealTime is the traffic-deadlock case. An implementer following the formula literally ships a colony that stalls on its first door, then debugs it as a pathfinding bug.
+  - Status line now reads `Amended 2026-08-03 (Battle Persistence) · Corrected 2026-08-20 (RealTime composite-walkability formula)`.
+  - **Scope deliberately narrow**: wording correction, NOT a design change — no re-validation, no `/propagate-design-change`, no status change. TurnBased untouched (closed doors still block; opening is an action).
+  - Live caveat preserved: if a **door policy that forbids opening** ever ships (CD-16 lists door policy among peacetime standing decisions), RealTime gains a blocking case again and this needs revisiting. Tracked as Pathfinding quick-spec §8 item 3.
+- **Terrain Data Model GDD (Approved) — three Tuning Knobs rows corrected**:
+  1. *Dig time per material tier* now splits the **number** (Material Catalog `DigCost`) from the **rule** (Excavation's progress accumulation) — the same split the table already applied to wall max HP.
+  2. *Dig-completion threshold* notes its operands now live in two places (`progress` in Excavation's side table, `dig cost` in the catalog) while the comparison and completion decision stay Excavation's. Terrain's atomic `ClearWall` guarantee unchanged.
+  3. *Tier ordering invariant* row — its warning **"split across two owners with nobody cross-checking direction, which is how invariants die"** is now marked **DISCHARGED**. Both halves (HP and dig cost) live in the catalog, and Material Catalog C3 makes the cross-check a hard load failure with AC-1 as its BLOCKING test. Registered as `material_tier_ordering` so `/consistency-check` can verify it.
+- **Debt trackers cleared** so nothing still claims these are owed: Pathfinding §4 flag + §8 item 4, Material Catalog §8 item 2, and both index Next Steps checkboxes.
+- **Note on method**: the ADR correction was written as a dated `Correction` block rather than an edit-in-silence, matching the `Amendment 2026-08-03` precedent. An Accepted ADR that quietly changes meaning is worse than one that carries its own errata.

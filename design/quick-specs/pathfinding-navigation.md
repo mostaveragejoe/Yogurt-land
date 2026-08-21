@@ -198,12 +198,13 @@ route. Only the composition rule and the caller set change by authority.
 | Region index | Used for job/reachability probing | **Not used for legality** — over-reports (C3.2); combat uses A\* under TurnBased walkability |
 | Callers | Colonist Movement, Job Assignment, Stockpile & Hauling, Repair & Rebuild | Combat: Movement & Reachability, Combat: Raider Decision-Making |
 
-> **Flag for ADR-0003 editorial correction.** ADR-0003's RealTime formula literally reads
-> `IsPassableTerrain(c) ∧ ¬DoorStore.BlocksMovement(c)`, which would make a closed door
-> block in RealTime — contradicting its own bracketed note *"colonists auto-open doors in
-> transit"* and the spike's verified 44/44 behavior. The table above states the verified
-> rule. ADR-0003 is **Accepted**, so this is raised as a wording defect for its next
-> amendment, not silently overridden here.
+> **ADR-0003 wording defect — RAISED AND FIXED 2026-08-20.** ADR-0003's RealTime formula
+> literally read `IsPassableTerrain(c) ∧ ¬DoorStore.BlocksMovement(c)`, which would make a
+> closed door block in RealTime — contradicting its own bracketed note *"colonists auto-open
+> doors in transit"* and the spike's verified 44/44 behavior. The table above states the
+> verified rule. Because ADR-0003 is **Accepted**, this was raised rather than silently
+> overridden; it has since been corrected at source — see *Correction 2026-08-20* in
+> `docs/architecture/adr-0003-entity-data-ownership.md`. **The ADR and this table now agree.**
 
 Pathfinding also supplies the walkability predicate for ADR-0003's **pre-switch placement
 normalization** ("nearest RealTime-walkable, unoccupied cell, scanning at expanding radius
@@ -292,7 +293,7 @@ Bands set above the spike's measured values, per the Terrain / Time Authority pr
 | 1 | TurnBased occupancy: blocks traversal, or only end-of-move? | Combat: Movement & Reachability **#21** | ADR-0003 assigns it there. The spike hard-blocks; the index answers "occupied by whom" either way, so both readings are servable without an interface change. |
 | 2 | `DoorTransitSurcharge` real value | Construction **#16** | Placeholder 10 until door open/close timing exists. |
 | 3 | A "door policy" that forbids opening would make the terrain-only index over-report in **RealTime** too | Squad Prep **#24** / Construction **#16** | CD-16 lists door policy among peacetime standing decisions. If a locked-door policy ships, C3.2 needs revisiting. |
-| 4 | ADR-0003 RealTime door-blocking wording defect | technical-director | See §4 flag — editorial correction at ADR-0003's next amendment. |
+| 4 | ~~ADR-0003 RealTime door-blocking wording defect~~ — **CLOSED 2026-08-20** | technical-director | Corrected at source (ADR-0003 *Correction 2026-08-20*). Wording only; no re-validation, no status change. |
 | 5 | Congestion-avoidance cost term in RealTime | **Deferred** (decided 2026-08-20) | Not in MVP: at ~10 colonists there is no jam to solve, and every A\* cost term is permanent tuning surface. **Adoption trigger**: colonist count or corridor contention rising to where walk-through-each-other reads as broken. |
 | 6 | Revision polling → narrow change list | **Deferred**, trigger named | Polling costs O(cached paths × remaining length) per mutation — 63.2 µs/dig at MVP caps. **Trigger**: ~5× growth in colonist count, path length, or simultaneous dig rate. |
 | 7 | Incremental region merge/split updates | **Deferred**, trigger named | **Trigger**: per-layer rebuild exceeding AC-15's 0.5 ms band, or multi-layer dirtying becoming routine (mass destruction across Z). |
