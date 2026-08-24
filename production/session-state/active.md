@@ -262,3 +262,18 @@ Both debts carried by the two quick-specs are now **CLOSED at source**. Neither 
 - **Damage breakpoints decided** (the terrain GDD left them to #7): damaged below 0.66, critical below 0.33 of `MaxWallHp`, load-validated as ordered. Terrain GDD tuning row updated.
 - Performance ACs set as bands above the 2026-08-24 target-hardware measurements (≤40 draw calls vs 32 measured; p99 ≤4 ms vs 2.02–2.17; ≤20 MB buffers vs 16.23).
 - Noted in §1: this is **the only MVP-set spec whose code is Godot-side rather than plain C#** — everything in it is a view over data it never owns.
+
+## Session Extract — /test-setup 2026-08-24
+
+**Test infrastructure scaffolded. 3 of the 5 `/gate-check` pre-gate artifacts now exist.**
+
+- **Framework decision: xUnit, not GdUnit4.** The skill's Godot path defaults to GdUnit4 with a GDScript runner; that is the wrong default here. `src/core/Hollowdeep.Core.csproj` is **Godot-free by contract** (ADR-0001/0002/0003; ADR-0002 makes it a validation criterion), so the core suite runs under a bare `dotnet test` with **no engine installed** — fast, free on CI, no display server. GdUnit4 gets its own project when engine-facing view tests exist; deliberately not set up now.
+- **Created**: `tests/Hollowdeep.Tests.csproj` (xUnit + net8.0, `InvariantGlobalization` on for determinism) · `Hollowdeep.sln` (3 projects) · `tests/unit/Primitives/CellCoordTests.cs` (6 real tests, not a stub — value semantics, axis non-interchangeability, dictionary-key usage, and the **Z-down convention pinned** so a reversal fails a test rather than inverting the design language) · `tests/README.md` · `tests/smoke/critical-paths.md` · `tests/integration/` + `tests/evidence/` · `.github/workflows/tests.yml`.
+- **Two ADR-mandated CI grep gates added** — these turn rules that lived only in prose into build failures:
+  1. **Core is Godot-free** (ADR-0001/0002/0003; ADR-0002 validation criterion 1)
+  2. **Core uses no stock/engine RNG** (ADR-0005's forbidden-pattern entry explicitly says "CI-grep gate")
+  - **Both greps skip comment lines deliberately, and this was verified against the real tree**: a naive `grep Godot src/core` false-positives on **three doc comments** (`DebugConsole.cs` ×2, `CellCoord.cs` ×1) that legitimately discuss the Godot boundary. The comment-stripped patterns return clean. Tested here before wiring in.
+- **technical-preferences slots filled**: Framework = xUnit. **Minimum Coverage = no numeric target, by decision** — coverage is gated by story type via the Testing Standards table (Logic/Integration BLOCKING, Visual/UI advisory); a percentage measures lines executed rather than behaviour pinned and reliably produces tests written for the metric. Revisit only if a story ships Done with evidence a percentage would have caught.
+- **`.gitignore`** gained `artifacts/`, `TestResults/`, `*.trx`. Root `Hollowdeep.csproj` already had `<Compile Remove="tests\**\*.cs" />` — it was written expecting this.
+- **NOT VERIFIED LOCALLY — no .NET SDK in this container.** The workflow YAML parses and both grep gates were run against the real `src/core`, but `dotnet test` has never executed. First CI run on push is the real check; budget one round for a package-version or namespace fix.
+- **Remaining for `/gate-check`**: `/ux-design` must produce `accessibility-requirements` and `ux/interaction-patterns`. Those are the last 2 of the 5.

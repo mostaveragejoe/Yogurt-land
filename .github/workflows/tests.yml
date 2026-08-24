@@ -1,0 +1,70 @@
+name: Automated Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Core Unit + Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # The simulation core has zero Godot references by contract, so its full
+      # suite runs headless with no engine installed. Only the test project and
+      # its core dependency are built - the Godot-facing root project is not.
+      - name: Restore
+        run: dotnet restore tests/Hollowdeep.Tests.csproj
+
+      - name: Build
+        run: dotnet build tests/Hollowdeep.Tests.csproj --no-restore -c Release
+
+      - name: Test
+        run: dotnet test tests/Hollowdeep.Tests.csproj --no-build -c Release --logger "trx;LogFileName=results.trx" --results-directory artifacts/test-results
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: artifacts/test-results/
+
+  architecture-gates:
+    name: Architecture Grep Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ADR-0001/0002/0003: the core assembly must carry ZERO Godot references.
+      # ADR-0002 names this an explicit validation criterion. Comment lines are
+      # excluded deliberately - the core's doc comments legitimately discuss the
+      # Godot boundary (e.g. CellCoord's Z-down to Y-up mapping note).
+      - name: Core is Godot-free
+        run: |
+          if grep -rnE '^[[:space:]]*(using[[:space:]]+Godot|.*[^/*[:space:]].*\bGodot\.)' src/core --include=*.cs \
+             | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)'; then
+            echo "::error::Godot reference found in src/core. The simulation core must stay engine-free (ADR-0001/0002/0003)."
+            exit 1
+          fi
+          echo "OK - src/core is Godot-free"
+
+      # ADR-0005: all randomness goes through SeededRngStore (PCG-XSH-RR).
+      # System.Random is not version-stable (breaks save formats), engine RNG is
+      # a Godot dependency, and entropy sources break bit-reproducible resume.
+      # The ADR's forbidden-pattern entry names this a CI-grep gate.
+      - name: Core uses no stock or engine RNG
+        run: |
+          if grep -rnE '\b(System\.Random|new Random\(|Guid\.NewGuid|RandomNumberGenerator|DateTime\.(Now|UtcNow)\.Ticks)' src/core --include=*.cs \
+             | grep -vE ':[0-9]+:[[:space:]]*(//|\*|/\*)'; then
+            echo "::error::Stock or engine RNG found in src/core. All randomness must go through SeededRngStore (ADR-0005)."
+            exit 1
+          fi
+          echo "OK - src/core uses no stock RNG"

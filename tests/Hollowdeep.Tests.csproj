@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Headless test suite for the plain-C# simulation core.
+       Deliberately does NOT reference Godot: the core assembly has zero Godot
+       dependencies by contract (ADR-0001/0002/0003), so its full unit suite runs
+       under a bare `dotnet test` with no engine installed. Engine-facing view
+       tests, when they arrive, belong in a separate GdUnit4 project. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Hollowdeep.Tests</RootNamespace>
+    <AssemblyName>Hollowdeep.Tests</AssemblyName>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- Determinism standard (ADR-0005): tests must not depend on wall-clock,
+         culture, or machine locale. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\core\Hollowdeep.Core.csproj" />
+  </ItemGroup>
+
+</Project>

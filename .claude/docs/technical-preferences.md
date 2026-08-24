@@ -45,8 +45,8 @@
 
 ## Testing
 
-- **Framework**: [TO BE CONFIGURED — decide during `/test-setup`; GUT (Godot Unit Test) is the common choice for GDScript, but verify C#-compatible options such as GoDotTest or standard .NET test runners]
-- **Minimum Coverage**: [TO BE CONFIGURED]
+- **Framework**: **xUnit** (`tests/Hollowdeep.Tests.csproj`, .NET 8) — decided at `/test-setup` 2026-08-24. The simulation core is Godot-free by contract, so its whole suite runs under a bare `dotnet test` with no engine installed. GdUnit4 is the right tool for engine-facing view tests and gets its own project when those exist; it is deliberately not set up yet.
+- **Minimum Coverage**: **no numeric target, by decision** (2026-08-24). Coverage is gated by *story type* via the Testing Standards table — Logic and Integration stories are BLOCKING on real evidence, Visual/UI are advisory. A percentage target measures lines executed, not behaviour pinned, and reliably produces tests written for the metric. Revisit only if a story ships Done with evidence that a percentage would have caught.
 - **Required Tests**: Balance formulas, gameplay systems, networking (if applicable)
 
 ## Forbidden Patterns

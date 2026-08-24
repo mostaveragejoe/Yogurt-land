@@ -148,3 +148,8 @@ prototypes/**/bin/
 prototypes/**/obj/
 prototypes/**/.godot/
 prototypes/**/.mono/
+
+# === Test output ===
+artifacts/
+TestResults/
+*.trx
