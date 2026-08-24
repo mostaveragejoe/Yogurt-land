@@ -45,7 +45,44 @@ Web criteria with no game analogue (page titles, link purpose, HTML landmarks) a
 
 ## Visual Accessibility
 
-[To be designed]
+### Contrast
+
+| Element class | Minimum ratio | Notes |
+|---|---|---|
+| Body text, labels, tooltips | 4.5:1 | Against the panel behind it, not the world |
+| Large text (>=24px), headings | 3:1 | |
+| Meaningful UI boundaries — panel edges, focus rings, selection outlines | 3:1 | Decorative rules exempt |
+| Designation overlays against terrain | 3:1 | **The hard one** — see below |
+
+**The designation-overlay case needs stating plainly.** Blueprint overlays sit on top of a warm, low-light 3D world whose brightness the player controls by where they put torches. A fixed overlay color cannot guarantee contrast against a surface that might be lit or unlit. **Mitigation: designation overlays carry their own backing treatment — outline, scrim, or stipple — rather than relying on fill color against terrain.** The specific treatment is owned by Blueprint UI (#26); this document sets the floor and the obligation.
+
+The art bible's **minimum ambient fill** is load-bearing here: because no visible surface crushes to black, overlays always have a floor to contrast against. That constant is an accessibility dependency, not only an art choice, and must not be lowered without re-checking this section.
+
+### Color independence
+
+The art bible already establishes that the world carries zero semantic color. This document extends that to UI chrome, where three assignments do carry meaning:
+
+| Meaning | Must also be conveyed by |
+|---|---|
+| Valid / invalid designation | Shape or icon, not green/red alone |
+| Disabled control | The single shared disabled treatment (Time Authority: exactly one treatment, legible without color) — hatching or dimming plus an icon |
+| Damage state (intact / damaged / critical) | Distinct mesh silhouette per state — already required by Terrain Rendering C7's three-state legibility floor |
+
+Damage states show the rule paying for itself: they were already specified as distinct **meshes** rather than tints, so they satisfy color independence at no extra cost.
+
+### Text scaling
+
+- UI text scalable to **150%** without clipping, overlap, or loss of function
+- No text baked into textures, except decorative signage that conveys nothing
+- Panels reflow or scroll; they never truncate an actionable label
+
+**Flagged tension.** The art bible ties the UI base pixel unit to texel density, which the camera decision (quantized zoom, Terrain Rendering C6) has now fixed. A freely scalable UI and a fixed-pixel-unit UI pull against each other. **Proposed resolution: UI scales in integer steps (100%, 125%, 150%) so the pixel grid survives.** Routed to art-director alongside the Sections 3.1/3.3 re-validation — this document proposes, art-director confirms.
+
+### Readability
+
+- Minimum body size **16px at 100% scale** at the default zoom level
+- No italic body text; italics for emphasis only, never for a whole message
+- The cutaway's depth attenuation (Terrain Rendering C4) applies to **world geometry only** — UI never dims with depth
 
 ---
 
