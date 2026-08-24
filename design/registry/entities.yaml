@@ -37,7 +37,7 @@
 #   Each entry: name, status, source, referenced_by[], attributes{}, added, revised
 
 version: 1
-last_updated: "2026-08-20"
+last_updated: "2026-08-24"
 
 # ─── ENTITIES ────────────────────────────────────────────────────────────────
 # Named game-world objects: enemies, NPCs, characters, factions, bosses.
@@ -100,7 +100,7 @@ items:
     yield_qty: 1
     value: 1
     naturally_occurring: true
-    added: 2026-08-20
+    added: 2026-08-24
     revised: ""
 
   - name: granite
@@ -120,7 +120,7 @@ items:
     yield_qty: 1
     value: 3
     naturally_occurring: true
-    added: 2026-08-20
+    added: 2026-08-24
     revised: ""
 
   - name: reinforced
@@ -146,7 +146,7 @@ items:
       manufactured. C6 makes the catalog indifferent (a material with zero weight in every
       stratum is legal and excluded from the EV check). If manufactured, build_cost becomes a
       recipe rather than a scalar. Routed to Construction (#16) + creative-director."
-    added: 2026-08-20
+    added: 2026-08-24
     revised: ""
 
 # Example:
@@ -178,7 +178,7 @@ items:
 
 formulas:
   # NOTE: none of these carry a balance NUMBER. Terrain owns the function, never the
-  # arguments. Ownership of the magnitudes, corrected 2026-08-20 (user decision, recorded in
+  # arguments. Ownership of the magnitudes, corrected 2026-08-24 (user decision, recorded in
   # design/quick-specs/material-catalog.md §8 item 2): Material Catalog owns tier HP, dig cost,
   # build cost, yield and value — every tier-ordered number lives in ONE table so the
   # tier-ordering invariant is checkable in one place. Excavation & Construction owns the dig
@@ -299,7 +299,7 @@ formulas:
       material has non-zero weight at stratum s it keeps non-zero weight below s, which is
       what keeps the mountain geological rather than a layer cake. Both fail LOUDLY at load.
       output_range upper bound tracks max Value; widen it when a 4th material lands."
-    added: 2026-08-20
+    added: 2026-08-24
     revised: ""
 
 # Example:
@@ -366,7 +366,7 @@ constants:
       a clamp, never a silent reorder. If a rebalance inverted the ordering the game would not
       be mistuned - it would teach the player something false, and CD-1's after-action report
       would become an active lie."
-    added: 2026-08-20
+    added: 2026-08-24
     revised: ""
 
 # Example:

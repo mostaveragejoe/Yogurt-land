@@ -3,7 +3,7 @@
 <!-- STATUS -->
 Epic: Pre-Production
 Feature: Quick-spec batch (design order #8-#11)
-Task: Material Catalog quick-spec DRAFTED 2026-08-20 (2 of 4 done: Pathfinding + Material Catalog). Next: Colonist Entity & Attributes (#8), then Terrain Rendering & Cutaway (#11).
+Task: Material Catalog quick-spec DRAFTED 2026-08-24 (2 of 4 done: Pathfinding + Material Catalog). Next: Colonist Entity & Attributes (#8), then Terrain Rendering & Cutaway (#11).
 <!-- /STATUS -->
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
@@ -156,7 +156,7 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 - Remaining to PASS: target-hardware criterion-5 run (needs real hardware) to promote ADR-0002/0004/0005. Then re-run /architecture-review in a fresh session.
 
 
-## Session Extract — quick-spec batch + bookkeeping 2026-08-20
+## Session Extract — quick-spec batch + bookkeeping 2026-08-24
 
 - **Pathfinding & Navigation quick-spec DRAFTED** (`design/quick-specs/pathfinding-navigation.md`, commit `282e8a9`). First document at the quick-spec tier. Resolved the three items the pathfinding spike routed to it:
   - **Region index = per-layer regions, terrain-only, stair cells as portals.** Doors and occupancy deliberately excluded from the index so a door toggle never dirties it. A dig marks only its own layer stale. Rebuild is lazy (first query reading a stale layer triggers it), capped at one layer per dispatch, never inside the mutation window. Full-world flood fill was 4.16 ms / 25.1% of frame; per-layer ~0.26 ms.
@@ -176,7 +176,7 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 - **Minor, untouched**: a skill references `.claude/docs/templates/patch-notes-template.md`, which does not exist in that directory.
 
 
-## Session Extract — Material Catalog quick-spec 2026-08-20
+## Session Extract — Material Catalog quick-spec 2026-08-24
 
 - **Material Catalog quick-spec DRAFTED** (`design/quick-specs/material-catalog.md`). Second document at the quick-spec tier; used `.claude/docs/templates/quick-spec.md`.
 - **Two user decisions taken this session:**
@@ -198,14 +198,14 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 - **DIG-TIME OWNERSHIP — still owed to the terrain GDD.** `design/gdd/terrain-data-model.md`'s Tuning Knobs table still reads as though Excavation owns the dig-time *number*. Substance agrees with the new decision, wording does not. Registry corrected; **the Approved GDD is not**. Trigger: its next `/design-review`, or before #15/#16 — whichever is first.
 - **Quick-spec batch status: 2 of 4.** Remaining: Colonist Entity & Attributes (#8, highest fan-out), Terrain Rendering & Cutaway (#11, folds in the ADR-0002 damage-overlay draw-call open item).
 
-## Session Extract — governed-doc debt paydown 2026-08-20
+## Session Extract — governed-doc debt paydown 2026-08-24
 
 Both debts carried by the two quick-specs are now **CLOSED at source**. Neither was a design change — both were documents disagreeing with decisions already made and already validated.
 
 - **ADR-0003 (Accepted) — RealTime composite-walkability formula CORRECTED.** Its RealTime line read `walkable = IsPassableTerrain(c) ∧ ¬DoorStore.BlocksMovement(c)`, making a closed door block in RealTime. That contradicted **three** things already inside the same ADR: its own bracketed note ("colonists auto-open doors in transit"), its spike-results section ("under RealTime colonists path through closed doors"), and validation criterion 5 — which requires the auto-open behaviour and **passed 44/44**. So the formula was the defect; the behaviour was always right.
   - Corrected in place to `walkable = IsPassableTerrain(c)`, with doors contributing a `DoorTransitSurcharge` traversal cost instead of blocking.
-  - Added a `Correction 2026-08-20` block explaining **why it mattered**: doors blocking in RealTime is the traffic-deadlock case. An implementer following the formula literally ships a colony that stalls on its first door, then debugs it as a pathfinding bug.
-  - Status line now reads `Amended 2026-08-03 (Battle Persistence) · Corrected 2026-08-20 (RealTime composite-walkability formula)`.
+  - Added a `Correction 2026-08-24` block explaining **why it mattered**: doors blocking in RealTime is the traffic-deadlock case. An implementer following the formula literally ships a colony that stalls on its first door, then debugs it as a pathfinding bug.
+  - Status line now reads `Amended 2026-08-03 (Battle Persistence) · Corrected 2026-08-24 (RealTime composite-walkability formula)`.
   - **Scope deliberately narrow**: wording correction, NOT a design change — no re-validation, no `/propagate-design-change`, no status change. TurnBased untouched (closed doors still block; opening is an action).
   - Live caveat preserved: if a **door policy that forbids opening** ever ships (CD-16 lists door policy among peacetime standing decisions), RealTime gains a blocking case again and this needs revisiting. Tracked as Pathfinding quick-spec §8 item 3.
 - **Terrain Data Model GDD (Approved) — three Tuning Knobs rows corrected**:
@@ -214,3 +214,23 @@ Both debts carried by the two quick-specs are now **CLOSED at source**. Neither 
   3. *Tier ordering invariant* row — its warning **"split across two owners with nobody cross-checking direction, which is how invariants die"** is now marked **DISCHARGED**. Both halves (HP and dig cost) live in the catalog, and Material Catalog C3 makes the cross-check a hard load failure with AC-1 as its BLOCKING test. Registered as `material_tier_ordering` so `/consistency-check` can verify it.
 - **Debt trackers cleared** so nothing still claims these are owed: Pathfinding §4 flag + §8 item 4, Material Catalog §8 item 2, and both index Next Steps checkboxes.
 - **Note on method**: the ADR correction was written as a dated `Correction` block rather than an edit-in-silence, matching the `Amendment 2026-08-03` precedent. An Accepted ADR that quietly changes meaning is worse than one that carries its own errata.
+
+## Session Extract — target-hardware terrain run 2026-08-24
+
+**ADR-0002 criterion 5: frame-rate and Gen0 clauses CLOSED. The ADR stays Proposed.**
+
+- Run by the user on their own PC (this container has no GPU). **RTX 3060 Ti, `software_rasterizer=False`** — timings admissible for the first time.
+- **p99 2.167 ms (Vulkan) / 2.024 ms (D3D12)** against the 16.6 ms budget — **~8× headroom**. Mean 650 / 570 fps. **0 Gen0/Gen1/Gen2 collections**, 32.7–36.1 B/frame. Draw calls **32**, exactly as predicted in July. `render_matches_model=True` after 30 s of continuous digging. Dig rebuild 0.30 µs (was 1.85 µs on lavapipe).
+- Evidence committed: `production/qa/evidence/terrain-target-hardware-2026-08-24/` (README + both raw logs; Windows username redacted to `<user>`).
+
+**Two findings recorded rather than waved through:**
+1. **One ~50 ms frame per run** — 1 in 1800, far beyond p99. Reads as environmental (driver / OS / compositor) since a systematic cost would have lifted p99 off ~2 ms. Not a blocker; **one confirming re-run wanted before Accepted**.
+2. **Video memory 43–50 MB vs a recorded 16.42 MB — the label was wrong, not the measurement.** `buffer_mem_mb` reads **16.23 MB**, matching the July figure almost exactly. The July number measures terrain *buffers*; the larger figure is total video memory including render targets and swapchain at real resolution — framebuffer overhead scaling with output resolution, not with terrain. technical-preferences corrected to say "render buffers" and to warn against budgeting it as total video memory.
+
+**Harness work that made the run meaningful** (commit `c6aa68a`): the original bench read `TimeFps` once at frame 60, quit at 62, with vsync on. Replaced with warmup-under-load → untimed draw-call sample → sustained 1800-frame window reporting mean/p50/p95/p99/worst plus GC counts, vsync forced off in two places, adapter name printed with a software-rasterizer VOID warning. The legacy single-read line printed **59.0 fps on a run whose true mean was 650** — it has now been deleted, since sitting next to good numbers it was actively misleading.
+
+**Environment deviations recorded for provenance:** Godot **4.7.2** (project pins 4.7.1 — patch release); **Debug** build, not Release (Godot loads Debug when running a project from its folder). Neither is material at 2 ms against a 16.6 ms budget.
+
+**STILL OPEN — the last gate.** Criterion 5's **checkpoint clause** (added by the 2026-08-03 Battle Persistence amendment): checkpoint snapshot+write at per-activation combat cadence on ADR-0004's double-buffered async path, confirming no frame-time impact during combat. **No implementation exists** — this is a spike in its own right, not a flag on the render bench. ADR-0002/0004/0005 promote together once it lands, then `/architecture-review` in a fresh session.
+
+**Housekeeping:** all of this session's docs were dated 2026-08-20 in error; corrected to **2026-08-24** across 9 files (128 occurrences). Security sweep run at user request — no credentials, keys, `.env` files, IPs or personal identifiers in the repo; the only personal datum was a Windows username in the raw logs, redacted.

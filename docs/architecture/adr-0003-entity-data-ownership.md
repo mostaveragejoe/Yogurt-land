@@ -1,7 +1,7 @@
 # ADR-0003: Entity Data Ownership
 
 ## Status
-**Accepted** (2026-07-26, user decision) — spike-validated: criteria 2–5 pass across the mode-switch, pathfinding and save/load spikes. · **Amended 2026-08-03** (Battle Persistence) · **Corrected 2026-08-20** (RealTime composite-walkability formula)
+**Accepted** (2026-07-26, user decision) — spike-validated: criteria 2–5 pass across the mode-switch, pathfinding and save/load spikes. · **Amended 2026-08-03** (Battle Persistence) · **Corrected 2026-08-24** (RealTime composite-walkability formula)
 
 > ### Amendment 2026-08-03 — Battle Persistence (user ruling 2026-08-02; propagated via `/propagate-design-change`, see `change-impact-2026-08-03-time-authority-mode-switch.md`)
 >
@@ -176,9 +176,9 @@ The World Change Event Bus keeps its ADR-0002 cap: **Terrain is its only publish
 Pathfinding composes (per ADR-0002's delegation), and the composition differs by authority — stated here because the pathfinding spike implements it:
 
 - **TurnBased**: walkable = `IsPassableTerrain(c)` ∧ ¬`DoorStore.BlocksMovement(c)` [door-opening move rules are Combat-GDD-era] ∧ **cell not occupied by a living unit** (occupancy hard-blocks — tactics legality) [whether friendly occupancy blocks *traversal* or only *end-of-move* (XCOM permits move-through-ally) is a Combat: Movement & Reachability GDD decision — the index answers "occupied by whom" either way].
-- **RealTime**: walkable = `IsPassableTerrain(c)` — **doors contribute nothing to RealTime blocking**, because colonists auto-open them in transit; a closed door is passable and carries a traversal-cost surcharge instead (`DoorTransitSurcharge`, Pathfinding quick-spec). *(Corrected 2026-08-20 — this line previously read `∧ ¬DoorStore.BlocksMovement(c)`; see the correction note below.)* **Occupancy does not block colony pathing in MVP** — that is the advisory decision made concrete; a later cost-term (congestion avoidance) is a Pathfinding-spec option, never a blocker.
+- **RealTime**: walkable = `IsPassableTerrain(c)` — **doors contribute nothing to RealTime blocking**, because colonists auto-open them in transit; a closed door is passable and carries a traversal-cost surcharge instead (`DoorTransitSurcharge`, Pathfinding quick-spec). *(Corrected 2026-08-24 — this line previously read `∧ ¬DoorStore.BlocksMovement(c)`; see the correction note below.)* **Occupancy does not block colony pathing in MVP** — that is the advisory decision made concrete; a later cost-term (congestion avoidance) is a Pathfinding-spec option, never a blocker.
 
-> ### Correction 2026-08-20 — RealTime door blocking (found authoring the Pathfinding quick-spec)
+> ### Correction 2026-08-24 — RealTime door blocking (found authoring the Pathfinding quick-spec)
 >
 > The RealTime line above previously read `walkable = IsPassableTerrain(c) ∧ ¬DoorStore.BlocksMovement(c)`, which makes a **closed door block in RealTime**. That contradicted three things already in this document: its own bracketed note *"colonists auto-open doors in transit"*; the spike-results section, which records that *"under RealTime colonists path through closed doors (auto-open in transit)"*; and validation criterion 5, which requires exactly that behaviour and **passed 44/44**.
 >

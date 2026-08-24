@@ -1,0 +1,33 @@
+Godot Engine v4.7.2.stable.mono.official.ed1daf0bf - https://godotengine.org
+Vulkan 1.4.329 - Forward+ - Using Device #0: NVIDIA - NVIDIA GeForce RTX 3060 Ti
+
+=== RENDER BACKEND BENCH: gridmap_two ===
+RESULT video_adapter=NVIDIA GeForce RTX 3060 Ti
+RESULT software_rasterizer=False
+initial build: 36 ms, 2 render nodes
+RESULT backend=gridmap_two
+RESULT draw_calls=32
+RESULT objects=32
+RESULT primitives=1149156
+RESULT video_mem_mb=43.32
+RESULT buffer_mem_mb=16.23
+RESULT render_nodes=2
+RESULT build_ms=36
+RESULT fps_llvmpipe_not_representative=59.0
+RESULT cells_with_BOTH_floor_and_wall=15043
+RESULT cells_wall_only=0  cells_floor_only=1341
+RESULT model_cells_with_both=15043  render_matches_model=True
+RESULT screenshot=C:/Users/<user>/AppData/Roaming/Godot/app_userdata/TerrainSpikeRender/terrain-spike-gridmap_two.png
+RESULT measured_frames=1800 warmup_frames=300 digs_per_frame=8
+RESULT frame_ms_mean=1.538 p50=1.515 p95=1.937 p99=2.167 worst=50.310
+RESULT fps_mean=650.2 fps_at_p99=461.4
+RESULT gen0_collections=0 gen1=0 gen2=0
+RESULT bytes_per_frame=36.1
+RESULT VERDICT_frame_rate_clause=PASS (p99 2.167 ms vs 16.6 ms budget)
+RESULT VERDICT_gen0_clause=PASS (criterion 5 wants no steady-state GC during dig-heavy play)
+NOTE checkpoint clause (ADR-0004 Option A, per-activation cadence) is NOT measured by this bench - no implementation exists.
+RESULT dig_rebuild_us_per_dig=0.30
+RESULT aoe_cells=8 same_octant_us=11.9 us_per_cell=1.49
+RESULT aoe_cells=27 same_octant_us=14.3 us_per_cell=0.53
+RESULT aoe_cells=48 same_octant_us=12.9 us_per_cell=0.27
+RESULT aoe_cells=75 same_octant_us=18.5 us_per_cell=0.25

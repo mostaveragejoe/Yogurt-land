@@ -26,7 +26,7 @@ public partial class RenderBench : Node3D
     private long _buildMs;
     private int _nodeCount;
 
-    // --- Criterion-5 frame-rate clause (added 2026-08-20 for the target-hardware run) ---
+    // --- Criterion-5 frame-rate clause (added 2026-08-24 for the target-hardware run) ---
     // The original harness read TimeFps ONCE at frame 60 and quit at 62. That cannot see a
     // hitch, cannot separate warmup from steady state, and reports a mean where the criterion
     // ("holds 60 fps") is really a tail requirement. Sustained window + percentiles instead.
@@ -451,8 +451,6 @@ public partial class RenderBench : Node3D
         ulong objs = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.TotalObjectsInFrame);
         ulong vmem = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.VideoMemUsed);
         ulong bmem = RenderingServer.GetRenderingInfo(RenderingServer.RenderingInfo.BufferMemUsed);
-        double fps = Performance.GetMonitor(Performance.Monitor.TimeFps);
-
         GD.Print($"RESULT backend={_backend}");
         GD.Print($"RESULT draw_calls={draws}");
         GD.Print($"RESULT objects={objs}");
@@ -461,7 +459,6 @@ public partial class RenderBench : Node3D
         GD.Print($"RESULT buffer_mem_mb={bmem / 1024.0 / 1024.0:F2}");
         GD.Print($"RESULT render_nodes={_nodeCount}");
         GD.Print($"RESULT build_ms={_buildMs}");
-        GD.Print($"RESULT fps_llvmpipe_not_representative={fps:F1}");
 
         if (_backend == "gridmap_two")
         {

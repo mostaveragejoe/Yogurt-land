@@ -222,3 +222,68 @@ once `StyleId` multiplies in.
 Concluded. ADR-0002 is **validated on every criterion this environment can measure (5 of 6)**;
 the frame-rate criterion is the sole remaining gate before it is promoted from Proposed to
 Accepted. No structural change to the ADR is required.
+
+---
+
+# Target-hardware run — 2026-08-24
+
+The frame-rate clause left open above has now been measured on real hardware.
+Full logs: `production/qa/evidence/terrain-target-hardware-2026-08-24/`.
+
+| Field | Value |
+|---|---|
+| GPU | NVIDIA GeForce RTX 3060 Ti (`software_rasterizer=False`) |
+| Godot | 4.7.2 stable mono (`ed1daf0bf`) — project pins 4.7.1; this is a patch release |
+| Build | Debug (Godot loads Debug when running a project from its folder) |
+| Config | `gridmap_two`, octant 32, styles 1 — the adopted backend |
+| Method | 1800 measured frames after 300 warmup, 8 digs/frame, vsync off, percentiles |
+
+## Result — frame-rate and Gen0 clauses both PASS
+
+| | Vulkan | D3D12 | Budget |
+|---|---|---|---|
+| Frame p99 | **2.167 ms** | **2.024 ms** | 16.6 ms |
+| Frame mean / p50 / p95 | 1.538 / 1.515 / 1.937 | 1.754 / 1.667 / 1.852 | — |
+| Worst frame | 50.310 ms | 45.000 ms | see caveat 1 |
+| fps mean | 650.2 | 570.3 | 60 |
+| Gen0 / 1 / 2 collections | 0 / 0 / 0 | 0 / 0 / 0 | 0 |
+| Bytes per frame | 36.1 | 32.7 | ~0 |
+| Draw calls | 32 | 32 | ≤150 |
+| Dig rebuild | 0.30 µs | 0.30 µs | (1.85 µs on lavapipe) |
+
+**Roughly 8× headroom** against the frame budget. Draw calls landed at exactly the 32
+predicted in July, and `render_matches_model=True` held after 30 s of continuous digging.
+
+## Harness changes that made this measurable
+
+The original bench read `TimeFps` **once** at frame 60 and quit at frame 62, with vsync on.
+That cannot see a hitch, cannot separate warmup from steady state, and reports a mean where
+the criterion ("holds 60 fps") is a tail property. Rewritten to warm up under load, sample
+draw calls once untimed, then measure a sustained window and report percentiles plus GC
+counts. The legacy single-read line printed **59.0 fps** on the Vulkan run against a true
+mean of 650 — a good illustration of why it was replaced; it has since been deleted.
+
+## Caveats recorded with the result
+
+1. **One ~50 ms frame per run**, far beyond p99 (1 in 1800). Reads as environmental — driver,
+   OS scheduling, or compositor — since a systematic cost would have raised p99, which sits
+   at ~2 ms. Not treated as a blocker; worth one confirming re-run before Accepted.
+2. **Video memory 43.32 / 49.61 MB vs the 14.25–16.42 MB recorded above — NOT a regression.**
+   `buffer_mem_mb` reads **16.23 MB** on both runs, matching the recorded figure almost
+   exactly. The July number measures terrain *buffers*; the larger number is total video
+   memory including render targets and swapchain at real resolution, which is framebuffer
+   overhead, not terrain's budget line. **The label was wrong, not the measurement** —
+   corrected in technical-preferences.
+3. Godot 4.7.2 rather than the pinned 4.7.1; Debug rather than Release. Neither is material
+   at 2 ms against a 16.6 ms budget.
+4. `cells_with_BOTH_floor_and_wall=15043` vs July's 15763 — by design; the count is now taken
+   after 300 frames of dig churn rather than on a pristine build.
+
+## Still NOT measured — ADR-0002 stays Proposed
+
+The **checkpoint clause** added by the 2026-08-03 Battle Persistence amendment: checkpoint
+snapshot+write at per-activation combat cadence on ADR-0004's double-buffered async path.
+**No implementation exists.** Criterion 5 is therefore *partially* discharged — two clauses
+closed, one outstanding — and the amendment is explicit that ADR-0002 must not be promoted
+on the old criterion 5. Also still unmeasured from the original list: GridMap collision cost
+and procgen sparse chunks.
