@@ -15,7 +15,8 @@
 | **Knowledge Risk** | **LOW** — the bus lives entirely in `Hollowdeep.Core` with zero Godot references. `VERSION.md` rates 4.7 HIGH globally, but no Godot API is load-bearing in this decision. The binding constraint here is the **C# language version**, not the engine |
 | **References Consulted** | `docs/engine-reference/godot/VERSION.md`, `breaking-changes.md`, `deprecated-apis.md`, `modules/gridmap.md` |
 | **Post-Cutoff APIs Used** | None |
-| **Verification Required** | CI-grep that no subscriber retains a batch; allocation benchmark proving dispatch is 0 B/publish; a determinism test proving dispatch order is stable across runs |
+| **Verification Required** | CI-grep that no subscriber retains a batch; allocation benchmark proving dispatch is 0 B/publish (with assertion-message allocation ruled out first); a determinism test proving dispatch order is stable across runs; **a `net9.0` compile check before anyone acts on the .NET 9 note below** |
+| **Specialist Review** | **godot-csharp-specialist, 2026-08-25 — APPROVE WITH NOTES.** Confirmed: the `net8.0`→C# 12 mapping, the ref-struct generic restriction, the non-generic delegate being legal, `in` on an interface method, the Godot marshalling boundary, and zero-allocation dispatch (`readonly ref struct` means `in` inserts no defensive copy). **One correction folded**: the draft's ".NET 9 lifts this constraint" claim was wrong. **Three additions folded**: rules 10, 11, 12 |
 
 > ### ⚠️ The binding constraint: C# 12 forbids the obvious implementation
 >
@@ -40,9 +41,23 @@
 > dig**, silently breaking the zero-steady-state-allocation standard that five Tier 0 spikes
 > exist to protect.
 >
-> **If the project ever moves to .NET 9+, this constraint lifts.** The contract below stays
-> valid regardless — it does not become wrong, only less mandatory. Do not migrate it on
-> version-bump alone; see Consequences.
+> **A .NET 9 upgrade would NOT make the illegal forms above legal** — corrected 2026-08-25
+> after godot-csharp-specialist review; the first draft of this ADR claimed otherwise and was
+> wrong. `allows ref struct` is **opt-in per generic declaration**: a type accepts ref-struct
+> arguments only if *its own* type parameter is annotated. Consequently:
+>
+> - **`List<Action<TerrainChangeBatch>>` can never be legal, in any C# version.** `List<T>`'s
+>   backing store is `T[]`, and the CLR forbids arrays of ByRefLike element type. That is a
+>   *runtime* rule, not a language rule — no future language version can lift it.
+> - **`Action<T>`, `EventHandler<T>` and `IObserver<T>` remain illegal** for this payload
+>   unless the BCL retrofits those specific type parameters with `allows ref struct`, which it
+>   has not. *(Confidence note: the `List<T>`/CLR restriction is a hard, version-independent
+>   rule. The "BCL delegates are unannotated" half is post-cutoff territory — verify with a
+>   compile check against `net9.0` before anyone relies on it in a migration decision.)*
+>
+> **This strengthens the decision rather than weakening it**: the interface contract below is
+> very likely the correct shape permanently, not a stopgap that a version bump dissolves.
+> Do not rewrite it to `event Action<T>` on a version bump; see Consequences → Risks.
 
 ## ADR Dependencies
 
@@ -137,6 +152,21 @@ public sealed class WorldChangeEventBus : ITerrainChangeSink
 }
 ```
 
+**Implementation notes that cost an afternoon each if missed** *(godot-csharp-specialist,
+2026-08-25)*:
+
+- **The `in` modifier must be replicated exactly in every implementation.** `public void
+  OnTerrainChanged(in TerrainChangeBatch batch)` — dropping `in` does not overload, it fails
+  to implement the interface member and the compiler rejects the class.
+- **`TerrainRenderer` must remain a `partial class`** like every Godot node script; adding
+  this interface does not change that requirement.
+- **Assertion messages must not allocate.** `Debug.Assert(cond, $"...")` **eagerly evaluates
+  the interpolated string on every call, pass or fail**, in any build where assertions are
+  compiled in. Rule 5's in-`Publish` assertion runs on every dispatch, so an interpolated
+  message there is a per-publish allocation that would contaminate validation criterion 3's
+  zero-allocation measurement. Use a non-allocating form, or confirm the benchmark strips
+  `DEBUG`.
+
 **Why an interface rather than a delegate.** A bespoke non-generic delegate
 (`delegate void TerrainChangeHandler(in TerrainChangeBatch)`) is *also* legal in C# 12 —
 delegates may take `ref struct` parameters; only generic *type arguments* are forbidden. It
@@ -193,9 +223,24 @@ to tune.** Recorded as a review question, not a tuning knob.
    must consume the batch inside `OnTerrainChanged` and translate to plain data before any
    signal emission.
 9. **Unsubscribe is mandatory for view-layer subscribers.** A freed Godot Node still
-   registered is a dangling reference. `TerrainRenderer` unsubscribes in `_ExitTree`. The bus
-   additionally logs a debug warning if a subscriber throws, rather than silently absorbing
-   it — matching ADR-0001's tickable-purge precedent.
+   registered is a dangling reference. `TerrainRenderer` unsubscribes in `_ExitTree`.
+10. **A missed unsubscribe must self-heal, not log forever.** `_ExitTree` can be skipped —
+   a crash path, `QueueFree()` racing a `Publish` on the same frame, a leaked reference. The
+   bus therefore applies **ADR-0001's tickable-purge precedent**: a subscriber that is a
+   `GodotObject` failing `IsInstanceValid()` is **removed from the list with one logged
+   warning**, not skipped on every publish forever. Silent absorption is still forbidden; so
+   is an unbounded warning stream. *(Added 2026-08-25, godot-csharp-specialist.)*
+11. **Exception isolation is explicit: one subscriber's throw never starves the rest.** Each
+   subscriber call is independently guarded; a throw is logged and dispatch **continues to
+   every remaining subscriber in priority order**. Without this rule, a throw at priority 50
+   (Notifications) would silently deny the batch to priority 60 (Terrain Rendering) — exactly
+   the subscriber-desync bug class this ADR exists to prevent, reintroduced through the error
+   path. *(Added 2026-08-25, godot-csharp-specialist — the draft implied this but never said
+   it, which is not good enough for a rule an implementer must not get wrong.)*
+12. **The bus is single-threaded by design and does not lock.** Registration and `Publish`
+   both occur exclusively on the sim thread. This is stated because ADR-0004 introduces a
+   background writer thread elsewhere in the architecture, and a reader who knows that will
+   reasonably ask. The bus is never touched from it.
 
 ### Architecture Diagram
 
@@ -232,7 +277,7 @@ to tune.** Recorded as a review question, not a tuning knob.
 
 - **Description**: The idiomatic .NET approach — `event Action<TerrainChangeBatch> Changed;`, subscribers use `+=`.
 - **Pros**: One line. Every C# developer knows it. No custom types.
-- **Cons**: **It does not compile.** `TerrainChangeBatch` is a `ref struct`, and C# 12 forbids `ref struct` as a generic type argument (`allows ref struct` is C# 13/.NET 9).
+- **Cons**: **It does not compile**, and **would not compile on .NET 9 either.** `TerrainChangeBatch` is a `ref struct`; C# 12 forbids `ref struct` as a generic type argument, and C# 13's `allows ref struct` is opt-in per declaration — the BCL has not annotated `Action<T>`/`EventHandler<T>`/`IObserver<T>`, and `List<T>` can never be annotated because the CLR forbids arrays of ByRefLike element type.
 - **Rejection Reason**: Illegal in the target language version. **Documented rather than omitted**, because it is the approach every implementer will try first — and the natural workaround (copy changes into a `List<TerrainChange>` before dispatch) allocates on every dig and breaks the zero-allocation standard.
 
 ### Alternative 2: Bespoke non-generic delegate
@@ -279,7 +324,10 @@ to tune.** Recorded as a review question, not a tuning knob.
 - **A freed Godot Node stays registered.** *Mitigation*: rule 9 (`_ExitTree` unsubscribe) plus a debug warning on subscriber throw, mirroring ADR-0001's tickable-purge precedent.
 - **Ordering becomes load-bearing over time** — someone tunes a priority to fix a bug, making correctness depend on dispatch order. *Mitigation*: stated explicitly as a design smell to escalate; the debug-console sweep can dump the registered order for audit.
 - **The bus grows into a general message bus.** *Mitigation*: cross-cutting contract #3's hard cap; `ITerrainChangeSink` is the only publish surface and it is terrain-shaped by its type.
-- **.NET 9 migration invites a rewrite to `event Action<T>`.** *Mitigation*: recorded here — the constraint lifting does not make this contract wrong. A migration would trade a working, ordered, unsubscribable contract for idiom alone, and would lose declared ordering. **Do not migrate on version-bump alone.**
+- **.NET 9 migration invites a rewrite to `event Action<T>`.** *Mitigation*: **the premise is false and the ADR now says so at the top.** `allows ref struct` is opt-in per declaration; the BCL types in Alternative 1 stay illegal, and `List<T>` stays illegal permanently by CLR rule. A migration would therefore require hand-authoring an annotated generic delegate — i.e. custom infrastructure, which is what this ADR already provides — while losing declared ordering and reliable unsubscription. **Do not migrate on version-bump alone.**
+- **A subscriber throw starves lower-priority subscribers.** *Mitigation*: rule 11 makes per-subscriber exception isolation an explicit numbered requirement, not an inference.
+- **A leaked Godot subscriber logs a warning on every publish forever.** *Mitigation*: rule 10's `IsInstanceValid()` purge — remove once with one warning, matching ADR-0001.
+- **Assertion messages silently break the zero-allocation measurement.** *Mitigation*: recorded as an implementation note above and as a condition on validation criterion 3.
 
 ## GDD Requirements Addressed
 
@@ -313,12 +361,13 @@ Greenfield — the bus does not exist yet. Two companion edits at adoption:
 
 1. Six subscribers register at declared priorities and are dispatched in `(priority, registration)` order; the order is identical across runs and across a save/load cycle.
 2. A handler attempting to write terrain or a store fails the mutation-window assertion; `Subscribe`/`Unsubscribe` during `Publish` fails the in-Publish assertion.
-3. **Zero allocation**: 10,000 publishes to 6 subscribers record 0 B and 0 Gen0 collections.
+3. **Zero allocation**: 10,000 publishes to 6 subscribers record 0 B and 0 Gen0 collections. **The benchmark must state its build configuration** — if assertions are compiled in, their messages must be verified non-allocating first (see implementation notes), or the measurement is of the wrong build.
 4. Duplicate subscriber registration is rejected; duplicate priorities across different subscribers are rejected.
 5. `PublishWorldReloaded` reaches every registered subscriber, in the same order, and each responds with a full rebuild — verified by the existing no-stale-cache-after-load integration test (ADR-0002 criterion 3).
 6. A Godot-side subscriber (`TerrainRenderer`) participates with the core assembly still passing the zero-Godot-references CI grep.
-7. An unsubscribed subscriber receives nothing; a subscriber that throws is logged, not silently absorbed.
-8. Six months in: the bus still has exactly one publisher, no queueing, no replay, and no subscriber's correctness depends on another's priority.
+7. An unsubscribed subscriber receives nothing; a subscriber that throws is logged, not silently absorbed — **and every remaining lower-priority subscriber still receives that batch** (rule 11).
+8. A Godot subscriber freed without unsubscribing is purged from the list after one logged warning, and subsequent publishes are clean — no repeated warning, no repeated failure (rule 10).
+9. Six months in: the bus still has exactly one publisher, no queueing, no replay, and no subscriber's correctness depends on another's priority.
 
 ## Related Decisions
 
