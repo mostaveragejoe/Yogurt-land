@@ -48,9 +48,19 @@ Measured on target hardware: **32 draw calls, 16.23 MB render buffers, 0.30 µs 
 
 Layers **above** the focus layer are not drawn at all — that is what makes it a cutaway. Layers **below** are drawn with progressive depth attenuation (C4). Default window depth is **3** (focus + 2).
 
-### C4 — Non-focus layers are dimmed, not recoloured
+### C4 — Non-focus layers are de-emphasised, not recoloured
 
 Layers below the focus receive progressive darkening toward the ambient floor, with a light desaturation. They never receive a hue shift.
+
+> **Strength is a build-time tuning job, and deliberately so.** The goal is that lower layers
+> stay **clearly visible and readable** — just slightly less prominent than the layer the
+> player is working on. This is de-emphasis, not fading into obscurity. The defaults in §6
+> (`DepthDimStep 0.35`, `DepthDesaturateStep 0.20`) are first-pass placeholders; **dial them in
+> by eye during implementation** rather than settling them on paper. If they read as too
+> strong, lower them — that is what the ranges are for.
+>
+> Implementation note: the tint comes from a shader reading world height, not from separate
+> meshes per depth, so changing the strength costs nothing and stays off the draw-call budget.
 
 This is the art bible's **presentation-layer exemption** — a rendering channel like UI chrome, carrying no world meaning. The constraint that survives from Section 4: depth is never communicated by hue, so the attenuation must read as *further away*, never as *a different kind of rock*.
 

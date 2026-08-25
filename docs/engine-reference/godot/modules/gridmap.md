@@ -140,7 +140,7 @@ call anywhere in the class.**
 
 ---
 
-## ⚠️ NEW CONSTRAINT — GridMap is not a `VisualInstance3D`
+## Note — GridMap is not a `VisualInstance3D`
 
 Quoted verbatim from the 4.7.1 class description:
 
@@ -148,53 +148,33 @@ Quoted verbatim from the 4.7.1 class description:
 > masked based on [layers]. If you make a light not affect the first layer, the whole GridMap
 > won't be lit by the light in question."*
 
-**This is not recorded anywhere in the project's ADRs, quick-specs, or preferences, and it
-touches two live open items.** It is the one finding here that could cost real rework.
+In plain terms: the terrain is one object as far as hiding and per-light filtering go. It
+affects exactly one thing in practice — how the cutaway's depth cue is built.
 
-### Impact 1 — the cutaway (`terrain-rendering-cutaway.md` C3/C4)
+### The cutaway's depth cue (`terrain-rendering-cutaway.md` C3/C4)
 
-C3 requires layers **above** the focus layer to *not be drawn at all*, and C4 requires layers
-**below** to be progressively dimmed. Neither can be done with visual-layer cull masks,
-because GridMap has no `layers` property to mask. `Node3D.visible` exists but hides the
-**entire** map, not a Z-slice.
+**The window itself is settled and measured.** `prototypes/terrain-spike/render/RenderBench.cs`
+only writes cells inside the window into the maps (`VisibleLayers = 3, TopLayer = 6`; every
+population loop runs `for (int z = TopLayer; z < TopLayer + VisibleLayers; z++)`, lines 158,
+292, 323). Layers above the focus simply aren't in the map. That is the measured 32-draw-call
+configuration and it works.
 
-So the cutaway must be implemented by one of:
+**The depth cue on lower layers is a build-time tuning job, not a blocker.** The intent is a
+*slight* de-emphasis — lower layers stay clearly visible and readable, just less prominent
+than the layer the player is working on. The spike didn't implement it, so the exact treatment
+and strength are still to be dialled in.
 
-| Approach | Note |
-|---|---|
-| **Repopulate cells** — only write cells within the window into the map | Matches the measured spike (a 3-layer cutaway at 32 draw calls); focus-layer changes cost a repopulate |
-| **One GridMap node pair per Z-layer** | Restores per-layer `visible` and per-layer material control (C4 dimming), at N× the node count |
-| **Per-item material variants per depth step** | Multiplies the item count against the draw-call ceiling — likely the wrong answer given the section above |
+C4's current numbers (`DepthDimStep 0.35`, `DepthDesaturateStep 0.20`) are first-pass
+placeholders and are already declared tunable in the quick-spec's §6 knob table. **Adjust them
+during implementation against how it actually looks** — that is the intended workflow, and the
+existing ranges (0.15–0.6 and 0–0.5) exist precisely so this gets tuned by eye rather than
+argued in advance. If the current defaults read as too strong, lower them; the spec's wording
+("progressive darkening toward the ambient floor") should be read as *de-emphasis*, not
+*fade to obscurity*.
 
-**What the spike actually did — checked, not assumed.** `prototypes/terrain-spike/render/RenderBench.cs`
-uses **approach 1**: `VisibleLayers = 3, TopLayer = 6`, and every population loop runs
-`for (int z = TopLayer; z < TopLayer + VisibleLayers; z++)` (lines 158, 292, 323). Cells
-outside the window are simply never written into either map. So the measured 32-draw-call
-figure is a *repopulate* cutaway, and approach 1 is demonstrably in budget.
-
-**But the spike did not implement C4 at all.** It writes one item per cell regardless of the
-cell's depth below focus — there is no dimming, no desaturation, and no per-depth material in
-the benchmark. So C4's "progressive darkening toward the ambient floor, with light
-desaturation" is **unmeasured and unimplemented**, and under approach 1 it has no obvious free
-implementation: with no per-instance channel (section above), a per-depth tint must come from
-either distinct per-depth mesh items (multiplying against the draw-call ceiling) or a shader
-reading world-space height (which sidesteps the item multiplication and is the likely answer).
-
-**Route to Terrain Rendering & Cutaway (#7) before render-backend implementation begins**:
-C4's dimming mechanism is an open engine question, not a settled one, and the 32-draw-call
-budget does not yet cover it.
-
-### Impact 2 — "Warm Hearth, Cold Dark" lighting
-
-`Light3D.light_cull_mask` exists (`default = 4294967295`, i.e. all layers) and is the standard
-tool for making a light affect only some geometry. **Against a GridMap it is all-or-nothing**:
-excluding layer 1 unlights the entire terrain map.
-
-`technical-preferences.md` still lists the many-local-lights evaluation and `AreaLight3D`
-(confirmed present at 4.7.1) as open, to be decided in the art/lighting pass. **That pass must
-now treat per-light cull-masking of terrain as unavailable**, and reach the warm/cold contrast
-through light placement, colour, attenuation and environment instead. Recorded here so the
-lighting pass does not discover it late.
+The one implementation note worth carrying: because there is no per-cell channel, a per-depth
+tint comes from a shader reading world height rather than from distinct meshes per depth. That
+keeps it off the draw-call budget. It is a normal shader task, not a design question.
 
 ---
 
@@ -242,9 +222,8 @@ Octants (**4.7-new**): the seven listed above.
 
 - **TR-terrain-044 / AC-10 — the damage-overlay draw-call measurement.** The *design* is now
   engine-verified; the *number* is still unmeasured.
-- **C4 per-layer dimming has no verified mechanism** (⚠️ above). The cutaway *window* is
-  settled (repopulate, spike-measured); the *depth attenuation* is not implemented anywhere
-  and is not covered by the 32-draw-call measurement.
+- **C4's depth cue is unimplemented** — a build-time tuning task (shader reading world height),
+  not a blocker. The cutaway *window* is settled and spike-measured.
 - **Octant rebake granularity under `set_cell_item`.** The class docs state the octant split
   exists "for efficient rendering and physics processing" but do not specify rebuild
   granularity as a contract. The project's 2026-07-25/26 spike measured it empirically
