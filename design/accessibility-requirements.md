@@ -88,7 +88,40 @@ Damage states show the rule paying for itself: they were already specified as di
 
 ## Motor Accessibility
 
-[To be designed]
+### Remapping
+
+- **Every action rebindable**, including mouse buttons and modifier combinations. No reserved bindings except OS-level ones
+- Conflict detection on bind: the UI names what the key currently does and requires confirmation
+- A restore-defaults control, always reachable
+- Bindings persist per profile and survive a patch that adds new actions — **a new action arrives unbound rather than stealing an existing binding**
+
+Cheap because input already routes through Godot's `InputMap` with clean action names (technical-preferences). Skipping remapping would mean *removing* a capability the architecture already has.
+
+### No timing pressure
+
+- **No action anywhere requires a response within a fixed window.** A whole-project rule, not a UI one — the concept doc lists timed inputs as an anti-pillar
+- No double-click required to reach any function; a double-click may exist as an accelerator only, never as the sole path
+- No press-and-hold required to confirm; hold may accelerate repeat, never gate an action
+- Turn-based combat has **no turn timer**, in any mode or difficulty
+
+### Drag-select, and the one real problem
+
+Drag-select is the primary designation gesture and the least accessible thing in the game. Two obligations on Blueprint UI (#26):
+
+1. **Every drag-select operation has a non-drag equivalent** — click the first cell, click the last cell, same rectangle designated. This is a **first-class path, not a lesser fallback**: it is also the faster route for precise single-cell work, which is what keeps it exercised rather than rotting unused.
+2. **No minimum drag speed or distance.** A slow drag is a drag. A one-cell drag is valid.
+
+**The mid-drag freeze.** Time Authority's zero-agency interruption means a raid can trigger mid-drag and discard that input with no warning. For a player who takes ten seconds to complete a drag this is materially worse than for one who takes one second. **Mitigation: an interrupted drag is discarded, never partially committed.** The player loses the gesture but never receives a designation they did not intend — silent partial commitment is the harmful outcome, not the loss.
+
+### Click targets and precision
+
+- Minimum interactive target **24x24px at 100% scale** for UI chrome. World-space cells are exempt — a cell is as big as zoom makes it, which is part of why zoom is a discrete, reliable control (Terrain Rendering C6)
+- No interaction requires pixel-accurate positioning; adjacent targets carry at least 2px separation or a shared boundary that cannot be ambiguously hit
+- **No path through the game requires simultaneous multi-key input.** Modifier-plus-click may exist as an accelerator with a non-modifier equivalent
+
+### Gamepad
+
+Partial support per technical-preferences: action names route cleanly from day one, controller UX is not built until the game is proven fun. **This document does not commit to gamepad navigation.** When it is built it inherits every rule in this section. Recorded so the deferral stays visible rather than becoming an unnoticed gap.
 
 ---
 
