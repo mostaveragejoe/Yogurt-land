@@ -243,22 +243,53 @@ One row per MVP system with a player-facing surface. **Status is aspirational** 
 
 ## Accessibility Test Plan
 
-[To be designed]
+| Check | Method | When | Gate |
+|---|---|---|---|
+| Contrast ratios | Automated sampler over UI screenshots against palette tokens | Per UI story | BLOCKING |
+| Color independence | Grayscale-render the screen; all state must still read | Per UI story | BLOCKING |
+| Keyboard-only traversal | Unplug the mouse; complete the critical path | Per sprint | BLOCKING |
+| Text at 150% | Screenshot every panel at max scale; no clipping or overlap | Per UI story | BLOCKING |
+| Every modal has a visible exit | Manual sweep of the modal inventory | Per sprint | BLOCKING |
+| Zero-volume playability | Complete a raid cycle with audio muted | When audio ships | BLOCKING |
+| Reduced-motion path | Toggle on; confirm no camera or transition animation remains | When motion ships | Advisory |
+| Rebinding survives a patch | Add a test action; confirm existing binds are untouched | Per release | Advisory |
+
+**Two of these are automatable now and should be**: contrast sampling and the grayscale render. Both are screenshot post-processing, both catch the failure classes most likely to regress silently, and both fit the existing evidence workflow (`tests/evidence/`).
+
+**Keyboard-only traversal is the highest-value manual check** and the one most likely to be skipped. It belongs as a named line in the smoke gate, not as a good intention.
 
 ---
 
 ## Known Intentional Limitations
 
-[To be designed]
+| Limitation | Why | Revisit when |
+|---|---|---|
+| **No screen-reader support** | A 3D cutaway colony sim has no meaningful non-visual representation. Godot 4.5+ has AccessKit plumbing, but shipping plumbing without a designed non-visual model would be a promise with no substance | A genuine non-visual play model exists, or a platform requires it |
+| **No gamepad navigation** | Partial support by project decision — action routing now, controller UX after the game is proven fun | The game is proven fun (TD-FEASIBILITY's own condition) |
+| **OS high-contrast mode not inherited** | See Platform APIs — accepted only because the palette carries no semantic color | A playtest contrast complaint the palette cannot answer |
+| **No mono downmix or directional-audio alternative** | No spatial audio design exists yet | The audio brief (#33) lands |
+| **Drag-select remains the primary gesture** | The right primary for a mouse-driven builder; the click-click equivalent is the mitigation, not a replacement | Playtest shows the equivalent path is unused or slower |
+
+Each of these is a decision with a name and a trigger, not an oversight. That distinction is the point of the section.
 
 ---
 
 ## Audit History
 
-[To be designed]
+| Date | Event | Outcome |
+|---|---|---|
+| 2026-08-24 | Document created; **WCAG-AA adapted for games** committed | Tier set |
+| — | First `/ux-review` against this tier | Pending — no UX specs exist yet |
+| — | First playtest with accessibility observation | Pending |
 
 ---
 
 ## Open Questions
 
-[To be designed]
+| # | Question | Owner | Trigger |
+|---|---|---|---|
+| 1 | **Integer-step UI scaling** (100/125/150%) as the resolution to the scaling-vs-fixed-pixel-unit tension — proposed here, needs confirmation | art-director | With the art bible 3.1/3.3 re-validation, already unblocked by the camera decision |
+| 2 | **Designation overlay treatment** against player-lit terrain — this document sets a 3:1 floor and requires a backing treatment; #26 picks which | Blueprint UI (#26) | At #26's UX spec |
+| 3 | **No player journey map exists** (`design/player-journey.md`), so emotional-state assumptions here are inferred from the concept doc rather than mapped | ux-designer | Before the first screen UX spec, ideally |
+| 4 | **Contrast sampling and grayscale checks are automatable but not built** | devops / qa-lead | When the first UI story lands |
+| 5 | ~~Time Authority references `design/ux/accessibility-requirements.md`~~ — **FIXED 2026-08-24**, corrected to this document's path | technical-director | Done |
