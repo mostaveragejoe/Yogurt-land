@@ -39,8 +39,8 @@
 | TR-terrain-014 | IsStairFloor retained under a built wall | ADR-0002 | ✅ |
 | TR-terrain-015 | One claim per cell, latest-wins, no rollback | ADR-0002 (bit storage); Job Assignment (semantics) | ⚠️ |
 | TR-terrain-016 | claim bit == table key invariant | ADR-0002 | ✅ |
-| TR-terrain-017 | Designation invalidation via events incl. while paused | ADR-0001, ADR-0002 | ✅ |
-| TR-terrain-018 | Batched change events w/ previous-state (CD-1) | ADR-0002 | ✅ |
+| TR-terrain-017 | Designation invalidation via events incl. while paused | ADR-0001, ADR-0002, **ADR-0006** | ✅ |
+| TR-terrain-018 | Batched change events w/ previous-state (CD-1) | ADR-0002, **ADR-0006** | ✅ |
 | TR-terrain-019 | Map authoring guarantees floor at load | Map Authoring quick-spec (deferred) | ⚠️ |
 | TR-terrain-020 | Connectivity: no region reachable only from below | Map Authoring quick-spec (deferred) | ⚠️ |
 | TR-terrain-021 | Terrain passive, never ticks | ADR-0001, ADR-0002 | ✅ |

@@ -69,6 +69,9 @@
 - **A generic "misc entity" store** — every entity kind gets a typed store plus ownership-table rows; a kind without a table row cannot exist (ADR-0003)
 - **UI or views writing entity stores** — views bind by `EntityId` and read-only poll `Revision`; input/UI submits designations and orders to owning systems, never direct writes (ADR-0003)
 - **Occupancy-index updates outside store-internal position/death handling** — `UnitOccupancyIndex` has a single write path, synchronous and atomic with the store write; no external writer exists (ADR-0003)
+- **`event`/`Action<T>`/`EventHandler<T>`/`IObserver<T>`/`List<Action<T>>` over `TerrainChangeBatch`** — illegal in C# 12 (a `ref struct` cannot be a generic type argument) and **still illegal on .NET 9** (`allows ref struct` is opt-in per declaration; `List<T>` can never qualify, by CLR rule). Use `ITerrainChangeSubscriber` (ADR-0006)
+- **Bus subscriber registration or unregistration during dispatch** — the sorted list is not re-entrantly safe; the `IsInstanceValid` purge is deferred until after the walk returns (ADR-0006 rules 5, 10)
+- **A bus handler querying another subscriber's derived state during dispatch** — handlers mark their own state only; cross-system reads happen in `Tick()`. This is what keeps dispatch order non-load-bearing (ADR-0006 rule 12)
 - **Stock or engine RNG in the core** — no `System.Random`, Godot `RandomNumberGenerator`, `Guid.NewGuid`, or time-based seeding anywhere in `src/core`; all randomness goes through `SeededRngStore` (PCG-XSH-RR), with `RootSeed` injected from the composition root. `System.Random` is not version-stable (breaks save formats), engine RNG is a Godot dependency, and entropy sources break bit-reproducible resume (CI-grep gate) (ADR-0005)
 
 ## Asset Authorship
