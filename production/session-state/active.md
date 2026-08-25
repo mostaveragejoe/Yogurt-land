@@ -1,10 +1,57 @@
 # Session State
 
 <!-- STATUS -->
-Epic: Pre-Production
-Feature: Quick-spec batch (design order #8-#11)
-Task: Material Catalog quick-spec DRAFTED 2026-08-24 (2 of 4 done: Pathfinding + Material Catalog). Next: Colonist Entity & Attributes (#8), then Terrain Rendering & Cutaway (#11).
+Epic: Technical Setup
+Feature: Master architecture document
+Task: architecture.md v1.0 WRITTEN and gate-reviewed 2026-08-25 (TD APPROVED WITH CONDITIONS / LP CONCERNS ACCEPTED). Next: close QQ-23..QQ-26 (the four interface gaps), then /create-control-manifest.
 <!-- /STATUS -->
+
+## SESSION 2026-08-25 — /create-architecture (COMPLETE)
+
+**Artifact written**: `docs/architecture/architecture.md` v1.0, 720 lines, 11 sections.
+The last missing Technical Setup artifact. All 5 gate-check pre-artifacts now exist.
+
+**Two engine-verification gates CLOSED** against the `4.7.1-stable` source tag (the docs
+website is egress-blocked; the in-repo class XML is the same source it renders):
+- **`docs/engine-reference/godot/modules/gridmap.md` AUTHORED** — the file the 2026-08-08
+  architecture review named as blocking `/story-readiness` for render-backend stories.
+  **GridMap downgraded HIGH -> LOW risk**: additive-only 4.3->4.7.1, 0 methods removed,
+  0 signature changes, 7 new octant methods in 4.7. No per-instance data channel CONFIRMED
+  by enumeration (validates the sparse damage overlay). `set_item_mesh_transform` per-item
+  CONFIRMED (discharges review finding 4).
+- **`modules/physics.md` amended** — `max_physics_steps_per_frame` (default 8) and
+  `physics_ticks_per_second` (60) confirmed exactly as ADR-0001 assumed. **ADR-0001 OQ #9
+  ANSWERED: read the `Engine` singleton, NOT `ProjectSettings`** — the ProjectSettings keys
+  are only read at project start, so a guard reading them validates a value the engine may
+  not be using. Binding on TR-time-011.
+
+**Gate outcomes (review mode full, both gates ran)**:
+- **TD-ARCHITECTURE: APPROVED WITH CONDITIONS.** Criterion 4 (Foundation gaps resolved) is a
+  clear FAIL — ADR-0004/0005 still Proposed, ADR-0003 criterion 1 unbuilt.
+- **LP-FEASIBILITY: CONCERNS** (lead-programmer spawned). "Nothing unimplementable... mostly
+  fixable by writing down interfaces that are currently only implied by prose."
+
+**Four NEW blocking questions from the gates — QQ-23..QQ-26, all verified against the repo:**
+1. **QQ-23 Bus subscriber registration has no interface.** Plus the trap: csproj targets
+   `net8.0` = C# 12, so `allows ref struct` (C# 13) is unavailable and `TerrainChangeBatch`
+   CANNOT be a generic type argument. `Action<T>`/`EventHandler<T>`/`IObserver<T>` all
+   illegal. The natural first idiom will not compile.
+2. **QQ-24 The composition root has no type definition** — 30 references across 5 docs, zero
+   definitions. The one-writer guarantee rests on it.
+3. **QQ-25 Checkpoint multi-owner buffer framing unspecified** — 7 owners, one buffer, no
+   ordering/length-prefixing/versioning. Blocks ADR-0004+0005 implementation.
+4. **QQ-26 Checkpoint lock boundary + join timeout** — "sim never waits" stated but not
+   guaranteed; no timeout on quiesce/quit join.
+Plus **QQ-27**: input carries MEDIUM engine risk (4.6 dual-focus, SDL3) with no owner while
+all three UX specs are unwritten.
+
+**Session correction worth carrying**: an earlier pass in this session inflated a GridMap
+lighting limitation into a "visual identity constraint" and turned the cutaway depth cue into
+a blocker. Both were overcorrections and were reverted (commit cd40201). The depth cue is a
+build-time tuning job — lower layers stay clearly visible, just de-emphasised — and lighting
+is a feature to build, not a design restriction. **User directive: suggest features that
+accomplish the vibe; do not manufacture design criteria from engine details.**
+
 
 ## BRANCH CONSOLIDATION 2026-08-06 — READ THIS BEFORE TRUSTING ANY OTHER BRANCH
 
@@ -333,7 +380,7 @@ All five pre-gate artifacts exist: `tests/unit`, `tests/integration`, `.github/w
 
 ### Still open
 
-- **`/create-architecture`** — last missing Technical Setup artifact, hard blocker at Production. Needs its own session.
+- ~~**`/create-architecture`**~~ — **DONE 2026-08-25**, gate-reviewed. Conditions QQ-23..QQ-26 open.
 - **ADR-0005 amendment** for the re-roll ruling (conflicts with TR-time-026/027 identical replay).
 - **New systems-index entries**: Research/Technology, production chain, furniture/workstations.
 - **Vertical slice** — scoped deliberately below MVP (1 stratum, ~3 colonists, dig+build, one raid), `prototypes/`, ADR-exempt, answering CD-18 only.

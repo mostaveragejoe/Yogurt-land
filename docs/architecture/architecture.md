@@ -8,8 +8,14 @@
 | **Created** | 2026-08-25 |
 | **Engine** | Godot 4.7.1 · C# (.NET 8) |
 | **Authored by** | `/create-architecture` (review mode: full) |
-| **Technical Director Sign-Off** | *pending — Phase 7b* |
-| **Lead Programmer Feasibility** | *pending — Phase 7b* |
+| **Technical Director Sign-Off** | 2026-08-25 — **APPROVED WITH CONDITIONS** (TD-ARCHITECTURE) |
+| **Lead Programmer Feasibility** | 2026-08-25 — **CONCERNS ACCEPTED** (LP-FEASIBILITY) |
+
+> **Conditions on the sign-off.** This document is architecturally sound and nothing in it is
+> unimplementable — but it is **not yet codeable**, and both gates independently reached that
+> conclusion for the same reason: missing written-down interfaces, not wrong decisions.
+> The conditions are tracked as **QQ-23 … QQ-26** in §8 and must close before the systems they
+> govern are implemented. §11 records the full gate findings.
 
 **Source documents.** 2 full GDDs (`terrain-data-model.md`, `time-authority-mode-switch.md`),
 4 quick-specs (Pathfinding & Navigation, Material Catalog, Colonist Entity & Attributes,
@@ -575,6 +581,10 @@ genuinely new outputs of this document.**
 | **QQ-02** | Build ADR-0004's async checkpoint path to measure it — recommend an ADR-exempt spike | technical-director | ADR-0004 **and** ADR-0005 promotion |
 | **QQ-03** | Research/Technology, production chain, furniture — three systems with no index entry, required by the prosthetics ruling | producer + game-designer | Construction #16; next `/scope-check` |
 | **QQ-04** | Is reinforced mined or manufactured? Decides whether `BuildCost` is a scalar or a recipe | Construction #16 + creative-director | #16 authoring |
+| **QQ-23** | **Bus subscriber registration has no interface.** `ITerrainChangeSink` is the *publish* side only; nothing defines how Pathfinding, Job Assignment, Rendering, Spatial Query and Notifications register to receive batches. `terrain-rendering-cutaway.md:125` carries a literal `OnTerrainChanged(/* batch */)` placeholder as proof. **Must state the C#-12 constraint** (below) or the first idiom tried will not compile | technical-director | World Change Event Bus #3 — blocks every subscriber |
+| **QQ-24** | **The composition root has no type definition.** Referenced **30 times** across 5 documents as the single review point for every writer grant, RNG handle and buffer pool — and defined nowhere. It is the object the entire one-writer guarantee rests on | technical-director | First implementation of any store |
+| **QQ-25** | **Checkpoint multi-owner buffer framing is unspecified.** ADR-0004 §1 has 7 independently-owned content items all writing into one coalesced pooled buffer via `SnapshotInto`, with no ordering, length-prefixing/TLV, or per-section schema versioning defined — so `Restore` cannot find each owner's section | technical-director | ADR-0004 + ADR-0005 implementation |
+| **QQ-26** | **Checkpoint writer lock boundary + join timeout.** ADR-0004 requires "the sim never waits" but does not pin the lock to the buffer handoff only (never across gzip/write/fsync); the obvious implementation silently breaks the requirement. No timeout on battle-end quiesce or quit-path join — a stalled disk hangs the process | technical-director | ADR-0004 implementation |
 
 ### Non-blocking — resolve at the named trigger
 
@@ -597,6 +607,7 @@ genuinely new outputs of this document.**
 | QQ-19 | Steam Cloud: exclude the rolling checkpoint slot (150–300 writes/battle) | release setup | Release configuration |
 | QQ-20 | Editor hot-reload can tear down a background write mid-flight | Save/Load #6 | Composition-root wiring |
 | QQ-21 | Return-to-menu mid-battle must also join the checkpoint writer | Save/Load #6 | At #6 |
+| QQ-27 | **Input has MEDIUM engine risk and no owner.** Godot 4.6's dual-focus system (mouse/touch focus separate from keyboard/gamepad focus) and 4.5's SDL3 gamepad driver are post-cutoff and unexercised, while all three UX specs are unwritten. #26 carries the project's highest accessibility load | ux-designer + technical-director | Before the first UX spec (#26) |
 | QQ-22 | Capacity assumption unconfirmed — history reads part-time (15 commit-days / 32 calendar) | producer + user | Next `/sprint-plan` |
 
 ---
@@ -612,6 +623,11 @@ genuinely new outputs of this document.**
 | God-object growth in Terrain / Colonist | **MEDIUM** | Firewall tables name an owner for every adjacent concern; six-month review criteria | Controlled |
 | Cell-struct / store field creep | **MEDIUM** | Forbidden-pattern list; "meaningless outside an encounter ⇒ side table" | Controlled |
 | Composition-root grant drift | **MEDIUM** | One reviewable file; debug-console grant audit sweep | Controlled |
+| Checkpoint buffer framing undefined (QQ-25) | **HIGH** | 7 owners share one buffer with no container format — blocks ADR-0004/0005 implementation entirely | **Open — LP-FEASIBILITY finding** |
+| Composition root undefined (QQ-24) | **HIGH** | 30 references, 0 definitions; the one-writer guarantee depends on it | **Open — LP-FEASIBILITY finding** |
+| Bus registration + C#-12 ref-struct trap (QQ-23) | **MEDIUM** | `TerrainChangeBatch` cannot be a generic type argument on net8.0/C# 12 (`allows ref struct` is C# 13) — `Action<T>`/`EventHandler<T>`/`IObserver<T>` all illegal; only a bespoke non-generic delegate or interface works | **Open — verified against the csproj** |
+| Zero-allocation CI gate covers only spiked systems | **MEDIUM** | Evidence is real but spans the 5 Tier 0 spikes; the ~20 unwritten Feature-layer systems are where LINQ/boxing creeps in. Extend the gate as each system lands rather than assuming inheritance | Open |
+| Writer-interface count without a growth trigger | **MEDIUM** | ~20–25 at MVP (practical); trends to 40–50+ once QQ-03's three systems land. Every other scaling risk in this document has an explicit trigger; this one does not | Open — see §11 |
 | Revision-polling rescan cost | **LOW** | Measured 63.2 µs/dig at MVP caps; narrow change-list upgrade pre-planned at ~5× growth | Monitored |
 | Whole-frame budget with entities/VFX/UI unmeasured | **LOW** | Terrain has ~8× headroom (p99 2.02–2.17 ms of 16.6 ms) | Monitored |
 
@@ -640,3 +656,65 @@ Everything below is measured, not estimated. Regressions against these are **bug
 
 **Spike verdicts: 5/5 Tier 0 complete** — fun PROCEED · terrain ✅ · mode-switch 61/61 ·
 pathfinding 44/44 · save/load 24/24.
+
+---
+
+## 11. Gate Review Record — 2026-08-25
+
+Review mode **full**, so both Technical Setup gates ran. Recorded permanently because the
+findings are conditions on the sign-off, not passing commentary.
+
+### TD-ARCHITECTURE (technical-director self-review) — APPROVED WITH CONDITIONS
+
+| Criterion | Verdict | Finding |
+|---|---|---|
+| 1 — Every baseline requirement covered by a decision | CONCERNS | 77/97 covered, 20 partial (expected under the tiered-doc plan), 0 gaps. **But TR-time-026/027 have *known-wrong* coverage**, not merely deferred: ADR-0005 guarantees identical replay; the save-scum ruling requires a re-roll. Tracked as QQ-01 |
+| 2 — HIGH-risk engine domains addressed or flagged | CONCERNS | GridMap and the physics settings both closed by the 2026-08-25 verification (§1). **Input was rated MEDIUM with no owner and no open question** while all three UX specs are unwritten — now QQ-27 |
+| 3 — API boundaries clean, minimal, implementable | CONCERNS | §5 is a sound *invariant checklist* but defers signatures. Real signatures exist for `TerrainWorld`, `IPathfinder`, `IReachabilityIndex`, `IMaterialCatalog`, `IPresentationGate`, `SeededRngStore`. **The writer interfaces exist nowhere** |
+| 4 — Foundation-layer ADR gaps resolved before implementation | **FAIL** | Two Foundation ADRs (0004, 0005) are **Proposed**, and `docs/CLAUDE.md` auto-blocks stories referencing a Proposed ADR. ADR-0003 criterion 1 is an unbuilt obligation. The QQ-02 spike is a *recommendation*, not a resolved gap |
+
+### LP-FEASIBILITY (lead-programmer, spawned) — CONCERNS
+
+> *"Nothing in this document is unimplementable with Godot 4.7.1/C# .NET 8 … The concerns are
+> real but all fixable before coding starts, mostly by writing down interfaces that are
+> currently only implied by prose."*
+
+Three findings the TD self-review missed, **all four load-bearing claims independently
+verified against the repository before acceptance**:
+
+1. **Checkpoint multi-owner buffer framing** (QQ-25) — 7 owners, one buffer, no container
+   format. Blocks ADR-0004/0005 implementation outright.
+2. **C# 12 ref-struct constraint** (QQ-23) — **verified: the csproj targets `net8.0`**, so
+   `allows ref struct` (C# 13/.NET 9) is unavailable and `TerrainChangeBatch` **cannot be a
+   generic type argument**. `Action<T>`, `EventHandler<T>`, `IObserver<T>` and
+   `List<Action<T>>` are all illegal for it. The natural first idiom for bus registration
+   will not compile.
+3. **Checkpoint lock boundary + join timeout** (QQ-26) — "the sim never waits" is stated but
+   not guaranteed; the obvious implementation holds the lock across the I/O.
+
+Also verified: **"composition root" appears 30 times across 5 documents with zero type
+definitions** (QQ-24); `IReservationOracle` is named once with no signature;
+`terrain-rendering-cutaway.md:125` carries a literal `OnTerrainChanged(/* batch */)`
+placeholder.
+
+**Clean bills of health worth recording** (the LP checked and cleared these rather than
+manufacturing concerns): the readonly-struct mutation window is sound on all exit paths;
+the double-buffer coalesce-newest protocol is correct with exactly 2 buffers; the writer
+thread correctly never touches a Godot API off the main thread; and the three deliberate
+non-idiomatic patterns (`Revision`-polling over an event bus, pull-based view diffing over
+signals, hand-rolled non-generic dispatch) are *documented, justified and reversible* —
+"the opposite of technical debt."
+
+The LP self-corrected mid-review, initially flagging `IPathfinder`/`IReachabilityIndex`/
+`IPresentationGate` as missing before finding all three fully defined. Recorded because it
+raises confidence in the findings that survived.
+
+### One recommendation accepted as a note, not a change
+
+The writer-interface set is ~20–25 at MVP (practical, not a "zoo") but trends toward 40–50+
+once QQ-03's three new systems land. The LP proposes a capability-token pattern
+(`WriteHealth(in WriterToken<Colonist.Health> token, …)`) — the same collapse ADR-0005
+already uses for RNG streams. **No change now**: the current design is fine at MVP scale.
+The actual gap is that this is the only scaling risk in the project without an explicit
+adoption trigger, while pathfinding has its 5× rule and style variety has its 8-variant
+ceiling. Logged in §9; a trigger should be set when QQ-03 is decided.
