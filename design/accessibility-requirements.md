@@ -171,7 +171,38 @@ The project's highest-severity cognitive risk, per Time Authority's own assessme
 
 ## Auditory Accessibility
 
-[To be designed]
+**Current state**: no audio exists. The audio brief (systems index #33) is Vertical Slice. This section sets the constraints audio must satisfy when it is authored; it does not describe anything shipping.
+
+### The governing rule
+
+**No information is conveyed by sound alone.** Every audio cue has a visual counterpart carrying the same information — not a caption describing the sound, but the information itself surfaced visually.
+
+This is nearly free here because of a decision already made: the concept doc requires colony work to be *legible and satisfying to watch* (CD-8, Design Test B — choose visible over abstracted). A game whose state is already readable on screen has little load left for audio to carry alone.
+
+### Gameplay-critical SFX audit
+
+To be completed when the audio brief is authored. Every entry needs a visual equivalent named before the cue ships.
+
+| Sound | Information it carries | Visual equivalent | Status |
+|---|---|---|---|
+| Raid warning | A raid is imminent | CD-15 requires a game-time-denominated warning — visual by construction | Satisfied by design |
+| Breach | A wall has been broken, and where | Terrain damage state + the after-action breach log (CD-1) | Satisfied by design |
+| Colonist death | A named colonist died, and where | Named death notification with location (CD-4) | Satisfied by design |
+| Job complete | Work finished | Notifications component | Satisfied by design |
+| *(to be extended)* | | | Audio brief #33 |
+
+Four for four already have visual equivalents mandated elsewhere — the CD-8 dividend.
+
+### Requirements when audio ships
+
+- **Independent volume sliders** — master, music, SFX, ambience, UI — each able to reach true zero
+- **The game is fully playable at zero volume.** This is the acceptance criterion, and it follows directly from the governing rule: audio may never become the sole carrier of anything
+- **Subtitles for any spoken or narrated content.** None is planned — the concept doc has no VO
+- **A visual alternative for any alert** that would otherwise only be audible
+
+### Deferred
+
+Mono downmix and directional-audio alternatives. No spatial audio design exists to make accessible yet — recorded so the gap is visible when the audio brief lands.
 
 ---
 
