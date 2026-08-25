@@ -208,13 +208,36 @@ Mono downmix and directional-audio alternatives. No spatial audio design exists 
 
 ## Platform Accessibility API Integration
 
-[To be designed]
+**PC only** (Steam / Epic lead SKU; other platforms deferred to Tier 3). No console certification requirements apply — those arrive with the platform, if it ever does.
+
+| API | Position |
+|---|---|
+| **Godot AccessKit** (4.5+) | **Not integrated.** Available in the engine — see Known Intentional Limitations |
+| OS high-contrast mode | **Not inherited.** The game renders its own palette and a forced OS contrast theme would break the art direction; the in-game palette meets AA on its own |
+| OS text-scaling preference | **Read at first launch** as the initial default for the in-game text scale, then owned by game settings |
+| OS reduced-motion preference | **Read at first launch** as the initial default for the in-game reduced-motion setting, same ownership rule |
+| Steam Input | Inherited free when gamepad support is built. No work now |
+
+The read-once-then-own pattern for the two OS preferences is deliberate: respecting the system default is polite, but silently re-overriding a deliberate in-game choice on every launch is worse than never reading it.
+
+> **Recorded as a judgement call, not a settled fact.** "We meet AA on our own, so we do not need the OS contrast mode" is an argument games often make badly. It is accepted here because the palette is colorblind-safe by default and carries no semantic color, so there is no information a contrast theme would rescue. Revisit if playtest surfaces a contrast complaint the palette cannot answer.
 
 ---
 
 ## Per-Feature Accessibility Matrix
 
-[To be designed]
+One row per MVP system with a player-facing surface. **Status is aspirational** — nothing is implemented, so every row is a requirement rather than a claim.
+
+| System | Visual | Motor | Cognitive | Auditory | Notes |
+|---|---|---|---|---|---|
+| Blueprint / Designation UI (#26) | Overlay contrast floor; color-independent valid/invalid | **Click-click equivalent for every drag**; interrupted drag discarded | Inert-not-hidden disabled states; on-attempt affordance for gestures | — | **Highest a11y load in the project** |
+| Combat UI (#27) | Readable freeze beat | No timing pressure; turn-based throughout | Survey clearable in one confirm; breach location shown | — | Owns the highest lockout risk |
+| Roster UI (#28) | Text scaling; colonist state color-independent | Keyboard-navigable list | Terminology consistency | — | |
+| Terrain Rendering (#7) | Depth attenuation never dims UI; ambient floor holds | Discrete zoom; pitch clamp keeps layering readable | — | — | Camera decided 2026-08-24 |
+| Notifications (shared) | — | — | Digest default on flush; named events may stand alone | Visual equivalent for every alert | |
+| Shared shell (save / quit / menu) | — | Fully rebindable | Quit dialog focus rule (Time Authority) | — | |
+
+**#26 carries the most.** That is where the accessibility budget should go first, and it is worth knowing before its UX spec is written rather than after.
 
 ---
 
