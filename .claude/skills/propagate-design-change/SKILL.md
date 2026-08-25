@@ -77,7 +77,7 @@ Read all ADRs in `docs/architecture/`:
 - Extract the "GDD Requirements Addressed" table
 - Note which GDD documents and requirement IDs each ADR references
 
-Read `docs/architecture/architecture-traceability.md` if it exists.
+Read `docs/architecture/requirements-traceability.md` if it exists.
 
 Report: "Loaded [N] ADRs. [M] reference [gdd filename]."
 
@@ -189,7 +189,7 @@ For ADRs marked **Superseded**:
 
 ## 8. Update Traceability Index
 
-If `docs/architecture/architecture-traceability.md` exists:
+If `docs/architecture/requirements-traceability.md` exists:
 - Add the changed GDD requirements to the "Superseded Requirements" table:
 
 ```markdown

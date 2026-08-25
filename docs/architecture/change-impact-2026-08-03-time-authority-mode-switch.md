@@ -53,7 +53,7 @@ The write-ownership table, occupancy index, reservation gating, doors, and `Enco
 | `.claude/docs/technical-preferences.md` | ⚠️ | Forbidden-pattern carve-out (with the wording constraint above); ADR log entries amended |
 | `design/gdd/time-authority-mode-switch.md` | ⚠️ | Save/Load dependency row's checkpoint-content list completed (see §3) — routed back as a GDD correction |
 
-`docs/architecture/architecture-traceability.md` does not exist — no traceability index update.
+`docs/architecture/requirements-traceability.md` does not exist — no traceability index update.
 
 ## 3. Checkpoint content scope (corrected — the GDD's list was incomplete)
 

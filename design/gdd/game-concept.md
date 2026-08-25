@@ -305,7 +305,7 @@ The MVP answers ONE question: **"Is the core loop fun?"**
 - Flood-fill/propagated lighting (aesthetic ambiance at scale) — simple dynamic lights suffice (Tier 2)
 - Multiple raider factions, veteran progression systems (Tier 2)
 - Controller support, ports, additional platforms (Tier 3)
-- Dwarf-Fortress-depth simulation — three needs and ~5 job types is the MVP cap
+- Dwarf-Fortress-depth simulation — three needs is the MVP cap. *(Amended 2026-08-24, user ruling: the former "~5 job types" cap is **removed**. There is no cap on job-type count. Many more job types are expected and the system is designed to carry them; limiting the count before the supply chain and workstations are designed would constrain the game for no benefit.)*
 
 ### Scope Tiers (if budget/time shrinks)
 

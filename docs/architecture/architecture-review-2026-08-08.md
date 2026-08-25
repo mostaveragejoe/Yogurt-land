@@ -5,7 +5,7 @@
 - **Mode:** `/architecture-review` full
 - **GDDs Reviewed:** 2 — `terrain-data-model.md`, `time-authority-mode-switch.md`
 - **ADRs Reviewed:** 4 — ADR-0001 (Accepted), ADR-0002 (Proposed), ADR-0003 (Accepted), ADR-0004 (Proposed)
-- **Companion artifacts:** `architecture-traceability.md` (full 97-row matrix), `tr-registry.yaml` (97 stable TR-IDs)
+- **Companion artifacts:** `requirements-traceability.md` (full 97-row matrix), `tr-registry.yaml` (97 stable TR-IDs)
 
 ---
 
@@ -25,7 +25,7 @@ Not PASS — one missing foundation ADR (Seeded RNG), two ADRs still Proposed be
 | ⚠️ Partial | 22 | 23% |
 | ❌ Gap | 1 | 1% |
 
-The four ADRs map cleanly onto the two foundation GDDs (ADR-0001↔time-authority, ADR-0002↔terrain, ADR-0003↔entity ownership feeding both, ADR-0004↔battle checkpoint). **Every technical requirement the two GDDs own at the foundation layer is covered.** Full row-by-row matrix in `architecture-traceability.md`.
+The four ADRs map cleanly onto the two foundation GDDs (ADR-0001↔time-authority, ADR-0002↔terrain, ADR-0003↔entity ownership feeding both, ADR-0004↔battle checkpoint). **Every technical requirement the two GDDs own at the foundation layer is covered.** Full row-by-row matrix in `requirements-traceability.md`.
 
 ### Coverage Gaps (no ADR)
 

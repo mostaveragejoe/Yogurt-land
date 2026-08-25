@@ -156,7 +156,7 @@ For each story file found:
 | Sprint status | `production/sprint-status.yaml` | MEDIUM — `/sprint-status` falls back to markdown |
 | Stage file | `production/stage.txt` | MEDIUM — phase auto-detect unreliable |
 | Engine reference | `docs/engine-reference/[engine]/VERSION.md` | HIGH — ADR engine checks blind |
-| Architecture traceability | `docs/architecture/architecture-traceability.md` | MEDIUM — no persistent matrix |
+| Architecture traceability | `docs/architecture/requirements-traceability.md` | MEDIUM — no persistent matrix |
 
 ### 2f: Technical Preferences Audit
 

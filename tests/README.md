@@ -85,6 +85,13 @@ Non-negotiable per `.claude/docs/coding-standards.md`:
    reference (ADR-0001/0002/0003) or any stock/engine RNG (ADR-0005)
 
 The grep gates turn two rules that previously lived only in prose into
-build failures. Both skip comment lines on purpose: the core's doc comments
+build failures.
+
+**Verified against planted violations, 2026-08-24.** A gate that has only ever
+passed is not a gate — it may simply never match anything. Both patterns were
+run against deliberately-bad files: `using Godot;` in a core file, `new Random(`,
+and `Guid.NewGuid()`. **All three were caught**, and a real core file whose doc
+comment mentions Godot was **not** flagged. Re-run this check if either pattern
+is ever edited. Both skip comment lines on purpose: the core's doc comments
 legitimately discuss the Godot boundary, and a naive match false-positives on
 three of them today.

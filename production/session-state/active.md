@@ -139,7 +139,7 @@ Foundation phase complete beforehand: 3 ADRs (Proposed) + contracts annex + debu
 - Dependency flags: ADR-0003 (Accepted) depends on ADR-0002 (Proposed) — status inversion; ADR-0002 & ADR-0004 share one target-hardware criterion-5 promotion gate
 - Engine (godot-specialist): 2 actionable challenges — (1) ADR-0004 use File.Move(overwrite:true) not File.Replace (POSIX atomicity); (2) ADR-0002 third damage-overlay GridMap is a style-variety draw-call multiplier, needs its own spike (not "free" like floor+wall). max_physics_steps_per_frame name/default still unverified in 4.7.1.
 - Pre-gate checklist: all 5 items ❌ (tests/unit, tests/integration, tests.yml, accessibility-requirements, ux/interaction-patterns) — /gate-check not yet reachable; needs /test-setup + /ux-design
-- Report: docs/architecture/architecture-review-2026-08-08.md · Index: docs/architecture/architecture-traceability.md · Registry: docs/architecture/tr-registry.yaml
+- Report: docs/architecture/architecture-review-2026-08-08.md · Index: docs/architecture/requirements-traceability.md · Registry: docs/architecture/tr-registry.yaml
 
 ## Session Extract — /architecture-decision seeded-rng 2026-08-08
 - ADR-0005 Seeded RNG written (Proposed): docs/architecture/adr-0005-seeded-rng.md
@@ -304,3 +304,38 @@ Authored **ahead of any screen spec** — unusual, but ten patterns were already
 ### Gate status
 
 All five pre-gate artifacts exist: `tests/unit`, `tests/integration`, `.github/workflows/tests.yml`, `design/accessibility-requirements.md`, `design/ux/interaction-patterns.md`. **Expect `/gate-check` to return CONCERNS rather than PASS** — no screen UX specs exist and `/ux-review` has never run against the new tier.
+
+## Session Extract — gate check + user rulings 2026-08-24
+
+**`/gate-check` ran both gates with all four directors (full mode). Unanimous: Gate 1 (Tech Setup → Pre-Production) CONCERNS; Gate 2 (Pre-Production → Production) FAIL. `stage.txt` NOT advanced.**
+
+### User rulings — binding, do not re-litigate
+
+1. **Prosthetics are an unlockable technology.** Not a scope question, not a cut candidate. `LostLimb` stays in MVP. The gate's cut recommendation is **withdrawn**. Requires two systems the index does not have: **Research/Technology** and a **production chain**.
+2. **Camera: one fixed viewing angle, 4 rotations of 90°, quantized zoom.** No pitch adjustment, no preset-cycle control (the four rotations are the presets). Supersedes the earlier free-pitch-10°–80° proposal and dissolves the canonical-authoring-pitch problem — there is exactly one angle to author against.
+3. **`BleedOutRemaining` is exempt from post-battle time advance.** A downed colonist must always get a real, playable chance at rescue; the clock must never be consumed by a time-skip. AC-5d added.
+4. **Destroyed walls leave rubble** — visual only, blocks nothing, costs nothing to clear. A fourth instance kind in the sparse overlay.
+5. **No job-type cap.** The concept doc's "~5 job types" line is removed. Many more are expected.
+6. **All art assets are made by a person. No AI-generated art ships.** Standing project rule; art bible **Section 0** + technical-preferences. `/asset-spec` writes briefs for a human artist, never generation prompts.
+7. **Flat damage overlays for MVP** — volumetric recorded as the better end state, playtest decides.
+8. **Encounter re-rolls within threat band on colony-save reload** (save-scum fix). Time Authority OQ **3b**.
+9. **Better ore spawns deeper. Full stop.** Risk comes from distance, hauling, exposure and logistics — emergent from other systems, not modelled in the catalog.
+10. **Default to the development plan** for scheduling disruptions like the ADR circularity.
+11. No decision yet on mid-battle rebuild or final slice scope — **playtesting decides**.
+
+### Fixes applied this pass
+
+- **ADR-0002 PROMOTED TO ACCEPTED.** Criterion 5 **split**: terrain clauses all measured and passed 2026-08-24; the **checkpoint clause moved to ADR-0004**, where the risk lives. This ends the circular block (ADR-0002 Proposed → needed a checkpoint measurement → needed ADR-0004's async path → building it is a story → auto-blocked by ADR-0002 being Proposed). ADR-0002 gates 11 of 35 systems, so a battle-save clause was freezing the terrain contract. ADR-0004 + ADR-0005 remain Proposed behind the inherited clause.
+- **ADR-0002 sparse-overlay supersession recorded as an amendment** — a downstream quick-spec had overturned a Foundation ADR's damage backend with only an open-item note.
+- **Traceability renamed** `architecture-traceability.md` → `requirements-traceability.md` (the name the gate globs), 7 inbound refs updated; **4 stale rows patched** (TR-time-025 ❌→✅ via ADR-0005; TR-terrain-045 ⚠️→✅ via the hardware run; TR-terrain-042 marked superseded; TR-time-026/027 now carry the re-roll conflict).
+- **CI grep gates PROVEN, not assumed.** Planted violations (`using Godot;`, `new Random(`, `Guid.NewGuid()`) were **all three caught**, and a real core file mentioning Godot in a doc comment was **not** flagged. A gate that has only ever passed is not a gate.
+- `coding-standards.md` test command corrected from the nonexistent gdunit4 runner to `dotnet test`.
+
+### Still open
+
+- **`/create-architecture`** — last missing Technical Setup artifact, hard blocker at Production. Needs its own session.
+- **ADR-0005 amendment** for the re-roll ruling (conflicts with TR-time-026/027 identical replay).
+- **New systems-index entries**: Research/Technology, production chain, furniture/workstations.
+- **Vertical slice** — scoped deliberately below MVP (1 stratum, ~3 colonists, dig+build, one raid), `prototypes/`, ADR-exempt, answering CD-18 only.
+- **Capacity assumption** still unconfirmed. Commit history reads part-time (15 commit-days / 32 calendar, one 12-day gap).
+- CI still never executed — pushing to `main` this pass to close it.

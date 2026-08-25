@@ -11,6 +11,21 @@
 
 ---
 
+## 0. Asset Authorship Policy — BINDING
+
+**All art assets for this project are made by a person. No AI-generated art ships in this game.**
+
+Recorded as a standing project rule 2026-08-24 by user ruling. This is not a style preference and not a per-asset judgement call — it governs every texture, mesh, icon, UI element and animation in the game.
+
+Practical consequences, so this is not rediscovered later:
+
+- `/asset-spec` produces **written specifications and briefs for a human artist**, never generation prompts. Any template section that assumes AI generation is to be read as a brief, or skipped.
+- Art production is a **real person's job and a real budget line**. Every scope decision touching asset count is also a decision about that person's time.
+- The kit-of-parts discipline in Section 3 matters more under this policy, not less: fewer, more reusable pieces is how a human-authored pipeline stays feasible.
+- The ~8-variants-per-tier draw-call ceiling and the asset-count implications of Sections 5-9 are **hiring and scheduling constraints**, not just technical ones.
+
+---
+
 ## 1. Visual Identity Statement
 
 ### The Rule

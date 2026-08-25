@@ -3,6 +3,8 @@
 ## Status
 **Proposed**
 
+> **Inherited 2026-08-24 — the checkpoint clause of ADR-0002's validation criterion 5 now lives here.** ADR-0002 was promoted to Accepted on its terrain clauses; the requirement to measure checkpoint snapshot+write at per-activation combat cadence on this ADR's double-buffered async path, confirming no frame-time impact during combat, transfers to **this** ADR's promotion gate. The move ends a circular block (ADR-0002 could not be Accepted without a measurement whose implementation was auto-blocked by ADR-0002 being Proposed) and puts the clause where the risk actually is. ADR-0005 remains co-dependent and promotes with this ADR.
+
 ## Date
 2026-08-03
 

@@ -61,6 +61,6 @@ All stories must have appropriate test evidence before they can be marked Done:
 - No merge if tests fail — tests are a blocking gate in CI
 - Never disable or skip failing tests to make CI pass — fix the underlying issue
 - Engine-specific CI commands:
-  - **Godot**: `godot --headless --script tests/gdunit4_runner.gd`
+  - **Godot (this project)**: `dotnet test tests/Hollowdeep.Tests.csproj` — the simulation core is Godot-free by contract (ADR-0001/0002/0003), so its suite runs headless with no engine installed. *(Corrected 2026-08-24: this line previously prescribed `godot --headless --script tests/gdunit4_runner.gd`, a GDScript runner that does not exist and will not — the framework decision at `/test-setup` was xUnit. See `tests/README.md`.)* GdUnit4 gets its own project and its own command when engine-facing view tests exist.
   - **Unity**: `game-ci/unity-test-runner@v4` (GitHub Actions)
   - **Unreal**: headless runner with `-nullrhi` flag

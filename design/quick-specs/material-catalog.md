@@ -80,6 +80,8 @@ Materials are distributed by an authored **weight table** over (stratum, materia
 
 Rule 2 is what keeps the mountain geological rather than a layer cake — dirt still shows up deep, and the player who wants granite still has to look for it rather than being handed it by depth alone.
 
+**The depth cost is not in the table, and deliberately so** (user ruling 2026-08-24). Better ore spawns deeper; that is the whole rule here. What makes deep mining expensive is *distance from base* — longer hauls, longer walks, more exposure to raiders, more food and logistics burden to sustain a dig far from home. Mining deep early is meant to be possible and risky, not gated. None of that machinery belongs in this spec: it emerges from Pathfinding, Stockpile & Hauling, Needs and Raid Trigger doing their own jobs. **The catalog's only contribution is that the good stuff is further down.**
+
 > **Why this shape.** CD-6 puts Pillar 5's "descent creates escalating material reward" on this system and explicitly warns it must not decay into untuned tables. A distributional rule is testable as a pure function of the weight table with no game running, which is what makes it a real acceptance criterion (AC-6) instead of a hope. Strict tier gating by stratum was rejected: it reads as gamey and collides with the art bible's *"The Wild Deepens, the Built Doesn't"* — depth should feel like geology, not like a level-select.
 
 ### C6 — Not every material is naturally occurring

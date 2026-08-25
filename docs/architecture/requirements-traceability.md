@@ -1,6 +1,6 @@
 # Architecture Traceability Index
 
-> Last Updated: 2026-08-08
+> Last Updated: 2026-08-24 (hand-patched at the 2026-08-24 gate check — 4 rows. A full `/architecture-review` re-run in a fresh session is still owed and will supersede this)
 > Engine: Godot 4.7.1 / C# .NET 8
 > Source: `/architecture-review` (full mode)
 > TR IDs: `docs/architecture/tr-registry.yaml` (v2)
@@ -8,8 +8,8 @@
 ## Coverage Summary
 
 - Total requirements: **97** (46 terrain, 51 time-authority)
-- ✅ Covered: **74** (76%)
-- ⚠️ Partial: **22** (23%)
+- ✅ Covered: **77** (79%)
+- ⚠️ Partial: **20** (21%)
 - ❌ Gap: **1** (1%)
 
 **Status legend**
@@ -64,10 +64,10 @@
 | TR-terrain-039 | Concentrated AoE 75 cells ≤30 µs | ADR-0002 | ✅ |
 | TR-terrain-040 | Plain C#, zero Godot, CI-grep | ADR-0002 | ✅ |
 | TR-terrain-041 | 3 discrete damage states (breakpoints #7) | ADR-0002; Material-Tier Destructibility #7 (deferred) | ⚠️ |
-| TR-terrain-042 | Damage = third overlay GridMap (no per-instance channel) | Terrain Rendering quick-spec (deferred, engine-gated) | ⚠️ |
+| TR-terrain-042 | Damage rendering backend | **SUPERSEDED 2026-08-24**: no longer a third overlay GridMap. `design/quick-specs/terrain-rendering-cutaway.md` C7 specifies a **sparse overlay** — one `MultiMeshInstance3D` per damage state, instanced only on damaged cells, plus a rubble kind for destroyed walls. Decouples damage from the material × style multiplier. Draw-call measurement (AC-10) still owed | ⚠️ |
 | TR-terrain-043 | Floor MeshLibrary stair item + dormant indicator | Terrain Rendering quick-spec (deferred) | ⚠️ |
 | TR-terrain-044 | Pre-render-backend Godot 4.7.1 verification gate | Engine gate (open — `gridmap.md` not authored) | ⚠️ |
-| TR-terrain-045 | 60 fps on target hardware (unverified) | ADR-0002 criterion 5 (open gate) | ⚠️ |
+| TR-terrain-045 | 60 fps on target hardware | **VERIFIED 2026-08-24** — RTX 3060 Ti, p99 2.167 ms Vulkan / 2.024 ms D3D12 vs 16.6 ms budget, 0 GC. Evidence: `production/qa/evidence/terrain-target-hardware-2026-08-24/` | ✅ |
 | TR-terrain-046 | Breach log owned by Combat #22 via EncounterOutcomeReport | ADR-0003; Combat set (deferred) | ⚠️ |
 
 ### Time Authority / Mode Switch (`design/gdd/time-authority-mode-switch.md` → ADR-0001, +0003/0004)
@@ -98,9 +98,9 @@
 | TR-time-022 | Non-checkpoint TurnBased save corrupt; manual inert in combat | ADR-0004 (AC-68), ADR-0001 | ✅ |
 | TR-time-023 | Checkpoint 8-item content scope | ADR-0004 | ✅ |
 | TR-time-024 | Non-blocking async checkpoint write mechanism | ADR-0004 | ✅ |
-| TR-time-025 | Checkpoint carries resumable RNG stream state | **Seeded RNG ADR (missing)** — ADR-0004 reserves slot only | ❌ |
-| TR-time-026 | Full determinism across cycle + save/load | ADR-0001, ADR-0004 (state); Seeded RNG (RNG half, pending) | ⚠️ |
-| TR-time-027 | RNG draws only inside Tick; reload no re-roll | ADR-0001 (draws rule); Seeded RNG (resume half, pending) | ⚠️ |
+| TR-time-025 | Checkpoint carries resumable RNG stream state | **ADR-0005 Seeded RNG** (PCG-XSH-RR; `State`-only serialization; combat stream captured at ADR-0004's `AwaitingPresentation → NextActor` beat) | ✅ |
+| TR-time-026 | Full determinism across cycle + save/load | ADR-0001, ADR-0004 (state); **ADR-0005** (RNG half). **⚠️ Live conflict: the 2026-08-24 user ruling on save-scum requires the encounter to RE-ROLL on reload, which contradicts this row's cross-save identical-replay requirement.** See the ruling note below | ⚠️ |
+| TR-time-027 | RNG draws only inside Tick; reload no re-roll | ADR-0001 (draws rule); **ADR-0005** (resume half). **⚠️ The "reload no re-roll" clause is overturned by the 2026-08-24 save-scum ruling** — see below | ⚠️ |
 | TR-time-028 | Pause vs freeze programmatically distinguishable | ADR-0001 | ✅ |
 | TR-time-029 | No raid while paused (threat only in real steps) | ADR-0001 | ✅ |
 | TR-time-030 | SceneTree.paused forbidden in sim path; grep gate | ADR-0001 | ✅ |
@@ -132,7 +132,11 @@
 |--------|-------------|------------------|--------|-------------|
 | TR-time-025 | Checkpoint must carry RNG stream state resumable at arbitrary draw counts | `/architecture-decision seeded-rng` (PCG/xoshiro class; streams resumable at arbitrary draw counts) | Determinism / Persistence | LOW |
 
-Partial items TR-time-026 and TR-time-027 are the downstream consequences of the same missing ADR — their RNG-dependent halves close once the Seeded RNG ADR exists.
+~~Partial items TR-time-026 and TR-time-027 are the downstream consequences of the same missing ADR~~ — **closed 2026-08-08 by ADR-0005.**
+
+**New conflict opened 2026-08-24 (user ruling on the save-scum hole).** Reloading a colony save before a raid currently lets the player scout the exact breach and composition, then reload and prepare against it — CD-15 forbids exactly that pre-reveal. The ruling is that **the encounter re-rolls within its threat band on reload**.
+
+This contradicts TR-time-026/027 as written, which specify cross-save identical replay (the Combat stream re-derived from `splitmix64(RootSeed, Combat, EncounterId)` precisely so a reload reproduces the same encounter). **ADR-0005 needs an amendment**: the combat stream must derive from something that changes per load-and-retry — an encounter attempt counter or equivalent — rather than from `EncounterId` alone. Owner: technical-director, with Raid Trigger (#18). Until amended, the spec and the ruling disagree.
 
 ## Partial Coverage — deferred to unwritten downstream specs
 

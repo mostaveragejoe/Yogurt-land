@@ -29,7 +29,7 @@ The load-bearing content here is **CD-13**. The fun spike concluded that revives
 | Whether raiders choose to shoot a downed colonist | Combat: Raider Decision-Making (#23) |
 | Draft roster, `SquadRole` assignment, muster points | Squad Preparation (#24) |
 | Hospital beds, medical furniture | Construction (#16) — **no furniture concept exists yet, see §8** |
-| Prosthetics as items, and the surgery that fits them | Material Catalog (#5) + Construction (#16) — **no crafting chain exists yet, see §8** |
+| The prosthetic **technology unlock**, and the production chain that builds prosthetics | Research / Technology (new system, see §8 item 4) + Construction (#16). **Prosthetics are an unlockable technology — user ruling 2026-08-24, not negotiable and not a scope candidate** |
 | Skill values and veterancy growth | Skill & Veterancy (#30), Vertical Slice |
 | Displaying any of this | Roster UI (#28) — UI never writes stores |
 
@@ -76,6 +76,9 @@ Same field, same unit, both authorities. A colonist downed with most of their cl
 2. **Stabilizing stops the clock permanently.** In battle a `Medic` spends actions on an adjacent downed unit; in the colony it is a tend job. Either way `BleedOutRemaining` freezes and the colonist becomes injured (C5).
 3. **`BleedOutRemaining` reaching 0 is death**, in whichever mode it runs out. Nobody reached them in time.
 4. **The battle ending changes nothing.** The clock keeps running into colony time; the rescue window simply continues.
+5. **`BleedOutRemaining` is exempt from any post-battle time advance.** Whatever colony-time cost a raid carries (Time Authority, post-battle time semantics), it is **not** deducted from the bleed-out clock. The clock advances only with lived colony time after control returns.
+
+> **Why the exemption exists.** Without it, a colonist downed with most of their clock left would die during the time-skip, before the player could order anyone to reach them — the fight would end, the clock would jump, and the rescue would be lost to bookkeeping rather than to anything the player did or failed to do. A downed colonist must always get a real, playable chance at rescue. *(User ruling 2026-08-24.)*
 
 Because the clock persists past the encounter, `BleedOutRemaining` and `IsDowned` are **colonist state in `ColonistStore`**, not a combat side table — they remain meaningful outside an encounter, so ADR-0003's firewall rule points them at the store. They serialize into colony saves like any other health field.
 
@@ -89,9 +92,11 @@ A colonist who survives being downed is **injured**. Severity is assigned when t
 |---|---|---|---|
 | **Bandaged** | Works normally at reduced movement | Time only — no bed, no carer | Full recovery to normal speed |
 | **Bed-rest** | Cannot work; must occupy a bed | Bed occupancy **plus** another colonist's tending time | Released to work at reduced movement, then full recovery |
-| **Lost limb** | Cannot work; must occupy a bed | Surgery **if a prosthetic is available**; otherwise none | With prosthetic: reduced movement, then full recovery. **Without: permanently very slow — this does not heal** |
+| **Lost limb** | Cannot work; must occupy a bed | Surgery **once the prosthetic technology is unlocked and a prosthetic has been produced**; otherwise none | With prosthetic: reduced movement, then full recovery. **Without: permanently very slow — this does not heal until a prosthetic is fitted** |
 
 Severity is set once at injury creation and never worsens on its own.
+
+**Prosthetics are an unlockable technology** (user ruling 2026-08-24). A lost limb is not a dead end — it is a standing reason to pursue the unlock. Before the technology exists the impairment is permanent *in fact*; after it exists and a prosthetic has been produced and fitted, the colonist recovers. This is what keeps `LostLimb` inside Pillar 3: the destructive event has an engineering answer, and the answer is a research goal rather than a consumable.
 
 > **Why three tiers and not a wound list.** Each tier maps to a distinct *player decision*: none, a bed plus somebody's labour, or a scarce manufactured part. A per-body-part wound model multiplies content without adding decisions at MVP scale (~10 colonists, one raider type).
 
@@ -209,6 +214,7 @@ All defaults are first-pass placeholders for `/balance-check`.
 - [ ] **AC-5** `BleedOutRemaining` reaching 0 kills the colonist in **either** authority. *(C4.3)*
 - [ ] **AC-5b** A colonist downed with clock remaining is **still downed and still alive** after `PostEncounterReconcile`, and their clock continues decrementing in RealTime. *(C4.4)*
 - [ ] **AC-5c** Total elapsed sim-ticks to bleed out is identical whether the clock ran entirely in TurnBased, entirely in RealTime, or across a switch. *(C4 — the conversion is the unit, so there is nothing to drift)*
+- [ ] **AC-5d** A post-battle colony-time advance of any size leaves `BleedOutRemaining` unchanged; a colonist downed with clock remaining is still rescuable after the advance. *(C4.5)*
 - [ ] **AC-6** A stabilized colonist resolves to alive with a non-`None` severity, and `BattlesSurvived` increments for them. *(C7)*
 - [ ] **AC-7** `LostLimb` with no prosthetic available never reaches `MobilityFactor == 1.0`, at any elapsed time. *(C5)*
 - [ ] **AC-8** `AppearanceSeed` is byte-identical across a save→load→save round-trip, and two runs from the same `RootSeed` produce identical seeds. *(C2, ADR-0005)*
@@ -236,7 +242,7 @@ All defaults are first-pass placeholders for `/balance-check`.
 | 1 | **ADR-0003 amendment.** Its health row says `Hp`→0 sets `IsDead` directly; C3/C4 insert a Downed state between them, and the health group gains seven persistent fields. Reconcile-time writer proposed as Needs & Simulation, already the RealTime health writer — no new writer needed. Applied alongside this spec | technical-director | Done with this spec |
 | 2 | **Survivability floor.** Targetable downed colonists plus ~10 colonists means a bad fight can trend toward a roster wipe, which CD-3 and the anti-pillar rule out. The carry-over clock softens this a lot — most downed colonists now leave the battle alive and rescuable. The remaining gap is a raider withdraw condition, which CD-3 already assigns elsewhere | Raid Trigger (#18) + Raider Decision-Making (#23) | When the Combat set is authored |
 | 3 | **Beds are furniture, and there is no furniture entry in the systems index.** Construction (#16) currently builds walls and doors | Construction (#16) | At #16's authoring |
-| 4 | **Prosthetics need a production chain.** No crafting/workshop entry exists; Material Catalog's three tiers are construction materials | Material Catalog (#5) + Construction (#16) | At #16's authoring. If none ships in MVP, `LostLimb` is permanent-only — still playable |
+| 4 | **Prosthetics are an unlockable technology (user ruling 2026-08-24) and therefore require two systems the index does not have: a Research/Technology system and a production chain.** This is a directive, not a scope question — the cut recommendation raised at the 2026-08-24 gate is withdrawn. `LostLimb` stays in MVP | producer + game-designer — needs new systems-index entries | Before Construction #16, and before the next `/scope-check` |
 | 5 | **Tending is a 6th job type** against the concept doc's "~5 job types" note | Job Assignment (#10) | At #10's authoring |
 | 6 | **`Medic` as a `SquadRole` value** — C4.3 assumes it exists. Squad Prep owns the role set, and MVP uses fixed loadouts | Squad Preparation (#24) | Before #24. If roles stay uniform, any colonist can stabilize and CD-13's cost stays intact — a smaller change than it looks |
 | 7 | **Colony-mode injury sources.** MVP has no way to be hurt outside combat, so the RealTime health writer only ever heals. If Needs & Simulation adds starvation damage, the downed state needs a RealTime meaning | Needs & Simulation (#13) | At #13's authoring |

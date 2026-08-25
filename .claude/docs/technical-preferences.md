@@ -71,6 +71,10 @@
 - **Occupancy-index updates outside store-internal position/death handling** — `UnitOccupancyIndex` has a single write path, synchronous and atomic with the store write; no external writer exists (ADR-0003)
 - **Stock or engine RNG in the core** — no `System.Random`, Godot `RandomNumberGenerator`, `Guid.NewGuid`, or time-based seeding anywhere in `src/core`; all randomness goes through `SeededRngStore` (PCG-XSH-RR), with `RootSeed` injected from the composition root. `System.Random` is not version-stable (breaks save formats), engine RNG is a Godot dependency, and entropy sources break bit-reproducible resume (CI-grep gate) (ADR-0005)
 
+## Asset Authorship
+
+- **All art assets are made by a person. No AI-generated art ships in this game.** Standing project rule, user ruling 2026-08-24. Full statement and consequences: `design/art/art-bible.md` Section 0. `/asset-spec` writes briefs for a human artist, never generation prompts.
+
 ## Allowed Libraries / Addons
 
 <!-- Add approved third-party dependencies here -->

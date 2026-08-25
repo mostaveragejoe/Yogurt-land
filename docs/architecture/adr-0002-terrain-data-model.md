@@ -1,9 +1,33 @@
 # ADR-0002: Terrain Data Model
 
 ## Status
-Proposed — **spike-validated 2026-07-25 on 5 of 6 criteria; one gate open (see Spike Results)** · **Amended 2026-08-03** (Battle Persistence)
+**Accepted** (2026-08-24) — every terrain clause of validation criterion 5 measured and passed on target hardware. · **Amended 2026-08-03** (Battle Persistence) · **Amended 2026-08-24** (criterion 5 split; sparse damage overlay supersession)
 
 *(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the terrain spike validates chunk size, memory footprint, allocation behavior, and render-extraction cost. The Tier 0 terrain spike has now run — see **Spike Results (2026-07-25)** below. Every measurable criterion passed and three tuning items are fixed. The **frame-rate clause closed on target hardware 2026-08-24** (p99 ~2 ms against a 16.6 ms budget); promotion to Accepted now awaits only the **checkpoint clause** that the Amendment below adds to criterion 5, which has no implementation yet.)*
+
+> ### Amendment 2026-08-24 — Criterion 5 split, and the sparse damage overlay supersession
+>
+> **Two changes. The first unblocks this ADR; the second records a decision a downstream spec already made.**
+>
+> **1. Validation criterion 5 is split, and this ADR is promoted on its terrain clauses.**
+>
+> The 2026-08-03 amendment folded a **checkpoint** clause into criterion 5 and stated *"This ADR must not be promoted to Accepted on the old criterion 5."* That coupling is now retired, deliberately, with the reason recorded.
+>
+> - Its only stated justification was that **one measurement run would discharge both**. That premise died on 2026-08-24: the terrain run happened, the checkpoint measurement did not, and they are now separate work on separate timelines.
+> - Keeping them coupled produced a **circular block**. This ADR could not be Accepted until a checkpoint was measured → the measurement needs ADR-0004's async path → building that path is a story → stories referencing a Proposed ADR are auto-blocked. This ADR gates 11 of 35 systems, so a clause about battle saves was freezing the terrain contract the whole project reads.
+> - **Every clause of criterion 5 that is about terrain has passed** (target hardware, 2026-08-24): 60 fps — p99 2.167 ms Vulkan / 2.024 ms D3D12 against a 16.6 ms budget; chunk size 32; draw calls 32 of a ≤150 ceiling; render buffers 16.23 MB; **zero** Gen0/Gen1/Gen2 collections under sustained digging; full-map walkability sweep; snapshot strategy. Evidence: `production/qa/evidence/terrain-target-hardware-2026-08-24/`.
+>
+> **The checkpoint clause moves to ADR-0004**, where the risk lives and where the unbuilt async path is the subject rather than a dependency. ADR-0004 and ADR-0005 remain **Proposed** behind it, unchanged.
+>
+> *Accepted risk, stated plainly*: if the checkpoint measurement later forces a change to `SnapshotInto` or the buffer strategy, this ADR takes a further amendment. It has taken two already; the mechanism works.
+>
+> **2. The damage render backend is superseded — sparse overlay, not a third GridMap.**
+>
+> This ADR's render-backend discussion assumed a third stacked GridMap for damage states and flagged it as a style-variety draw-call multiplier needing its own spike. `design/quick-specs/terrain-rendering-cutaway.md` **C7 (2026-08-24) overturns that**: damage is a **sparse overlay** — one `MultiMeshInstance3D` per damage state, instanced only on cells currently in that state, plus a rubble instance kind for destroyed walls.
+>
+> Cost is bounded by **three meshes plus rubble**, not by material × style × damage, and instance count scales with how much is broken rather than with world size. This decouples damage from the measured ~8-variants-per-tier ceiling and directly answers architecture-review finding 2.
+>
+> Recorded here because a Foundation ADR must not silently disagree with the spec implementing it. **The draw-call measurement (quick-spec AC-10 / TR-terrain-044) is still owed** — the design is answered, the number is not. Mesh authoring is flat overlays for MVP (user ruling 2026-08-24), with volumetric recorded as the better end state.
 
 > ### Amendment 2026-08-03 — Battle Persistence (user ruling 2026-08-02; propagated via `/propagate-design-change`, see `change-impact-2026-08-03-time-authority-mode-switch.md`)
 >

@@ -62,16 +62,20 @@ Where a stair landing or void column falls past the visible window, it is **not*
 
 > **Why uniform.** Extending the window at stair cells gives a ragged silhouette and makes the draw-call count depend on map content rather than window depth — the one property that made the octant-32 budget predictable. **This is safe only because the cutaway is explicitly not the dormant-stair guarantee**: the terrain GDD's re-review recorded that a stair sealed below cutaway depth may be invisible in 3D, and routed that promise to the **#26 designation-layer indicator and the inspect view**, neither of which depends on cutaway depth. This treatment supplements them; it never substitutes for them. *(Closes terrain GDD Open Question #4.)*
 
-### C6 — Camera: quantized rotation and zoom, free pitch within a clamp, four presets
+### C6 — Camera: one fixed viewing angle, four 90° rotations, quantized zoom
+
+*(Revised 2026-08-24 by user ruling — supersedes the earlier free-pitch proposal.)*
 
 | Axis | Behaviour |
 |---|---|
-| **Rotation** | Quantized to **8 compass steps** (45°). No free yaw |
-| **Zoom** | Quantized to discrete levels. No continuous dolly |
-| **Pitch** | **Free within 10°–80°**, clamped at both ends |
-| **Reset** | One button **cycles four canonical (rotation, pitch) presets**, giving an always-available way back to a known-good framing |
+| **Projection** | Fixed. One parametric viewing angle, identical in every view |
+| **Pitch** | **Not adjustable.** A single authored angle |
+| **Rotation** | **4 steps of 90°.** The four cardinal views of the same fixed angle |
+| **Zoom** | Quantized to discrete levels |
 
-> **Why this shape holds the pixel-art look.** The art bible's 3D-pixel-art direction needs a stable texel-to-pixel ratio, and that ratio is driven by **zoom distance**, not pitch — so quantizing zoom is what protects crispness, and free pitch within the clamp does not threaten it. The 10° floor keeps the player from flattening to a near-side-on view where the cutaway stops reading as layered; the 80° ceiling stops a pure top-down view where wall height and cover vanish, which tactics needs.
+> **Why one angle beats a pitch range.** A single fixed angle means there is exactly one geometry for artists to author against — every texture, every silhouette, every ornament is drawn for the one view the player will ever see it in. A pitch *range* would have forced a choice of canonical authoring angle anyway, and every other angle would render art it was not drawn for. It also removes a whole class of camera-state complexity: the four views are the presets, so no reset control is needed.
+>
+> **Correction to the earlier rationale.** The previous version of this rule claimed texel density is driven by zoom and not pitch. That is true for the floor plane and false for walls — pitch changes vertical-surface foreshortening, so a wall's apparent texel density varies with it (art-director, gate review 2026-08-24). Fixing the angle removes the problem at its root rather than managing it.
 
 **This closes the art bible's deferred camera decision**, and with it the dependency chain it flagged: camera → texel density → UI base pixel unit → icon sizes. Art bible Sections 3.1 and 3.3 are now unblocked for re-validation (§8 item 1).
 
@@ -81,7 +85,13 @@ Walls render in **three damage states** — intact, damaged, critical — read f
 
 Damage is drawn as a **separate sparse overlay** — one `MultiMeshInstance3D` per damage state, holding instances only for cells currently in that state. Intact cells contribute nothing.
 
+**A destroyed wall leaves rubble** (user ruling 2026-08-24). When a wall is destroyed in combat the cell becomes open and walkable, and a rubble instance is placed on it. Rubble is **visual only** — it blocks nothing, costs nothing to clear, and carries no simulation state. It is a fourth instance kind in the same sparse overlay, so it inherits the overlay's cost properties: bounded by one mesh, instanced only where walls actually broke.
+
+> **Why.** Without it a breach renders as an absence, identical to a cell the player deliberately dug. The after-action report can name where a wall failed; rubble is what makes that place findable when you walk the colony afterwards.
+
 > **Why sparse rather than a third GridMap.** ADR-0002 assumed a third stacked map and flagged the problem: GridMap has no per-instance data channel, so each damage tier needs a distinct mesh item **per material/style combo**, multiplying against the measured ~8-variants-per-tier ceiling (1 variant → 32 draw calls, 2 → 48, 4 → 80, 8 → 144, against a ≤150 budget). Three damage states would treble the variant count — survivable at MVP's single ornament vocabulary, fatal at the art bible's two-vocabularies-plus-ornaments Vertical Slice target.
+>
+> **Mesh authoring: flat overlays for MVP** (user ruling 2026-08-24). Art-director flagged at the 2026-08-24 gate that flat alpha-cutout planes can read as stickers on a low-poly surface, and that volumetric meshes read as scars. Volumetric is the better end state; flat is what ships first, and playtest decides whether it needs upgrading. Recorded so the trade-off is a known choice rather than an oversight.
 >
 > A sparse overlay decouples the two axes entirely. Cost is bounded by **three meshes**, not by material × style × damage, and instance count scales with *how much is broken* — normally one breach site, not the map. It also matches the fiction: damage is a scar on a surface, not a different surface. **Still needs its own measurement (§7b), but the expected answer is a small constant rather than a multiplier.**
 
@@ -108,14 +118,12 @@ public partial class TerrainRenderer : Node3D
 
 public partial class TerrainCamera : Node3D
 {
-    public int   RotationStep { get; private set; } // 0..7, 45 degrees each
-    public int   ZoomLevel    { get; private set; } // discrete
-    public float PitchDegrees { get; private set; } // clamped [10, 80]
+    public int RotationStep { get; private set; }   // 0..3, 90 degrees each
+    public int ZoomLevel    { get; private set; }   // discrete
 
-    public void RotateBy(int steps);
+    public void RotateBy(int steps);                // wraps 0..3
     public void ZoomBy(int levels);
-    public void SetPitch(float degrees);            // clamps
-    public void CyclePreset();                      // the four canonical framings (C6)
+    // No pitch control by design (C6). No preset cycle - the four rotations are the presets.
 }
 ```
 
@@ -159,10 +167,10 @@ Values live in `assets/data/rendering.json`, not hardcoded.
 | `DepthDesaturateStep` | 0.20 | 0–0.5 | feel | Light desaturation per layer. Never a hue shift (C4) |
 | `DamagedBreakpoint` | 0.66 | 0.5–0.8 | curve | `WallHp/MaxWallHp` below this reads as damaged |
 | `CriticalBreakpoint` | 0.33 | 0.15–0.5 | curve | Below this reads as critical. Must stay below `DamagedBreakpoint` — load-validated |
-| `RotationSteps` | 8 | 4 or 8 | gate | 45° steps. 4 is the Gnomoria-classic fallback if 8 proves fiddly |
+| `RotationSteps` | **4** | fixed | gate | 90° steps — the four cardinal views. Not a knob (C6) |
 | `ZoomLevels` | 5 | 3–8 | feel | Discrete stops; protects texel density (C6) |
-| `PitchMin` / `PitchMax` | 10° / 80° | fixed | gate | User-specified clamp. Not a free knob — the ends are load-bearing (C6) |
-| `CameraPresets` | 4 | fixed | gate | The reset cycle (C6) |
+| `ViewPitch` | one authored angle | fixed | gate | Not adjustable. The single angle all art is authored against (C6) |
+| ~~`CameraPresets`~~ | — | — | — | Removed: the four rotations **are** the presets (C6) |
 
 `cell_octant_size` is **not** a knob — it is locked to `ChunkSize` (C2).
 
@@ -176,8 +184,8 @@ Values live in `assets/data/rendering.json`, not hardcoded.
 - [ ] **AC-2** The renderer performs zero writes to `TerrainWorld`; a CI grep finds no mutation call in the view assembly. *(C1)*
 - [ ] **AC-3** `cell_octant_size == TerrainWorld.ChunkSize` is asserted at startup. *(C2)*
 - [ ] **AC-4** Damage state is a pure function of `WallHp/MaxWallHp` against the two breakpoints, and a config with `CriticalBreakpoint >= DamagedBreakpoint` fails to load. *(C7, §6)*
-- [ ] **AC-5** Camera pitch cannot leave [10°, 80°] by any input path; rotation lands only on the 8 steps; zoom only on discrete levels. *(C6)*
-- [ ] **AC-6** `CyclePreset()` visits all four framings and returns to the first. *(C6)*
+- [ ] **AC-5** No input path changes pitch; rotation lands only on the 4 cardinal steps and wraps; zoom lands only on discrete levels. *(C6)*
+- [ ] **AC-6** `RotateBy` from any step returns to the starting view after four rotations in the same direction. *(C6)*
 
 ### (b) Performance — target hardware, **BLOCKING regression gate**
 
@@ -193,7 +201,7 @@ Bands sit above the 2026-08-24 measurements.
 
 - [ ] **AC-12** In a 3-layer cutaway, the focus layer is unambiguously the focus at a glance, and no visible surface crushes to black. *(C4, art bible ambient floor)*
 - [ ] **AC-13** The three damage states are distinguishable in a single screenshot without a legend. *(C7 — the Pillar 3 legibility floor)*
-- [ ] **AC-14** At 10° and at 80° pitch the scene stays readable: layering survives the low angle, wall height and cover survive the high one. *(C6 — validates the clamp ends)*
+- [ ] **AC-14** At the fixed angle, all four rotations read correctly: cutaway layering is legible, and wall height and cover are readable for tactics in every view. *(C6)*
 
 ### (d) Integration — **BLOCKED on siblings; does not gate this system's Done**
 

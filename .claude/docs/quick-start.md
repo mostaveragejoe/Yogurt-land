@@ -156,7 +156,7 @@ Templates are in `.claude/docs/templates/`:
 
 - `game-design-document.md` -- for new mechanics and systems
 - `architecture-decision-record.md` -- for technical decisions
-- `architecture-traceability.md` -- maps GDD requirements to ADRs to story IDs
+- `requirements-traceability.md` -- maps GDD requirements to ADRs to story IDs
 - `risk-register-entry.md` -- for new risks
 - `narrative-character-sheet.md` -- for new characters
 - `test-plan.md` -- for feature test plans
