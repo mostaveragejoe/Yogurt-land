@@ -277,3 +277,30 @@ Both debts carried by the two quick-specs are now **CLOSED at source**. Neither 
 - **`.gitignore`** gained `artifacts/`, `TestResults/`, `*.trx`. Root `Hollowdeep.csproj` already had `<Compile Remove="tests\**\*.cs" />` — it was written expecting this.
 - **NOT VERIFIED LOCALLY — no .NET SDK in this container.** The workflow YAML parses and both grep gates were run against the real `src/core`, but `dotnet test` has never executed. First CI run on push is the real check; budget one round for a package-version or namespace fix.
 - **Remaining for `/gate-check`**: `/ux-design` must produce `accessibility-requirements` and `ux/interaction-patterns`. Those are the last 2 of the 5.
+
+## Session Extract — /ux-design 2026-08-24 — ALL 5 GATE ARTIFACTS NOW EXIST
+
+Two documents written. **`/gate-check` is reachable for the first time.**
+
+### `design/accessibility-requirements.md` — 11 sections, complete
+
+- **Tier committed: WCAG-AA adapted for games.** Cheap here for three reasons already true: turn-based combat has no reaction floors, colony play pauses at will (speed 0 is first-class), and input already routes through Godot's `InputMap` so remapping is a settings screen not a refactor.
+- **Path conflict resolved**: the gate, the skill and the template all use `design/accessibility-requirements.md`; the Time Authority GDD pointed at `design/ux/accessibility-requirements.md`. Canonical file written at the majority path and **the GDD's single reference corrected** (closes the doc's own open question 5).
+- **Three constraints inherited from Time Authority, not chosen** — mid-input freeze with no grace window, inert-not-hidden disabled controls, and the after-action survey's no-timeout/no-escape persistence (that GDD's self-named highest lockout risk). This doc owns mitigations and may not relax the rules.
+- **Mitigations decided**: interrupted drag is **discarded, never partially committed** (losing the gesture is fine; an unintended designation is not); every modal renders its exit before becoming interactive; click-click rectangle is a **first-class path, not a fallback** — it is also faster for precise corners, which is what stops it rotting.
+- **User corrections applied mid-session**: (1) the quit-dialog default-focus rule was **not** generalised to all confirmations — scoped back to where Time Authority ruled it, with generalisation left to each owning spec; (2) digest-over-burst for the notification flush is a **default with exceptions allowed**, not a mandate, since a named colonist death is not a line item in a summary. **Process note: pose extensions as options, do not apply them unilaterally.**
+- Screen readers, gamepad navigation, OS high-contrast inheritance, audio downmix and drag-select-as-primary are all in **Known Intentional Limitations** — each with a reason and a revisit trigger. Not-inheriting OS high-contrast is explicitly recorded as a judgement call, since "we meet AA on our own" is an argument games often make badly.
+- **Blueprint UI (#26) carries the highest accessibility load in the project** per the feature matrix.
+
+### `design/ux/interaction-patterns.md` — 11 patterns, P1–P11
+
+Authored **ahead of any screen spec** — unusual, but ten patterns were already pinned by the Terrain and Time Authority GDDs, the CD notes, and the accessibility doc. The first UX spec now inherits settled behaviour instead of inventing it. Every pattern carries its accessibility clause inline.
+
+- **Four genuine inventions, flagged as such**: P4's disabled treatment is **dimming + hatch + a reason string on hover/focus**, with disabled controls staying keyboard-focusable so the reason is reachable without a mouse; P7's speed dial gets an **explicit carve-out from the inert-not-hidden rule** (hidden in combat because its whole domain is suspended, not merely unavailable); P3 makes single-cell designation a **toggle**; P2's anchor **survives a mode switch inert** (flagged as open question 3 — may feel wrong in play).
+- **P10 + P11 land the dormant-stair handoff** that Terrain Rendering C5 created when it decided below-cutaway reads as darkness. That promise is no longer dangling.
+- **Six gaps listed, not pre-solved**: locked-vs-disabled treatment, list/multi-select, drag-drop assignment, tooltips, tab switching, numeric entry. A pattern with no real consumer is a guess.
+- P4's hatch is specified as a concept, not as art — it must survive the pixel-art texel grid at every zoom step (art-director, with the art bible 3.1/3.3 re-validation).
+
+### Gate status
+
+All five pre-gate artifacts exist: `tests/unit`, `tests/integration`, `.github/workflows/tests.yml`, `design/accessibility-requirements.md`, `design/ux/interaction-patterns.md`. **Expect `/gate-check` to return CONCERNS rather than PASS** — no screen UX specs exist and `/ux-review` has never run against the new tier.
