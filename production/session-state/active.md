@@ -2,8 +2,8 @@
 
 <!-- STATUS -->
 Epic: Technical Setup
-Feature: Master architecture document
-Task: architecture.md v1.0 WRITTEN and gate-reviewed 2026-08-25 (TD APPROVED WITH CONDITIONS / LP CONCERNS ACCEPTED). Next: close QQ-23..QQ-26 (the four interface gaps), then /create-control-manifest.
+Feature: Master architecture document + ADR-0006
+Task: architecture.md v1.0 WRITTEN and gate-reviewed 2026-08-25 (TD APPROVED WITH CONDITIONS / LP CONCERNS ACCEPTED). ADR-0006 (bus subscriber contract) DRAFTED, closes QQ-23, gates still pending. Next: finish ADR-0006's gates, then QQ-24/25/26, then /create-control-manifest. CARRIED FROM 2026-08-24 AND STILL UNADDRESSED — CHECK CI: the workflow has still never run; this merge to main is the chance to confirm it.
 <!-- /STATUS -->
 
 ## SESSION 2026-08-25 — /create-architecture (COMPLETE)
@@ -386,3 +386,36 @@ All five pre-gate artifacts exist: `tests/unit`, `tests/integration`, `.github/w
 - **Vertical slice** — scoped deliberately below MVP (1 stratum, ~3 colonists, dig+build, one raid), `prototypes/`, ADR-exempt, answering CD-18 only.
 - **Capacity assumption** still unconfirmed. Commit history reads part-time (15 commit-days / 32 calendar, one 12-day gap).
 - CI still never executed — pushing to `main` this pass to close it.
+
+---
+
+## SESSION CLOSED 2026-08-24
+
+**Branch `claude/colony-sim-next-steps-9t9c26` and `main` both at `46e65d8`.** Working tree clean, everything pushed.
+
+### What this session produced
+
+| | |
+|---|---|
+| Quick-specs written | 4 (Pathfinding #8, Material Catalog #5, Colonist Entity #9, Terrain Rendering #7) — **the design-order #8–#11 batch is complete** |
+| Gate artifacts | All 5 now exist; `/gate-check` reachable for the first time |
+| Target-hardware run | Frame-rate + Gen0 clauses CLOSED — p99 ~2 ms vs a 16.6 ms budget |
+| ADRs | **ADR-0002 promoted to Accepted**; criterion 5 split, circular block broken |
+| Test infra | xUnit suite + CI with two grep gates, **gates proven against planted violations** |
+| Accessibility | WCAG-AA committed, 11 sections |
+| Interaction patterns | P1–P11 |
+| Governed-doc debts closed | ADR-0003 door formula, terrain dig-time ownership, ADR-0002 supersession, traceability rename + 4 stale rows |
+
+### FIRST THING NEXT SESSION
+
+**Check whether CI went green.** `main` was pushed at `46e65d8` and the workflow had never executed before that push. If it is red, fix it before building anything else on top — 21 commits currently assume it works. Expect the grep job to pass (proven locally); the test job is the unknown.
+
+### Do not re-litigate — user rulings from 2026-08-24
+
+Prosthetics are unlockable technology (not a scope candidate) · camera is one fixed angle with four 90° rotations · bleed-out is exempt from post-battle time advance · destroyed walls leave rubble · **no job-type cap** · **all art is made by a person, no AI-generated art** · flat damage overlays for MVP · encounters re-roll on colony-save reload · better ore spawns deeper, full stop · default to the development plan on scheduling disruptions · mid-battle rebuild and final slice scope are **playtest decisions**, not now.
+
+### Process notes for whoever picks this up
+
+- **Pose extensions as options; do not apply them unilaterally.** The user corrected this twice.
+- **Do not dramatize ordinary gaps in an early concept.** Missing systems get a line in §8 and the work continues.
+- The four quick-specs are **the easy half** — five of six documented systems serve Pillar 1. Combat and rebuild are unwritten.
