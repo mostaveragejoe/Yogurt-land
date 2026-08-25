@@ -2,9 +2,62 @@
 
 <!-- STATUS -->
 Epic: Technical Setup
-Feature: Master architecture document + ADR-0006
-Task: architecture.md v1.0 WRITTEN and gate-reviewed 2026-08-25 (TD APPROVED WITH CONDITIONS / LP CONCERNS ACCEPTED). ADR-0006 (bus subscriber contract) DRAFTED, closes QQ-23, gates still pending. Next: finish ADR-0006's gates, then QQ-24/25/26, then /create-control-manifest. CARRIED FROM 2026-08-24 AND STILL UNADDRESSED — CHECK CI: the workflow has still never run; this merge to main is the chance to confirm it.
+Feature: Master architecture + ADR-0006
+Task: SESSION CLOSED 2026-08-25. architecture.md v1.0 gate-reviewed; ADR-0006 written, specialist- and TD-reviewed, corrections folded, registry updated. NEXT SESSION MUST BE FRESH — run /architecture-review (the skill forbids running it in the authoring session).
 <!-- /STATUS -->
+
+## SESSION 2026-08-25 — /create-architecture + /architecture-decision (BOTH COMPLETE)
+
+### FIRST THING NEXT SESSION
+
+1. **CHECK CI.** Carried unaddressed from 2026-08-24 and still true: the workflow has
+   never executed. `main` has been pushed twice since. If it is red, fix before building on it.
+2. **Run `/architecture-review` in a FRESH session.** Mandatory, not stylistic — this session
+   authored ADR-0006, so it is the wrong context to validate it. Expect it to re-check the
+   97-row matrix plus ADR-0006.
+
+### Landed this session
+
+| Artifact | State |
+|---|---|
+| `docs/architecture/architecture.md` v1.0 (720 lines, 11 sections) | TD **APPROVED WITH CONDITIONS**, LP **CONCERNS ACCEPTED** |
+| `docs/architecture/adr-0006-...subscriber-contract.md` (440 lines) | **Proposed**; csharp-specialist APPROVE WITH NOTES + TD-ADR CONCERNS, all folded |
+| `docs/engine-reference/godot/modules/gridmap.md` | NEW — closes the gate that BLOCKED render-backend stories |
+| `modules/physics.md` | Amended — closes ADR-0001 OQ #9 / TR-time-011 |
+| `docs/registry/architecture.yaml` | +1 interface contract, +3 forbidden patterns |
+
+### Engine facts verified against the `4.7.1-stable` tag (not training data)
+
+- **GridMap is LOW risk, not HIGH** — additive-only 4.3→4.7.1: 0 methods removed, 0 signature
+  changes, 7 new octant methods. No per-instance data channel CONFIRMED by enumeration.
+- **`Engine.MaxPhysicsStepsPerFrame`, NOT `ProjectSettings`** — the ProjectSettings keys are
+  only read at project start, so a startup guard reading them checks a stale value. Binding.
+- **`net8.0` = C# 12** → `TerrainChangeBatch` cannot be a generic type argument. **This does
+  not lift on .NET 9** (`allows ref struct` is opt-in; `List<T>` never qualifies, CLR rule).
+
+### Errors I made and had to correct — read this before trusting a draft from one pass
+
+- Claimed .NET 9 would lift the ref-struct constraint. **False twice over.** Caught by
+  godot-csharp-specialist.
+- Cited "63.2 µs/dig" as evidence AGAINST Revision polling. It is the project's own
+  measurement of polling on terrain, concluded **"not falsified, 0.38% of a frame"**. Backwards.
+- Introduced a rule-5/rule-10 contradiction *while folding in the specialist's fix* — patched
+  one rule without re-reading the rule it collided with.
+- Asserted a read-after-invalidate dependency in a table while denying it in prose two
+  paragraphs below. Both caught by TD-ADR.
+- **Lesson: a single authoring pass is not trustworthy on this material. The gates earn their cost.**
+
+### Still open — BLOCKING
+
+- **QQ-24 composition root undefined** — 30 references across 5 docs, 0 definitions. Blocks the
+  first store implementation. Next ADR.
+- **QQ-25 checkpoint multi-owner buffer framing** — 7 owners, one buffer, no container format.
+- **QQ-26 checkpoint lock boundary + join timeout.**
+- **QQ-02** build ADR-0004's async path (recommend an ADR-exempt spike under `prototypes/`).
+- **QQ-01** amend ADR-0005 for the re-roll ruling.
+- **ADR-0006 is Proposed** — stories referencing it are auto-blocked. TD's path to APPROVE was
+  "fold B1–B5 + A4", which is done, so it is eligible; promotion is a user call.
+
 
 ## SESSION 2026-08-25 — /create-architecture (COMPLETE)
 

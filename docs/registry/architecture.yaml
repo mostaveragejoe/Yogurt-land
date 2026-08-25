@@ -30,7 +30,7 @@
 #   Superseded entries:     Grep pattern="status: superseded"
 
 version: 1
-last_updated: "2026-08-08"
+last_updated: "2026-08-25"
 
 # ─── STATE OWNERSHIP ─────────────────────────────────────────────────────────
 # Who is the authoritative owner of each piece of shared game state.
@@ -97,6 +97,31 @@ interfaces:
       - docs/architecture/adr-0005-seeded-rng.md
       - docs/architecture/adr-0004-battle-checkpoint-architecture.md
     added: 2026-08-08
+    revised: ""
+
+  - contract: terrain_change_notification
+    status: active
+    pattern: event_bus      # push dispatch; deliberately NOT the Revision-polling used for entities
+    producer: terrain-data-model      # TerrainWorld is the bus's ONLY publisher, permanently
+    consumers:
+      - pathfinding                 # priority 10 — marks its layer stale
+      - spatial-query-los           # priority 20
+      - job-assignment              # priority 30
+      - repair-rebuild              # priority 40
+      - notifications               # priority 50
+      - terrain-rendering-cutaway   # priority 60 — Godot-side; unsubscribes in _ExitTree
+    adr: docs/architecture/adr-0006-world-change-event-bus-subscriber-contract.md
+    signal_signature: "ITerrainChangeSubscriber.OnTerrainChanged(in TerrainChangeBatch) / OnWorldReloaded(); registration via WorldChangeEventBus.Subscribe(subscriber, int priority) at the composition root, dispatched in (priority, registration sequence) order"
+    notes: "NOT a C# event. TerrainChangeBatch is a ref struct and cannot be a generic type
+      argument on C# 12 (net8.0) — and would remain illegal on .NET 9, since allows ref struct
+      is opt-in per declaration and List<T> can never qualify by CLR rule. Ordering is
+      deterministic but NOT load-bearing: rule 12 forbids a handler reading another
+      subscriber's derived state during dispatch. All subscribers must register BEFORE
+      TerrainWorld is constructed, or they miss the load-window WorldReloaded."
+    referenced_by:
+      - docs/architecture/adr-0006-world-change-event-bus-subscriber-contract.md
+      - docs/architecture/adr-0002-terrain-data-model.md   # owns the batch + the sink
+    added: 2026-08-25
     revised: ""
 
 # Example:
@@ -204,6 +229,42 @@ forbidden_patterns:
       entropy sources are non-deterministic and break bit-reproducible resume (AC-67 / TR-time-026)."
     adr: docs/architecture/adr-0005-seeded-rng.md
     added: 2026-08-08
+
+  - pattern: generic_over_terrain_change_batch
+    status: active
+    description: "Never use TerrainChangeBatch as a generic type argument: event Action<T>,
+      EventHandler<T>, IObserver<T>, List<Action<T>>. Use ITerrainChangeSubscriber."
+    why: "It is a ref struct, which C# 12 (net8.0) forbids as a generic type argument — a
+      compile error, not a slowdown. This does NOT lift on .NET 9: allows ref struct is opt-in
+      per declaration and the BCL has not annotated those types, while List<T> can never
+      qualify because the CLR forbids arrays of ByRefLike element type. The natural workaround
+      for the compile error (copy changes into a List first) allocates on every dig and breaks
+      the zero-steady-state-allocation standard."
+    adr: docs/architecture/adr-0006-world-change-event-bus-subscriber-contract.md
+    added: 2026-08-25
+
+  - pattern: bus_registration_during_dispatch
+    status: active
+    description: "Never call Subscribe/Unsubscribe while Publish is on the stack. The
+      IsInstanceValid purge of a dead Godot subscriber is DEFERRED — mark and skip during the
+      walk, compact after it returns."
+    why: "The sorted subscriber list is not re-entrantly safe, and Publish walks a plain array
+      whose indices removal would invalidate. Dispatch order would also depend on dispatch
+      position, breaking the determinism ADR-0002 rule 8 requires."
+    adr: docs/architecture/adr-0006-world-change-event-bus-subscriber-contract.md
+    added: 2026-08-25
+
+  - pattern: cross_subscriber_read_during_dispatch
+    status: active
+    description: "A bus handler must not query another subscriber's derived state during
+      dispatch (e.g. Job Assignment calling IsReachable inside its handler). Handlers mark
+      their OWN state stale; cross-system reads happen in Tick(), after dispatch completes."
+    why: "Handlers only mark rather than recompute, so such a query returns a different answer
+      depending on whether the earlier handler has run — a genuine read-after-invalidate that
+      the idempotence rule does not cover, because querying is not writing. This rule is what
+      makes 'dispatch order is not load-bearing' true by construction rather than by hope."
+    adr: docs/architecture/adr-0006-world-change-event-bus-subscriber-contract.md
+    added: 2026-08-25
 
 # Example:
 #
