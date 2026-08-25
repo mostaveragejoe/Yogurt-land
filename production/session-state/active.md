@@ -3,15 +3,31 @@
 <!-- STATUS -->
 Epic: Technical Setup
 Feature: Master architecture + ADR-0006
-Task: SESSION CLOSED 2026-08-25. architecture.md v1.0 gate-reviewed; ADR-0006 written, specialist- and TD-reviewed, corrections folded, registry updated. NEXT SESSION MUST BE FRESH — run /architecture-review (the skill forbids running it in the authoring session).
+Task: SESSION CLOSED 2026-08-25. architecture.md v1.0 gate-reviewed; ADR-0006 written, specialist- and TD-reviewed, corrections folded, registry updated. CI verified GREEN 2026-08-25 (8/8 tests, both grep gates) — that carried item is discharged. ONE ITEM LEFT: run /architecture-review in a FRESH session (the skill forbids running it in the authoring session).
 <!-- /STATUS -->
 
 ## SESSION 2026-08-25 — /create-architecture + /architecture-decision (BOTH COMPLETE)
 
 ### FIRST THING NEXT SESSION
 
-1. **CHECK CI.** Carried unaddressed from 2026-08-24 and still true: the workflow has
-   never executed. `main` has been pushed twice since. If it is red, fix before building on it.
+1. ~~CHECK CI~~ — **RESOLVED 2026-08-25. CI is GREEN.** Carried from 2026-08-24 and now
+   discharged; nothing to fix. All four runs of `Automated Tests` have passed, including
+   [run #4](https://github.com/mostaveragejoe/Yogurt-land/actions/runs/32890829598) on the
+   current `main` head `d364992`. Both jobs pass: **Core Unit + Integration Tests** (build
+   0 warnings / 0 errors; `Failed: 0, Passed: 8, Skipped: 0`) and **Architecture Grep Gates**
+   (Godot-free OK, no-stock-RNG OK). The test job was the flagged unknown — it is verified
+   to actually execute, not no-op on an empty suite: the log reports 1 matched test file and
+   8 passing tests, reconciling exactly with `tests/unit/Primitives/CellCoordTests.cs`
+   (5 `[Fact]` + 1 `[Theory]` x 3 `[InlineData]` = 8). No silent skips.
+
+   **Two caveats, neither a failure:**
+   - **The suite is one file** against 6 core source files. The pipeline works, but green CI
+     currently proves very little about the codebase — it is a working harness awaiting tests,
+     not yet a safety net. The commits it was meant to protect are docs and ADRs, so there was
+     never much for it to catch. Real coverage arrives with the first implementation stories.
+   - **Node 20 deprecation warning.** `actions/checkout@v4`, `setup-dotnet@v4` and
+     `upload-artifact@v4` target Node 20 and are force-run on Node 24. Non-blocking; bump to
+     v5 next time the workflow is touched.
 2. **Run `/architecture-review` in a FRESH session.** Mandatory, not stylistic — this session
    authored ADR-0006, so it is the wrong context to validate it. Expect it to re-check the
    97-row matrix plus ADR-0006.
@@ -462,6 +478,10 @@ All five pre-gate artifacts exist: `tests/unit`, `tests/integration`, `.github/w
 ### FIRST THING NEXT SESSION
 
 **Check whether CI went green.** `main` was pushed at `46e65d8` and the workflow had never executed before that push. If it is red, fix it before building anything else on top — 21 commits currently assume it works. Expect the grep job to pass (proven locally); the test job is the unknown.
+
+> **Resolved 2026-08-25 — CI is green, both jobs.** Left above as the record of what this
+> session handed forward. Do not re-do it; see the 2026-08-25 section at the top of this file.
+> The prediction held: the grep job passed, and the test job — the stated unknown — passed too.
 
 ### Do not re-litigate — user rulings from 2026-08-24
 
