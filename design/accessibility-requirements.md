@@ -127,7 +127,45 @@ Partial support per technical-preferences: action names route cleanly from day o
 
 ## Cognitive Accessibility
 
-[To be designed]
+### Interruption recovery — the mode-switch freeze
+
+Time Authority's zero-agency interruption is the project's most cognitively demanding moment: the colony freezes mid-action with no grace window, and the player is relocated into a tactical situation whose timing they did not choose.
+
+| Obligation | Owner |
+|---|---|
+| The freeze beat is **readable** — the player can tell *what just happened* without inference | Combat UI (#27) |
+| Interrupted input is discarded, never partially committed (see Motor) | Blueprint UI (#26) |
+| The breach location is shown, not left to be hunted for | #27 — already required by EC-5's camera fallback |
+| **No decision is required during the freeze itself** | Time Authority Rule 8 — already guaranteed |
+
+The last row carries the most weight: the freeze is a **notification, not a prompt**. A player who needs twenty seconds to reorient loses nothing by taking them.
+
+### Lockout prevention
+
+The project's highest-severity cognitive risk, per Time Authority's own assessment, is the **after-action survey**: no timeout, no escape, and it blocks the return to the dial.
+
+- **Every modal state has a visible, unambiguous exit.** No modal is dismissible only by a key with no on-screen affordance
+- The after-action survey's floor is fixed in Time Authority and inherited verbatim: **clearable by one unambiguous confirm action**, with any further detail sitting behind that confirm, never in front of it
+- **No modal state may be entered without an exit already rendered.** A modal that renders its dismiss control conditionally is a defect
+
+**Default focus in confirmations** is left to the spec that owns each dialog. The quit-mid-battle dialog is already fixed by Time Authority — the affirmative must NOT hold default focus, so a stressed player cannot key-repeat through it by accident. Whether that pattern generalizes to other confirmations is each owning spec's call, not this document's.
+
+### Consistency
+
+- One meaning, one control, one place. The **single shared disabled treatment** (Time Authority) is the canonical case: six order categories, whatever their control type, share one visual language
+- Gesture controls have no at-rest surface to carry a disabled state. Time Authority's exception applies — an **on-attempt transient affordance** (cursor badge, struck ghost-rectangle, or equivalent). "Nothing happens" is the banned outcome
+- Terminology is fixed once and reused. A "designation" is never also a "blueprint" or an "order" in player-facing text
+
+### Reading load and pacing
+
+- No player-facing text requires reading faster than the player chooses. Colony play pauses at will and combat is turn-based, so **nothing in the game carries a reading deadline**
+- Notifications queued during combat flush on return (Time Authority Rule 10). A burst of thirty queued messages is a cognitive dump, so **digest presentation is the default** — but the Notifications component may depart from it where a message type genuinely needs immediacy or individual acknowledgement (a named colonist death is not a line item in a summary). Time Authority left this choice to the component and this document does not overrule it
+- Tutorial and onboarding text is re-readable on demand, never one-shot
+
+### Error prevention over error messages
+
+- **Destructive actions are confirmable or undoable — preferably undoable.** Cancelling a designation is free and instant (Terrain C4: cancelling a dig discards progress and leaves the wall untouched)
+- The game does not punish exploratory clicking. **Designation is a plan, not an execution** — the gap between the two is where mistakes get caught before they cost anything
 
 ---
 
