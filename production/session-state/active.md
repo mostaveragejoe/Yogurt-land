@@ -487,9 +487,9 @@ Prosthetics are unlockable technology (not a scope candidate) · camera is one f
   `Needs Revision` was drafted but **NOT applied** — needs approval.
 - Top ADR gaps: **None net-new.** Remaining work is amendments + promotions, not new ADRs.
 
-### The two blocking findings
+### The two blocking findings (1 of 2 now RESOLVED)
 
-1. **🔴 Pathfinding registration conflict — NEW, previously unrecorded.** ADR-0001:195
+1. **✅ RESOLVED 2026-08-26 by ADR-0001 Amendment — Pathfinding registration conflict.** ADR-0001:195
    (Accepted) lists Pathfinding in the tickable table under both authorities; the Pathfinding
    quick-spec §4 (2026-08-24) says it "registers no `ITickable`, owns no `Tick()`." A downstream
    quick-spec overturned an Accepted Foundation ADR with no amendment — the **same governance
@@ -550,3 +550,33 @@ Decide before story authoring: register quick-spec ACs as TR-IDs, or exempt them
   outside this skill's write scope.
 
 - Report: `docs/architecture/architecture-review-2026-08-26.md`
+
+
+## Step 2 DONE — ADR-0001 Amendment 2026-08-26 (Pathfinding)
+
+Verified the quick-spec before amending rather than assuming: rebuild is lazy and
+query-triggered (C4), invalidation is an ADR-0006 handler, queries run on the caller's stack.
+Nothing left for a `Tick()`. ADR-0001's row was stale; the quick-spec was right.
+
+**Two gaps found while verifying, both fixed in the amendment:**
+1. **`TickSequence` had NO increment rule.** ADR-0001 pinned `TurnIndex` ("per actor
+   activation") but described `TickSequence` only as "monotonic across both modes". Now
+   pinned: **+1 per dispatch pass**, both modes. TR-time-026's "monotonic and gapless" is
+   only testable because of this.
+2. **The region-rebuild budget had NO reset owner.** The quick-spec caps rebuilds
+   `RegionRebuildsPerDispatch` per *dispatch*, but Pathfinding has no tick and therefore no
+   dispatch boundary. Unresolved: budget spent once, never refills, every later stale-layer
+   query degrades to A\* **forever** — not wrong (C5 exactness), a silent permanent perf
+   cliff. Fixed by budgeting per distinct `TickSequence`, read via a composition-root-granted
+   read-only accessor. A read is not a registration.
+
+**Consequence recorded in the quick-spec tuning table**: RealTime delivers up to `SubStepCap`
+dispatches per frame, so speed 3 permits up to 3 rebuilds (~0.78 ms), not one (~0.26 ms). The
+per-frame ceiling is `SubStepCap`, not the speed dial.
+
+Files: `adr-0001` (status, amendment block, table row, `TimeContext` comment) ·
+`time-authority-mode-switch.md:144` · `pathfinding-navigation.md` (C4 + §7) ·
+`requirements-traceability.md` (TR-time-039 → ✅; **81/15/1**) · review report.
+
+**Matrix now 81 ✅ / 15 ⚠️ / 1 🔴 / 0 ❌.** The last known-wrong row is TR-time-026 (QQ-01,
+the RNG re-roll ruling) — that is step 3.

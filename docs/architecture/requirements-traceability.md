@@ -8,10 +8,13 @@
 ## Coverage Summary
 
 - Total requirements: **97** (46 terrain, 51 time-authority)
-- ✅ Covered: **80** (82%)
-- ⚠️ Partial: **15** (16%)
-- 🔴 Known-wrong: **2** (2%)
+- ✅ Covered: **81** (84%)
+- ⚠️ Partial: **15** (15%)
+- 🔴 Known-wrong: **1** (1%)
 - ❌ Gap: **0**
+
+> **Updated 2026-08-26 (later same day)**: TR-time-039 closed by ADR-0001 Amendment 2026-08-26.
+> One known-wrong row remains — TR-time-026 (QQ-01, the combat RNG re-roll ruling).
 
 > **Count corrected 2026-08-26.** The previous header read 77 / 20 / 1, which summed to 98
 > against 97 requirements; the matrix body actually held 76 ✅ / 21 ⚠️; and the single ❌ was a
@@ -120,7 +123,7 @@
 | TR-time-036 | Zero-agency edge cases safe by construction | ADR-0001 (Combat handling deferred) | ✅ |
 | TR-time-037 | Manager owns Mode/TurnIndex/TickSequence; dup reject | ADR-0001 | ✅ |
 | TR-time-038 | TurnBased systems must not read DeltaSeconds | ADR-0001 | ✅ |
-| TR-time-039 | Pathfinding dual-registration (both authorities) | ADR-0001:195 (**Accepted**) lists Pathfinding in the tickable table under both authorities. **🔴 Conflict opened 2026-08-26**: `design/quick-specs/pathfinding-navigation.md` §4 (2026-08-24) states Pathfinding *"registers no `ITickable`, owns no `Tick()`, and advances no state"*. A downstream quick-spec has overturned an Accepted Foundation ADR with no amendment. See the conflict note below | 🔴 |
+| TR-time-039 | ~~Pathfinding dual-registration (both authorities)~~ → **Pathfinding registers with neither authority** | **Conflict RESOLVED 2026-08-26 by ADR-0001 Amendment 2026-08-26.** The quick-spec was right: queries are answered on the caller's stack, invalidation is an ADR-0006 handler at priority 10, rebuild is lazy. ADR-0001's tickable row is retracted and the GDD's "dual-registration case" wording corrected. The amendment additionally pins `TickSequence`'s increment rule (+1 per dispatch) and gives the region-rebuild budget a reset owner it never had | ✅ |
 | TR-time-040 | Pre-switch placement normalization (decision-order) | ADR-0001, ADR-0003 | ✅ |
 | TR-time-041 | View-freeze contract on ModeTransitioned | ADR-0001 | ✅ |
 | TR-time-042 | Sim only via Tick(); _Process presentation-only | ADR-0001 | ✅ |
@@ -142,12 +145,12 @@ checkpoint RNG stream state) closed on 2026-08-08 with ADR-0005.
 *(The previous version of this section still listed TR-time-025 as an open gap, duplicating a
 row the matrix above already marked ✅. Removed 2026-08-26.)*
 
-## Known-Wrong Coverage — 2 rows
+## Known-Wrong Coverage — 1 row (was 2)
 
 Distinct from Partial: an ADR **does** address these, and its answer is contradicted by a later
 ruling or a downstream spec. These are the review's blocking findings.
 
-### 🔴 TR-time-039 — Pathfinding registration (opened 2026-08-26)
+### ✅ TR-time-039 — Pathfinding registration (opened AND resolved 2026-08-26)
 
 | Source | Claim |
 |---|---|
@@ -160,11 +163,21 @@ sparse damage overlay — *"a downstream quick-spec had overturned a Foundation 
 backend with only an open-item note, which is a governance defect regardless of the decision
 being right."* That instance became a formal ADR-0002 amendment. This one recurred unrecorded.
 
-**Recommended resolution**: amend **ADR-0001** — remove Pathfinding from the tickable table and
-state that it is a passive query service whose cache invalidation runs in its ADR-0006 bus
-handler at priority 10, not in `Tick()`. On the merits the quick-spec appears right: ADR-0001's
-own row already describes Pathfinding's only duty as "invalidate cached paths/regions on
-terrain change," which ADR-0006 now dispatches. Owner: technical-director.
+**RESOLVED 2026-08-26 — ADR-0001 Amendment 2026-08-26.** The quick-spec was right and ADR-0001's
+row is retracted. Pathfinding registers with neither authority: queries are answered
+synchronously on the **caller's** stack, invalidation is an ADR-0006 handler at priority 10, and
+region rebuild is lazy (quick-spec C4). The GDD's "notable dual-registration case" wording is
+corrected in the same changeset.
+
+**The amendment closed two gaps the conflict exposed**, neither of which was a disagreement:
+1. **`TickSequence` had no increment rule** — defined only as "monotonic across both modes."
+   Now pinned: **+1 per dispatch pass**, both modes.
+2. **The region-rebuild budget had no reset owner.** The quick-spec caps rebuilds
+   `RegionRebuildsPerDispatch` per *dispatch*, but Pathfinding has no tick and so no
+   dispatch boundary. Unresolved, the budget would be spent once and never refill, degrading
+   every later stale-layer query to A\* permanently — not wrong (C5), but a silent performance
+   cliff. Resolved by budgeting per distinct `TickSequence` via a read-only accessor granted at
+   the composition root.
 
 ### 🔴 TR-time-026 — combat RNG re-roll vs identical replay (QQ-01)
 
@@ -223,3 +236,4 @@ None. No requirement has been retired; TR-terrain-042's *implementation* was sup
 | 2026-08-08 | 97 | 74 | 22 | — | 1 | Initial matrix — 4 ADRs, 2 foundation GDDs |
 | 2026-08-24 | 97 | 76 | 21 | — | 0 | Hand-patch at gate check (header recorded 77/20/1 in error) |
 | 2026-08-26 | 97 | 80 | 15 | 2 | 0 | Full re-run, 6 ADRs. Count corrected; 4 rows closed; TR-time-039 conflict opened; TR-time-026/027 re-scoped |
+| 2026-08-26 (b) | 97 | 81 | 15 | 1 | 0 | TR-time-039 resolved by ADR-0001 Amendment 2026-08-26 |

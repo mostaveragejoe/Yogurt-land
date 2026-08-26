@@ -1,9 +1,64 @@
 # ADR-0001: Time Authority / Mode-Switch Architecture
 
 ## Status
-**Accepted** (2026-07-26, user decision) — spike-validated 61/61 · **Amended 2026-08-03** (Battle Persistence)
+**Accepted** (2026-07-26, user decision) — spike-validated 61/61 · **Amended 2026-08-03** (Battle Persistence) · **Amended 2026-08-26** (Pathfinding is passive, not a tickable; `TickSequence` increment rule pinned)
 
 *(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes, promoted once the mode-switch spike validated the architecture — see **Spike Results (2026-07-26)** below. All four testable validation criteria pass; criterion 5 remains a six-month review item. Two corrections were applied at promotion, neither structural: the mutation window must be a struct scope, and pre-switch normalization decides against the decision set rather than live occupancy.)*
+
+> ### Amendment 2026-08-26 — Pathfinding is a passive query service; `TickSequence` increment rule pinned
+>
+> Raised at `/architecture-review` 2026-08-26 as a 🔴 conflict between this ADR and
+> `design/quick-specs/pathfinding-navigation.md` (2026-08-24). Three changes, the second and
+> third of which are gaps this ADR left rather than disagreements with the quick-spec.
+>
+> **1. Pathfinding registers no `ITickable`.** The worked-example table below listed Pathfinding
+> as `RealTime + TurnBased` — *"the notable dual-registration case"* — with `Tick` duties of
+> "service colony path requests" / "service combat reachability queries". **Retracted.**
+> Servicing a request is *caller-driven*: it happens inside the **caller's** `Tick()`, not in a
+> Pathfinding tick of its own. The quick-spec (§4) is correct — Pathfinding *"registers no
+> `ITickable`, owns no `Tick()`, and advances no state."* Its two real duties both live
+> elsewhere: queries are answered synchronously on the caller's stack, and cache invalidation
+> is an **ADR-0006 bus handler at priority 10** (`MarkLayerDirty(z)`), which is bookkeeping,
+> not a tick. Region rebuild is **lazy** — triggered by the first reachability query that reads
+> a stale layer (quick-spec C4), never by a tick and never inside the mutation window.
+> The row is restated below under the "**neither**" convention already used for Terrain, the
+> entity stores and the renderer. GDD `time-authority-mode-switch.md:144` and `TR-time-039`
+> carry the same "dual-registration" wording and are corrected with this amendment.
+>
+> *Governance note*: a downstream quick-spec overturned an **Accepted** Foundation ADR with no
+> amendment — the same failure the 2026-08-24 gate-check named for the sparse damage overlay.
+> The decision is right; recording it is what was missing. This amendment is that record.
+>
+> **2. `TickSequence` increments exactly once per dispatch, in both modes.** This ADR defined
+> `TurnIndex`'s increment rule explicitly ("per **actor activation**") but described
+> `TickSequence` only as *"monotonic across both modes"* — never saying what advances it. Pinned
+> now: **one increment per `Tick()` dispatch pass to the registered set.** In RealTime one
+> dispatch is one fixed-dt sub-step, so a frame at speed *N* advances `TickSequence` by the
+> number of sub-steps actually delivered (`SubStepsDelivered`, never the requested count). In
+> TurnBased each discrete scheduler-driven tick is one dispatch. This is what makes it
+> "monotonic and gapless across the swap" (`TR-time-026`) mean something testable, and it is
+> the unit change 3 depends on.
+>
+> **3. The per-dispatch region-rebuild budget resets against `TickSequence`.** The quick-spec
+> caps region rebuilds at `RegionRebuildsPerDispatch` (default 1) — a budget denominated in
+> **this ADR's dispatch unit** — but neither document said who resets it, and Pathfinding, having
+> no tick, has no dispatch-boundary hook of its own. Left unresolved the counter is spent on the
+> first rebuild and never refills, so every later query on a stale layer degrades to A\* forever:
+> **not a correctness bug** (quick-spec C5 — the index is exact, A\* fallback is "slower, never
+> wrong") but a silent, permanent performance cliff, which is the kind that ships.
+>
+> Resolution — no new mechanism, no registration: Pathfinding stores the `TickSequence` at which
+> it last rebuilt and permits `RegionRebuildsPerDispatch` rebuilds **per distinct `TickSequence`
+> value**. Because of change 2 that is exactly "per dispatch". It needs only a **read-only
+> `CurrentTickSequence` accessor** on `TimeAuthorityManager`, granted at the composition root
+> (QQ-24) alongside the ADR-0003 writer interfaces and ADR-0005 draw handles. A read is not a
+> registration and does not make Pathfinding a tickable; reading the anchor is not advancing it.
+>
+> *Consequence worth stating*: because RealTime delivers up to `SubStepCap` dispatches per frame,
+> a frame at speed 3 permits **up to 3 layer rebuilds (~0.78 ms)**, not one (~0.26 ms). The
+> quick-spec's §7 tuning note reasons about per-dispatch cost without noting that game speed
+> multiplies it per frame. Still inside budget at defaults; the ceiling is `SubStepCap`, not the
+> speed dial. Routed to the Pathfinding quick-spec as a tuning-table note.
 
 > ### Amendment 2026-08-03 — Battle Persistence (user ruling 2026-08-02; propagated via `/propagate-design-change`, see `change-impact-2026-08-03-time-authority-mode-switch.md`)
 >
@@ -77,7 +132,8 @@ public readonly record struct TimeContext(
     TimeAuthorityMode Mode,
     double DeltaSeconds,   // fixed sub-step dt in RealTime; ALWAYS 0 in TurnBased (see rule below)
     int TurnIndex,         // increments per ACTOR ACTIVATION in TurnBased; -1 in RealTime
-    ulong TickSequence);   // monotonic across both modes; determinism/save/replay anchor
+    ulong TickSequence);   // +1 per DISPATCH pass, both modes (amended 2026-08-26); monotonic and
+                           // gapless across the swap; determinism/save/replay anchor
 // Passed BY VALUE (four fields; `in` would force defensive copies on non-readonly structs
 // and is banned until a profiler demands it).
 
@@ -192,7 +248,7 @@ Paused systems still receive events; ALL handlers are idempotent bookkeeping onl
 |---|---|---|---|---|
 | Colonist Needs & Sim | RealTime only | Integrate need decay over `DeltaSeconds`; emit task candidates | — (needs freeze; see Open Questions) | none |
 | Job Assignment | RealTime only | Arbitrate queue, assign/cancel jobs | — | Mark reservations stale, flag jobs whose target cells changed (no state advance) |
-| Pathfinding | RealTime + TurnBased | Service colony path requests | Service combat reachability queries (Δ irrelevant — query-driven) | Invalidate cached paths/regions on terrain change |
+| Pathfinding & Navigation | **neither** — passive query service *(amended 2026-08-26; this row previously read "RealTime + TurnBased … the notable dual-registration case")* | — (queries answered synchronously on the **caller's** stack, inside the caller's `Tick()`) | — (same; Δ irrelevant — query-driven) | `MarkLayerDirty(z)` on terrain change — **ADR-0006 subscriber, priority 10**. Region rebuild is lazy, triggered by the first query reading a stale layer, budgeted per distinct `TickSequence` |
 | Raid Trigger | RealTime only | Accumulate threat over `DeltaSeconds`; on trigger: `RequestSwitch(TurnBased, …)` and gate on the returned `SwitchResult` | — | none |
 | Combat: Turn Order | TurnBased only | — | Advance activation order on each discrete tick | none |
 | Terrain Data Model | **neither** — passive store (ADR-0002) | — | — | None — it is the bus's sole publisher; only its legal writer set changes per authority (ADR-0002 writer table) |

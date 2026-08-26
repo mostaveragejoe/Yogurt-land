@@ -70,7 +70,14 @@ without claiming any state.
 
 Both conflicts below are **GDD/ADR vs. downstream-spec or vs. user ruling.**
 
-### 🔴 Conflict 1 — Pathfinding registration (NEW, previously unrecorded)
+### ✅ Conflict 1 — Pathfinding registration (opened AND resolved 2026-08-26)
+
+> **RESOLVED later the same day by ADR-0001 Amendment 2026-08-26.** The quick-spec was right;
+> ADR-0001's tickable row is retracted and the GDD wording corrected. The amendment also closed
+> two gaps the conflict exposed: `TickSequence` had no stated increment rule (now +1 per
+> dispatch), and the region-rebuild budget had no reset owner (now budgeted per distinct
+> `TickSequence` via a composition-root-granted read-only accessor). Detail below, kept as the
+> record of what was found.
 
 `architecture.md` §7.5 is titled "The one open conflict." There are two.
 

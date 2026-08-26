@@ -77,7 +77,14 @@ itself.
 1. A stale layer is **never** rebuilt inside the mutation window or as a consequence of the
    dig itself. Rebuild is triggered **lazily, by the first reachability query that reads a
    stale layer**.
-2. **At most one layer rebuild per dispatch** (`RegionRebuildsPerDispatch`, §7).
+2. **At most one layer rebuild per dispatch** (`RegionRebuildsPerDispatch`, §7). **The budget
+   resets against `TimeAuthorityManager.CurrentTickSequence`** — Pathfinding stores the
+   `TickSequence` of its last rebuild and permits the budget per *distinct* value, which is
+   exactly "per dispatch" since `TickSequence` advances once per dispatch pass (ADR-0001
+   Amendment 2026-08-26). A read-only accessor granted at the composition root; reading the
+   anchor is not a registration. *(Added 2026-08-26 — the cap was specified with no reset
+   owner, so the budget would have been spent once and never refilled, silently degrading
+   every later stale-layer query to A\* fallback forever.)*
 3. If a query reads a stale layer and the rebuild budget is already spent, the query
    **degrades to authoritative A\*** — slower, never wrong.
 
@@ -236,7 +243,7 @@ Values live in `assets/data/pathfinding.json`, not hardcoded.
 | `DiagonalStepCost` | 14 | **fixed** | correctness | C1 pair — 10/14 ≈ √2, matched to the octile heuristic |
 | `StairStepCost` | 10 | 10–30 | gate | Raising it makes descent less casual without making it illegal |
 | `DoorTransitSurcharge` | 10 | 0–40 | feel | **Placeholder** representing open-in-transit time; RealTime only; tuned by Construction #16 |
-| `RegionRebuildsPerDispatch` | 1 | 1–4 | perf | Above 1, worst-case dispatch cost scales linearly (~0.26 ms each) |
+| `RegionRebuildsPerDispatch` | 1 | 1–4 | perf | Above 1, worst-case dispatch cost scales linearly (~0.26 ms each). **Per *dispatch*, not per frame**: RealTime delivers up to `SubStepCap` dispatches per frame, so a frame at speed 3 permits up to 3 rebuilds (~0.78 ms) at the default of 1. The per-frame ceiling is `SubStepCap`, not the speed dial. *(Noted 2026-08-26, ADR-0001 Amendment.)* |
 | `MaxPathBufferCells` | 512 | 256–2048 | perf | Caller buffer ceiling; overflow returns `BufferTooSmall`, never a truncated path |
 
 > **Deliberate exception to "gameplay values must be data-driven".** `OrthogonalStepCost`
