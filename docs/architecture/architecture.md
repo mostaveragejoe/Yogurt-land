@@ -561,10 +561,17 @@ stream from `splitmix64(RootSeed, Combat, EncounterId)` precisely so a reload re
 same encounter. The user ruling requires the encounter to **re-roll within its threat band on
 reload**, so pre-reveal scouting cannot be exploited (CD-15).
 
-These are directly contradictory. **ADR-0005 needs an amendment**: derive the combat stream
-from something that varies per load-and-retry — an encounter attempt counter or equivalent —
-rather than `EncounterId` alone. Owner: technical-director with Raid Trigger (#18).
-**Until amended, the spec and the ruling disagree, and ADR-0005 should not be promoted.**
+**RESOLVED 2026-08-26 — ADR-0005 Amendment 2026-08-26.** The contradiction was narrower than
+this section claimed: one sentence covered two different properties. **Resume determinism**
+(`TR-time-025`/AC-67 — Battle Persistence) restores the combat stream's `State` **directly** and
+never re-derives, so it was never affected. Only **cross-save re-derivation**, which happens in
+`BeginEncounter` at battle start, is the exploit — and closing it is what the ruling asks for.
+
+Resolution: `splitmix64(RootSeed, Combat-key, EncounterId, EncounterAttempt)`, with the attempt
+counter in a `user://` profile file — **never the colony save**, since a counter inside the save
+restores with it and re-rolls nothing. `TR-time-026` is **not** weakened: `EncounterAttempt`
+joins `RootSeed` as a declared determinism input. **No schedule cost, no lost guarantee.**
+QQ-01 is closed; this no longer blocks ADR-0005 promotion.
 
 ---
 
@@ -577,7 +584,7 @@ genuinely new outputs of this document.**
 
 | ID | Question | Owner | Blocks |
 |---|---|---|---|
-| **QQ-01** | Combat RNG re-roll vs identical replay (§7.5) | technical-director + #18 | ADR-0005 promotion |
+| ~~QQ-01~~ | ~~Combat RNG re-roll vs identical replay (§7.5)~~ — **CLOSED 2026-08-26** by ADR-0005 Amendment 2026-08-26. No longer blocks ADR-0005 promotion | technical-director + #18 | — |
 | **QQ-02** | Build ADR-0004's async checkpoint path to measure it — recommend an ADR-exempt spike | technical-director | ADR-0004 **and** ADR-0005 promotion |
 | **QQ-03** | Research/Technology, production chain, furniture — three systems with no index entry, required by the prosthetics ruling | producer + game-designer | Construction #16; next `/scope-check` |
 | **QQ-04** | Is reinforced mined or manufactured? Decides whether `BuildCost` is a scalar or a recipe | Construction #16 + creative-director | #16 authoring |

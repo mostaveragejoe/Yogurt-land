@@ -1,7 +1,63 @@
 # ADR-0005: Seeded RNG
 
 ## Status
-Proposed
+Proposed · **Amended 2026-08-26** (encounter re-roll on colony-save reload — QQ-01 closed)
+
+> ### Amendment 2026-08-26 — Encounter re-roll on colony-save reload (closes QQ-01)
+>
+> **User ruling, reaffirmed 2026-08-26: the encounter re-roll ships.** It is the mechanism that
+> stops a player scouting a raid's breach and composition, reloading, and preparing against
+> known information — the pre-reveal CD-15 forbids, and the erosion of Pillars 2 and 3 that
+> follows from it.
+>
+> **This costs nothing in schedule and nothing in guarantees.** The apparent conflict with
+> `TR-time-026` came from one sentence covering two different properties. Separated:
+>
+> | Property | Mechanism | Affected? |
+> |---|---|---|
+> | **Resume determinism** — restore a checkpoint, the battle continues identically (`TR-time-025`, AC-67, Battle Persistence) | Checkpoint restores the combat stream's `State` **directly**; never re-derives | **No — untouched** |
+> | **Cross-save re-derivation** — reload a colony save, get the *same* encounter | `BeginEncounter` re-derives from the key material at **battle start only** | **Yes — and this is precisely the exploit being closed** |
+>
+> `BeginEncounter` is the sole re-derivation point and runs at battle start. Checkpoint restore
+> restores `State` and never calls it. **Changing the derivation key therefore changes which
+> battle you get and can never affect resuming the battle you are in.** Battle Persistence is a
+> shipped player-facing feature, not a test convenience, and it is unaffected.
+>
+> **1. The Combat stream gains `EncounterAttempt` as derivation input.**
+> `Inc,State = splitmix64(RootSeed, Combat-key, EncounterId, EncounterAttempt)`. Same
+> forced-odd `Inc` rule, same `State`-only serialization; one more input to the mixer.
+>
+> **2. `EncounterAttempt` MUST NOT live in the colony save.** This is the whole point and the
+> easy thing to get wrong: a counter persisted *inside* the save is restored *with* the save, so
+> the reload reproduces the attempt number and **re-rolls nothing**. It lives in a
+> **per-installation profile file under Godot's `user://`**, written by the Godot composition
+> root and injected into the core as a plain `uint` — the identical pattern `RootSeed` already
+> uses, since `Hollowdeep.Core` has no file access and no entropy source. It increments each
+> time an encounter is **generated** for a given `EncounterId`.
+>
+> **3. `TR-time-026` is NOT weakened — its declared input set is corrected.** The requirement
+> reads *"given fixed seed **+ input sequence** … bit-identical."* `EncounterAttempt` becomes a
+> **declared determinism input** alongside `RootSeed`, rather than TR-time-026 taking a
+> carve-out. Given the same `(RootSeed, EncounterAttempt, input sequence)` the run is still
+> bit-identical and still fully testable. The guarantee keeps its strength; the input list
+> becomes honest. *(This supersedes the "needs an explicit carve-out" framing recorded in
+> `requirements-traceability.md` and `architecture-review-2026-08-26.md` — the sharper framing
+> was found while drafting this amendment.)*
+>
+> **4. Threat model — stated, not implied.** A determined player can edit the profile file and
+> reach a chosen attempt number. That is the **same posture ADR-0004 already records**: *"the
+> anti-save-scum design closes UI paths, not disk tampering."* The ruling closes the
+> reload-and-retry loop available through normal play; it does not claim tamper-proofing.
+>
+> **5. QA reproducibility — the one genuine cost, and its mitigation.** With the counter outside
+> the save, "load save X, trigger the raid, observe bug Y" is no longer reproducible from the
+> save file alone. **Obligation on Debug Console (#29)**: a command to read and pin
+> `EncounterAttempt`, and bug reports record it beside `RootSeed`. Determinism for testing is
+> fully preserved — it is pinned explicitly rather than implied by the save file.
+>
+> **6. GDD Open Question 3b is closed by this amendment**
+> (`time-authority-mode-switch.md:296`), and `TR-time-027` was never in conflict: it governs
+> mid-battle checkpoint resume, a different reload point (OQ 3a, closed 2026-08-02).
 
 ## Date
 2026-08-08
@@ -113,7 +169,10 @@ public enum RngStreamGroup { ColonyPersistent, CombatTransient }
 
 public sealed class SeededRngStore {
     public SeededRngStore(ulong rootSeed);                    // derives colony-persistent streams (odd Inc)
-    public void BeginEncounter(long encounterId);            // (re)derives the Combat stream from RootSeed+key+id
+    //   EncounterAttempt is injected per-encounter from the composition root (user:// profile
+    //   file, NEVER the colony save) — Amendment 2026-08-26
+    public void BeginEncounter(long encounterId, uint encounterAttempt);  // (re)derives Combat from
+                                                            // RootSeed+key+id+attempt (Amendment 2026-08-26)
     // draws (granted narrowly + mode-tagged per system at the composition root):
     public int    NextInt(RngStream s, int maxExclusive);
     public double NextDouble(RngStream s);
@@ -190,6 +249,18 @@ Greenfield — no existing RNG to migrate. This ADR establishes the only sanctio
 4. AC-67 harness (once ADR-0004's checkpoint exists): resume-from-checkpoint reproduces an unquit control run bit-for-bit.
 5. CI-grep: no `System.Random`/`RandomNumberGenerator`/`Guid.NewGuid`/time-based seeding in `src/core`.
 6. Zero-allocation test: a draw loop records 0 Gen0 collections.
+7. **Re-roll test (Amendment 2026-08-26)**: the same `(RootSeed, EncounterId)` with *different*
+   `EncounterAttempt` values produces **different** encounter rolls — the save-scum loop is
+   actually closed, not merely intended.
+8. **Re-roll determinism test**: the same `(RootSeed, EncounterId, EncounterAttempt)` produces
+   an **identical** roll across processes and machines — `TR-time-026` holds against its
+   corrected input set.
+9. **Counter-location test**: a colony save/load round-trip does **not** restore
+   `EncounterAttempt` — proving the counter lives outside the save and the reload actually
+   re-rolls. This is the test that catches the easy implementation error.
+10. **Resume-unaffected test**: checkpoint restore reproduces an unquit control run bit-for-bit
+    **regardless of `EncounterAttempt`**, confirming re-derivation and resume are independent
+    paths (guards the separation this amendment rests on).
 
 ## Related Decisions
 - ADR-0001 Time Authority (draws-inside-Tick rule; `TickSequence` anchor)

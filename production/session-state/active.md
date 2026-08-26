@@ -580,3 +580,52 @@ Files: `adr-0001` (status, amendment block, table row, `TimeContext` comment) ·
 
 **Matrix now 81 ✅ / 15 ⚠️ / 1 🔴 / 0 ❌.** The last known-wrong row is TR-time-026 (QQ-01,
 the RNG re-roll ruling) — that is step 3.
+
+## Step 3 DONE — ADR-0005 Amendment 2026-08-26 (encounter re-roll). QQ-01 CLOSED.
+
+**User ruling reaffirmed 2026-08-26: the re-roll ships.** It is vital to stopping players
+gaming the system, and the user asked whether build plans needed adjusting to fit it.
+
+**They do not. Zero schedule cost, zero lost guarantee.** The recorded conflict was one
+sentence covering two different properties:
+
+| Property | Mechanism | Affected? |
+|---|---|---|
+| Resume determinism (TR-time-025 / AC-67 / Battle Persistence) | Checkpoint restores combat-stream `State` **directly**; never re-derives | **No** |
+| Cross-save re-derivation | `BeginEncounter`, at **battle start only** | **Yes — the exploit** |
+
+`BeginEncounter` is the sole re-derivation point and checkpoint restore never calls it.
+
+### Premise correction the user should keep
+
+The user asked "the bit-identical thing only exists for testing, right? Build prototypes that
+way and add RNG after?" **Half wrong, and it matters**: determinism is the mechanism behind
+**Battle Persistence** — quit mid-battle, relaunch, resume exactly (a shipped player-facing
+feature, user ruling 2026-08-02), not a QA convenience. It must survive to ship, so
+"deterministic prototype, add RNG later" was not available. But it never conflicted with the
+re-roll, so nothing had to be delayed.
+
+### The decision
+
+`splitmix64(RootSeed, Combat-key, EncounterId, EncounterAttempt)`.
+
+- **`EncounterAttempt` MUST live outside the colony save** (`user://` profile file, injected
+  from the composition root like `RootSeed`). **This is the easy error**: a counter inside the
+  save restores with the save and re-rolls nothing — exploit survives while looking fixed.
+  Now a Forbidden Pattern + ADR-0005 validation criterion 9.
+- **TR-time-026 NOT weakened** — `EncounterAttempt` becomes a *declared determinism input*
+  beside `RootSeed`. Supersedes the earlier "needs a carve-out" framing in the review report
+  and traceability index.
+- **Threat model stated**: editing the profile file still reaches a chosen attempt. Same
+  posture ADR-0004 already records — closes UI paths, not disk tampering.
+- **QA cost + mitigation**: bug repro no longer follows from the save file alone. New
+  obligation on **Debug Console (#29)**: read/pin `EncounterAttempt`; record beside `RootSeed`.
+
+### State
+
+**Matrix 82 ✅ / 15 ⚠️ / 0 🔴 / 0 ❌ — no known-wrong rows remain.** Both conflicts the
+2026-08-26 review opened were closed the same day. QQ-01 closed in architecture.md §7.5 + §8;
+GDD OQ 3b closed; systems-index checklist item ticked.
+
+**ADR-0005 promotion is no longer blocked by QQ-01** — remaining gate is QQ-02 (build ADR-0004's
+async checkpoint path to measure it), shared with ADR-0004 as a co-promotion pair.

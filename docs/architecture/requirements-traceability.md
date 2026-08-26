@@ -8,13 +8,14 @@
 ## Coverage Summary
 
 - Total requirements: **97** (46 terrain, 51 time-authority)
-- ✅ Covered: **81** (84%)
+- ✅ Covered: **82** (85%)
 - ⚠️ Partial: **15** (15%)
-- 🔴 Known-wrong: **1** (1%)
+- 🔴 Known-wrong: **0**
 - ❌ Gap: **0**
 
-> **Updated 2026-08-26 (later same day)**: TR-time-039 closed by ADR-0001 Amendment 2026-08-26.
-> One known-wrong row remains — TR-time-026 (QQ-01, the combat RNG re-roll ruling).
+> **Updated 2026-08-26 (third pass)**: **both** known-wrong rows closed the same day —
+> TR-time-039 by ADR-0001 Amendment 2026-08-26, TR-time-026 by ADR-0005 Amendment 2026-08-26
+> (QQ-01). Every requirement now has coverage that matches the project's rulings.
 
 > **Count corrected 2026-08-26.** The previous header read 77 / 20 / 1, which summed to 98
 > against 97 requirements; the matrix body actually held 76 ✅ / 21 ⚠️; and the single ❌ was a
@@ -110,7 +111,7 @@
 | TR-time-023 | Checkpoint 8-item content scope | ADR-0004 | ✅ |
 | TR-time-024 | Non-blocking async checkpoint write mechanism | ADR-0004 | ✅ |
 | TR-time-025 | Checkpoint carries resumable RNG stream state | **ADR-0005 Seeded RNG** (PCG-XSH-RR; `State`-only serialization; combat stream captured at ADR-0004's `AwaitingPresentation → NextActor` beat) | ✅ |
-| TR-time-026 | Full determinism across cycle + save/load | ADR-0001, ADR-0004 (state); **ADR-0005** (RNG half). **🔴 Known-wrong**: ADR-0005 derives the Combat stream from `splitmix64(RootSeed, Combat, EncounterId)` specifically to make battle *N* reproduce across a colony save/load. The 2026-08-24 save-scum ruling requires the encounter to **re-roll** on reload. The **cross-save identical-replay clause** is the half in conflict. See the ruling note below | 🔴 |
+| TR-time-026 | Full determinism across cycle + save/load | ADR-0001, ADR-0004 (state); **ADR-0005 + its Amendment 2026-08-26**. **Conflict RESOLVED 2026-08-26 (QQ-01 closed).** The Combat stream derives from `splitmix64(RootSeed, Combat, EncounterId, EncounterAttempt)`, with the attempt counter held outside the colony save. **The requirement is not weakened**: `EncounterAttempt` joins `RootSeed` as a *declared determinism input*, so "given fixed seed + input sequence → bit-identical" still holds against the corrected input set. Resume determinism was never affected — checkpoint restore restores `State` and never re-derives | ✅ |
 | TR-time-027 | RNG draws only inside Tick; reload no re-roll | ADR-0001 (draws rule); **ADR-0005** (resume half). **Re-scoped 2026-08-26 — NOT overturned.** This row's "reload resumes **the same battle** with nothing re-rolled" governs the **mid-battle checkpoint resume** path, which restores `State` directly and is unaffected by the derivation key (Open Question 3a, closed 2026-08-02). The save-scum ruling concerns colony-save reload *before* a raid, a different reload point | ✅ |
 | TR-time-028 | Pause vs freeze programmatically distinguishable | ADR-0001 | ✅ |
 | TR-time-029 | No raid while paused (threat only in real steps) | ADR-0001 | ✅ |
@@ -145,7 +146,7 @@ checkpoint RNG stream state) closed on 2026-08-08 with ADR-0005.
 *(The previous version of this section still listed TR-time-025 as an open gap, duplicating a
 row the matrix above already marked ✅. Removed 2026-08-26.)*
 
-## Known-Wrong Coverage — 1 row (was 2)
+## Known-Wrong Coverage — 0 rows (both closed 2026-08-26)
 
 Distinct from Partial: an ADR **does** address these, and its answer is contradicted by a later
 ruling or a downstream spec. These are the review's blocking findings.
@@ -179,7 +180,7 @@ corrected in the same changeset.
    cliff. Resolved by budgeting per distinct `TickSequence` via a read-only accessor granted at
    the composition root.
 
-### 🔴 TR-time-026 — combat RNG re-roll vs identical replay (QQ-01)
+### ✅ TR-time-026 — combat RNG re-roll vs identical replay (QQ-01 — RESOLVED 2026-08-26)
 
 The 2026-08-24 user ruling on the save-scum hole: reloading a colony save before a raid lets
 the player scout the exact breach and composition, then reload and prepare against known
@@ -194,15 +195,29 @@ TR-time-027. It does not — that row governs mid-battle checkpoint resume, a di
 point, closed by Open Question 3a on 2026-08-02. Only TR-time-026's cross-save clause is
 affected.
 
-**Unstated consequence, recorded here 2026-08-26.** The fix is described repo-wide as "derive
-from an encounter attempt counter or equivalent." But an attempt counter persisted **in the
-colony save** restores with the save and re-rolls nothing — the exploit survives. To vary per
-load-and-retry the counter must deliberately survive **outside** the save file (profile- or
-session-scoped). At that point "bit-identical replay from a fixed seed and input sequence" is
-no longer true by construction, so **TR-time-026 needs an explicit carve-out, not merely a
-different derivation key**, and ADR-0005's validation criterion 3 needs restating.
+**RESOLVED 2026-08-26 — ADR-0005 Amendment 2026-08-26. User reaffirmed the re-roll ships.**
 
-Owner: technical-director with Raid Trigger (#18). Blocks ADR-0005 promotion.
+The conflict was narrower than recorded, because one sentence covered two different properties:
+
+| Property | Mechanism | Affected by the ruling? |
+|---|---|---|
+| **Resume determinism** (`TR-time-025`, AC-67, Battle Persistence) | Checkpoint restores the combat stream's `State` **directly**; never re-derives | **No** |
+| **Cross-save re-derivation** | `BeginEncounter` re-derives at **battle start only** | **Yes — the exploit being closed** |
+
+`BeginEncounter` is the sole re-derivation point. Checkpoint restore never calls it. So the
+derivation key decides *which battle you get* and can never affect *resuming the battle you are
+in*. **No schedule cost; Battle Persistence untouched.**
+
+Resolution: `splitmix64(RootSeed, Combat-key, EncounterId, EncounterAttempt)`, the counter held
+in a `user://` profile file — **never the colony save**, since a counter inside the save is
+restored with it and re-rolls nothing (ADR-0005 validation criterion 9 exists to catch exactly
+that error).
+
+**Framing correction.** An earlier pass of this document said TR-time-026 "needs an explicit
+carve-out." Superseded: `EncounterAttempt` becomes a **declared determinism input** alongside
+`RootSeed`, so the requirement keeps full strength against a corrected input set rather than
+being weakened. Testing determinism is preserved — pinned explicitly via the Debug Console (#29)
+rather than implied by the save file.
 
 ## Partial Coverage — deferred to unwritten downstream specs
 
@@ -237,3 +252,4 @@ None. No requirement has been retired; TR-terrain-042's *implementation* was sup
 | 2026-08-24 | 97 | 76 | 21 | — | 0 | Hand-patch at gate check (header recorded 77/20/1 in error) |
 | 2026-08-26 | 97 | 80 | 15 | 2 | 0 | Full re-run, 6 ADRs. Count corrected; 4 rows closed; TR-time-039 conflict opened; TR-time-026/027 re-scoped |
 | 2026-08-26 (b) | 97 | 81 | 15 | 1 | 0 | TR-time-039 resolved by ADR-0001 Amendment 2026-08-26 |
+| 2026-08-26 (c) | 97 | 82 | 15 | 0 | 0 | TR-time-026 resolved by ADR-0005 Amendment 2026-08-26 (QQ-01). **No known-wrong rows remain** |
