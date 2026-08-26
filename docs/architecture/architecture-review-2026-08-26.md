@@ -150,8 +150,36 @@ its own decisions have already superseded, in locations an implementer will act 
 | 5 | **ADR-0004's dependency field is stale twice** — calls ADR-0002 "(Proposed, amended)" and names the "**Seeded RNG ADR (pending)**" rather than ADR-0005, which has existed since 2026-08-08 | Dependency ordering derived from ADR-0004's own header is wrong |
 | 6 | **ADR-0006's migration plan is 4-of-5 applied.** Item 1 is not done: `design/quick-specs/terrain-rendering-cutaway.md:125` still reads `public void OnTerrainChanged(/* batch */);` | That placeholder is the exact defect ADR-0006 was written to close, and the ADR cites it by line number as its motivating evidence |
 
-Items 2, 4 and 5 were verified against every file that names ADR-0002 or ADR-0006; items 1,
-3 and 6 are single-line quotations from the files named.
+**Undercount corrected 2026-08-26, after fixing.** A repo-wide sweep run while applying these
+fixes found **nine further live-document instances of the same class**, which the review's
+first pass missed because it only searched for stale *ADR-0002* and *ADR-0006* status claims —
+it never checked whether ADR-0001's status was recorded correctly by its dependents:
+
+| # | Defect | Note |
+|---|---|---|
+| 7 | **ADR-0003:41 records its dependency ADR-0001 as "(Proposed)"** | ADR-0001 has been **Accepted since 2026-07-26** — stale for two months, and the most consequential of the set, since ADR-0003 is itself Accepted and Foundation-layer |
+| 8 | ADR-0003:41 and :404 both record ADR-0002 as "(Proposed)" | Two more instances in the same file |
+| 9 | `cross-cutting-contracts.md:4` — ADR-0002 "Proposed; spike-validated, awaiting the frame-rate clause on target hardware" | The contracts annex is a primary reference doc; the clause it names has passed |
+| 10 | ADR-0004:29 Ordering Note — "Do not promote ADR-0002 until checkpoint cadence is measured on target hardware" | Inverted by the 2026-08-24 split: that clause now gates **ADR-0004**, not ADR-0002 |
+| 11 | ADR-0004:196 Related Decisions — "Seeded RNG ADR (pending)" | Second instance of defect 5 in the same file |
+| 12 | `terrain-data-model.md:455` — "the frame-rate clause does not yet exist… the last gate before ADR-0002 moves from Proposed to Accepted" | The run happened 2026-08-24 and passed |
+| 13 | **ADR-0002:60 `Depends On` records ADR-0001 as "(Proposed)"** | Same two-month-stale ADR-0001 status, in the other Foundation ADR |
+| 14 | ADR-0002:436 Related Decisions — ADR-0001 "(Proposed)" | Second instance in the same file |
+| 15 | ADR-0003:403 Related Decisions — ADR-0001 "(Proposed)" | Third file-internal duplicate |
+
+**Total: 15, all fixed.** **Five of the fifteen misrecorded ADR-0001** — Accepted 2026-07-26 —
+as Proposed, across both other Foundation ADRs. Since `/story-readiness` auto-blocks stories on
+a Proposed governing ADR, the repo was carrying a false block on the two most-depended-on
+decisions in the project. Correctly-historical occurrences were left untouched — session logs,
+the dated spike note, the dated QA-evidence README, the 2026-08-03 change-impact doc, the
+2026-08-08 review, and ADR-0006's own quotations of the `/* batch */` placeholder as its
+motivating evidence.
+
+**Method note worth carrying**: the first pass enumerated defects by reading the documents a
+reviewer would naturally reach for. It took a mechanical `grep` for the *pattern* — every
+co-occurrence of an ADR id with "Proposed" — to find the rest. Six of twelve were invisible to
+reading and obvious to grep. Future runs of this skill should grep the pattern, not just read
+the documents.
 
 ---
 

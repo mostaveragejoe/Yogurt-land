@@ -23,10 +23,10 @@
 
 | Field | Value |
 |-------|-------|
-| **Depends On** | ADR-0001 (Accepted, amended 2026-08-03 — snapshot contract and resume path delegated here); ADR-0002 (Proposed, amended — `TerrainSnapshot` reuse, buffer strategy); ADR-0003 (Accepted, amended — side-table serialization, occupancy rebuild); **Seeded RNG ADR (pending)** for item 3 of the content scope — this ADR reserves the slot, that ADR defines the stream format |
+| **Depends On** | ADR-0001 (Accepted, amended 2026-08-03 — snapshot contract and resume path delegated here); ADR-0002 (**Accepted** 2026-08-24, amended — `TerrainSnapshot` reuse, buffer strategy); ADR-0003 (Accepted, amended — side-table serialization, occupancy rebuild); **ADR-0005 Seeded RNG (Proposed)** for item 3 of the content scope — this ADR reserves the slot, ADR-0005 defines the stream format; the two are a declared co-promotion pair. *(Statuses corrected 2026-08-26 at `/architecture-review`: ADR-0002 was still listed Proposed, and ADR-0005 was still named as an unwritten "pending" ADR though it has existed since 2026-08-08.)* |
 | **Enables** | Save/Load quick-spec (#6); all battle-checkpoint stories; GDD AC-67's determinism test |
 | **Blocks** | Save/Load quick-spec (#6) — it must not be specced before this ADR and the Seeded RNG ADR exist |
-| **Ordering Note** | The non-RNG scope is implementable before the Seeded RNG ADR lands; AC-67 (deterministic resume) needs both. Do not promote ADR-0002 until checkpoint cadence is measured on target hardware. |
+| **Ordering Note** | The non-RNG scope is implementable independently of ADR-0005; AC-67 (deterministic resume) needs both, and the two are a declared **co-promotion pair**. *(Corrected 2026-08-26: this note previously read "Do not promote ADR-0002 until checkpoint cadence is measured on target hardware" — the 2026-08-24 amendment split criterion 5 and moved that clause here, so it gates **this** ADR, not ADR-0002, which is Accepted.)* |
 
 ## Context
 
@@ -193,7 +193,7 @@ Nothing ships yet — the save/load spike validated the colony path only. Save/L
 ## Related Decisions
 - ADR-0001/0002/0003 — Amendments 2026-08-03 (Battle Persistence); this ADR discharges the obligations they delegate
 - `docs/architecture/change-impact-2026-08-03-time-authority-mode-switch.md` — decision record this ADR implements (§3, §4)
-- Seeded RNG ADR (pending) — owns stream format; blocking for Save/Load #6
+- **ADR-0005 Seeded RNG (Proposed** 2026-08-08**)** — owns the stream format; blocking for Save/Load #6; co-promotes with this ADR
 - Cross-cutting contract #2 (serialization) — mode-tagging rule as amended
 - Open design hole routed to creative-director: colony manual saves still allow pre-raid reload; decide before Save/Load #6
 

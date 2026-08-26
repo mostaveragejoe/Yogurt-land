@@ -505,7 +505,7 @@ Prosthetics are unlockable technology (not a scope candidate) · camera is one f
    which point bit-identical-replay-from-fixed-seed is false by construction, so TR-time-026
    needs a **carve-out**, not just a different derivation key.
 
-### Six documentation-integrity defects — NOT yet fixed
+### Documentation-integrity defects — 15 found, ALL FIXED 2026-08-26 (commit follows)
 
 1. **ADR-0002 contradicts its own header** — line 4 says Accepted (2026-08-24); lines 6 and 416
    still say it "remains Proposed." Stories auto-block on Proposed ADRs and ADR-0002 gates
@@ -518,6 +518,14 @@ Prosthetics are unlockable technology (not a scope candidate) · camera is one f
    rather than ADR-0005.
 6. **ADR-0006 migration item 1 unapplied** — `terrain-rendering-cutaway.md:125` still reads
    `OnTerrainChanged(/* batch */)`, the exact placeholder ADR-0006 exists to close.
+
+**All six above are FIXED, plus nine more of the same class found by a repo-wide grep while
+fixing them (15 total).** The nine the first pass missed: ADR-0002:60/436, ADR-0003:41/403/404,
+`cross-cutting-contracts.md:4`, ADR-0004:29/196, `terrain-data-model.md:455`.
+**Five of the fifteen recorded ADR-0001 as Proposed** — Accepted since 2026-07-26 — inside both
+other Foundation ADRs, so the repo carried a false story-block on its two most-depended-on
+decisions. **Method lesson: grep the pattern, do not just read the documents.** Six of twelve,
+then three more, were invisible to reading and obvious to grep.
 
 ### Registry scope gap
 

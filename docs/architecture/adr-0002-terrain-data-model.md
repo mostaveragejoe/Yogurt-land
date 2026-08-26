@@ -3,7 +3,7 @@
 ## Status
 **Accepted** (2026-08-24) — every terrain clause of validation criterion 5 measured and passed on target hardware. · **Amended 2026-08-03** (Battle Persistence) · **Amended 2026-08-24** (criterion 5 split; sparse damage overlay supersession)
 
-*(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the terrain spike validates chunk size, memory footprint, allocation behavior, and render-extraction cost. The Tier 0 terrain spike has now run — see **Spike Results (2026-07-25)** below. Every measurable criterion passed and three tuning items are fixed. The **frame-rate clause closed on target hardware 2026-08-24** (p99 ~2 ms against a 16.6 ms budget); promotion to Accepted now awaits only the **checkpoint clause** that the Amendment below adds to criterion 5, which has no implementation yet.)*
+*(Written per the systems-index sequencing: authored as Proposed before the Tier 0 spikes; promoted to Accepted when the terrain spike validates chunk size, memory footprint, allocation behavior, and render-extraction cost. The Tier 0 terrain spike has now run — see **Spike Results (2026-07-25)** below. Every measurable criterion passed and three tuning items are fixed. The **frame-rate clause closed on target hardware 2026-08-24** (p99 ~2 ms against a 16.6 ms budget). **Promoted to Accepted 2026-08-24**: the Amendment below retires the checkpoint coupling and moves that clause to ADR-0004, where the risk actually lives.)*
 
 > ### Amendment 2026-08-24 — Criterion 5 split, and the sparse damage overlay supersession
 >
@@ -57,7 +57,7 @@
 
 | Field | Value |
 |-------|-------|
-| **Depends On** | ADR-0001 Time Authority (Proposed) — terrain mutations occur only inside authority-driven execution; the mutation-window assertion is provided by `TimeAuthorityManager` |
+| **Depends On** | ADR-0001 Time Authority (**Accepted** 2026-07-26) — terrain mutations occur only inside authority-driven execution; the mutation-window assertion is provided by `TimeAuthorityManager` |
 | **Enables** | ADR-0003 Entity Data Ownership (entities live at `CellCoord`s; occupancy index and door boundary defined there); Pathfinding, Spatial Query/LOS, Terrain Rendering & Cutaway quick-specs; Excavation+Construction, Material-Tier Destructibility GDDs; Map Authoring quick-spec |
 | **Blocks** | Tier 0 terrain spike (implements this ADR); every system in the index that lists Terrain Data Model as a dependency (11 of 35 entries) |
 | **Ordering Note** | Proposed BEFORE the terrain spike by design; the spike validates chunk size, layout, and extraction strategy. The Terrain Data Model **GDD** additionally waits for spike numbers per the sequencing policy — this ADR is the data contract, the GDD is the gameplay-facing rules. **Shared primitives**: `CellCoord`, `ChunkCoord`, and `EntityId` live in a foundation-primitives namespace (`Hollowdeep.Core.Primitives`) that both ADR-0001 and ADR-0002 consume — neither ADR's assembly depends on the other for its types (companion correction to ADR-0001's dependency note) |
@@ -413,7 +413,7 @@ GridMap at octant 32 wins **both** axes: 2.6× fewer draw calls and ~240× cheap
 
 **Frame-rate clause — CLOSED 2026-08-24 (target hardware).** Re-run on an RTX 3060 Ti (Godot 4.7.2 mono, `gridmap_two` at octant 32, sustained 1800-frame window at 8 digs/frame, vsync off): frame-time **p99 2.167 ms on Vulkan and 2.024 ms on D3D12** against the 16.6 ms budget — ~8× headroom — with **0 Gen0/Gen1/Gen2 collections** and 32.7–36.1 B/frame. Draw calls came in at exactly the predicted 32 and `render_matches_model=True` held through 30 s of continuous digging. Evidence: `production/qa/evidence/terrain-target-hardware-2026-08-24/`; detail and caveats in `prototypes/terrain-spike/SPIKE-NOTE.md`. Two caveats recorded rather than waved through: a single ~50 ms frame per run (1 in 1800, beyond p99, reads as environmental — one confirming re-run wanted), and video memory reported at 43–50 MB where `buffer_mem_mb` matched the recorded 16.23 MB, i.e. the earlier figure measured terrain buffers and was mislabelled "video memory" (corrected in technical-preferences).
 
-**Still open before promotion to Accepted:** the **checkpoint clause** the 2026-08-03 amendment added to criterion 5 — checkpoint snapshot+write at per-activation combat cadence on ADR-0004's double-buffered async path, confirming no frame-time impact during combat. **No implementation of that path exists yet**, so criterion 5 is *partially* discharged (two clauses closed, one outstanding) and this ADR **remains Proposed**, exactly as the amendment requires. Also unmeasured: GridMap collision/physics cost (shapes disabled; the grid is not physics-driven) and procgen-era sparse chunk storage (out of MVP scope).
+**Moved to ADR-0004 (Amendment 2026-08-24):** the **checkpoint clause** the 2026-08-03 amendment had added to criterion 5 — checkpoint snapshot+write at per-activation combat cadence on ADR-0004's double-buffered async path, confirming no frame-time impact during combat. No implementation of that path exists yet, and it is now **ADR-0004's gate, not this ADR's**: every terrain clause of criterion 5 passed on target hardware, so this ADR is **Accepted**. *(Corrected 2026-08-26 at `/architecture-review` — this paragraph still read "this ADR **remains Proposed**" after the 2026-08-24 amendment promoted it, and `/story-readiness` auto-blocks stories on a Proposed ADR.)* Also unmeasured: GridMap collision/physics cost (shapes disabled; the grid is not physics-driven) and procgen-era sparse chunk storage (out of MVP scope).
 
 ## Validation Criteria
 1. Terrain assembly has **zero Godot references** (CI grep) and its full unit suite runs headless: mutation→event pairing with correct `Previous`, damage clamp/destroy-at-zero, repair clamp-at-max, bulk `Apply` rule-3 semantics (reject-on-invalid, duplicate-cell rejection, no-op dropping, order preservation), passability, bounds, mutation-window assertion firing on out-of-window writes.
@@ -433,7 +433,7 @@ GridMap at octant 32 wins **both** axes: 2.6× fewer draw calls and ~240× cheap
 - **Zone data structure** (sparse cell sets for stockpiles/home areas) → Stockpile & Hauling quick-spec; never terrain state.
 
 ## Related Decisions
-- ADR-0001 Time Authority (Proposed) — mutation-window provider; writer-set-per-authority rule; passive-store behavior; companion edits listed in Migration Plan
+- ADR-0001 Time Authority (**Accepted** 2026-07-26) — mutation-window provider; writer-set-per-authority rule; passive-store behavior; companion edits listed in Migration Plan
 - ADR-0003 Entity Data Ownership (pending) — the entity/cell boundary defined by the firewall table; door boundary; occupancy index; item/stack reservations
 - Seeded RNG ADR (pending) — terrain itself draws no RNG; map generation (Alpha) will
 - `design/gdd/systems-index.md` — cell-record mandate, God-object risk entry, cross-cutting contracts #2 and #3, CD-1/CD-5/CD-7 notes

@@ -122,7 +122,11 @@ public partial class TerrainRenderer : Node3D
     public int  WindowDepth { get; private set; }   // default 3 (C3)
 
     public void SetFocusLayer(int z);               // clamped to world bounds
-    public void OnTerrainChanged(/* batch */);      // marks octants dirty; ADR-0002 rule: copy out synchronously
+    // ITerrainChangeSubscriber (ADR-0006). Registered at priority 60 by the composition
+    // root; unsubscribes in _ExitTree (ADR-0006 rules 3, 9). The `in` modifier is part of
+    // the interface member -- dropping it fails to implement it, it does not overload.
+    public void OnTerrainChanged(in TerrainChangeBatch batch);  // marks octants dirty; copy out synchronously, the batch dies at end of call
+    public void OnWorldReloaded();                  // full rebuild -- never incremental
     public void RebuildAll();                       // WorldReloaded / load path
 }
 

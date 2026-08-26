@@ -1,7 +1,7 @@
 # Cross-Cutting Contracts (Annex)
 
 **Status**: Active (binds all MVP specs and stories) · **Date**: 2026-07-25 · **Owner**: technical-director
-**Sources**: ADR-0001 (Time Authority — **Accepted**), ADR-0002 (Terrain Data Model — Proposed; spike-validated, awaiting the frame-rate clause on target hardware), ADR-0003 (Entity Data Ownership — **Accepted**). All three spike-validated 2026-07-25/26.
+**Sources**: ADR-0001 (Time Authority — **Accepted**), ADR-0002 (Terrain Data Model — **Accepted** 2026-08-24; the frame-rate clause passed on target hardware and the checkpoint clause moved to ADR-0004), ADR-0003 (Entity Data Ownership — **Accepted**). All three spike-validated 2026-07-25/26.
 **Hard cap** (systems-index mandate): one page, these three contracts, **no fourth**. A concern that doesn't fit one of these three gets its own ADR — it does not grow this page.
 
 Every simulation-bearing GDD, quick-spec, and story is written against — and reviewed against — these three contracts.

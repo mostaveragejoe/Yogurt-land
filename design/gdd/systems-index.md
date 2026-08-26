@@ -120,7 +120,7 @@ Hollowdeep is a real-time colony sim on a layered floor+wall tile grid that swit
 | Order | Item | Type | Priority | Layer | Agent(s) | Est. |
 |-------|------|------|----------|-------|----------|------|
 | 1 | ADR-001 Time Authority | ADR (**Accepted** 2026-07-26) | MVP | Foundation | technical-director, godot-specialist | S |
-| 2 | ADR-002 Terrain Data Model | ADR (Proposed; **spike-validated 2026-07-25** — numbers landed; target-hardware criterion-5 run is the only gate left) | MVP | Foundation | technical-director, godot-specialist | S |
+| 2 | ADR-002 Terrain Data Model | ADR (**Accepted** 2026-08-24; spike-validated 2026-07-25, and every terrain clause of criterion 5 measured on target hardware 2026-08-24 — p99 ~2 ms vs a 16.6 ms budget, 0 GC. The checkpoint clause moved to ADR-0004) | MVP | Foundation | technical-director, godot-specialist | S |
 | 3 | ADR-003 Entity Data Ownership | ADR (**Accepted** 2026-07-26) | MVP | Foundation | technical-director, lead-programmer | S |
 | 4 | Cross-cutting contracts annex + serialization contract | Contract page | MVP | Foundation | technical-director | S |
 | 5 | Dev Tools / Debug Console | Build (Tier 0) | Tier 0 | — | gameplay-programmer | S |
