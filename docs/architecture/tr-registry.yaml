@@ -24,13 +24,35 @@
 #
 # STATUS VALUES: active | deprecated | superseded-by: TR-[system]-NNN
 
-version: 2
-last_updated: "2026-08-08"
+version: 3
+last_updated: "2026-08-26"
 
 # First real population: /architecture-review 2026-08-08.
 # 97 requirements extracted from the two foundation GDDs.
 #   system: terrain -> design/gdd/terrain-data-model.md (46)
 #   system: time    -> design/gdd/time-authority-mode-switch.md (51)
+#
+# /architecture-review 2026-08-26 (full re-run): NO new TR-IDs, NO revisions, NO deprecations.
+# Both foundation GDDs changed since 2026-08-08, but every change was an ownership-table
+# refinement or an open-question closure (damage breakpoints decided, cutaway boundary closed,
+# dig-cost ownership moved to the Material Catalog, accessibility path corrected) -- none
+# added, removed or reworded a technical requirement. Coverage moved; the baseline did not.
+#
+# NOT registered, by decision deferred to the user (see architecture-review-2026-08-26.md,
+# "Registry Scope Gap"): the four quick-specs in design/quick-specs/ now carry 71 acceptance
+# criteria between them with 1 TR-ID reference total. /create-stories embeds a TR-ID per story
+# and /story-readiness validates it, so a quick-spec-sourced story currently has nothing to
+# cite. Registering ~71 IDs unilaterally was out of scope for a review pass.
+#
+# KNOWN-WRONG COVERAGE (requirement text is correct; the ADR answer is not):
+#   TR-time-039 -- ADR-0001:195 vs design/quick-specs/pathfinding-navigation.md S4
+#   TR-time-026 -- ADR-0005 EncounterId derivation vs the 2026-08-24 save-scum ruling (QQ-01)
+#
+# STALE-GDD NOTE (registry text is faithful to the GDD; the GDD is what needs revising):
+#   TR-time-017 -- PostEncounterReconcile duties. ADR-0003 Amendment 2026-08-24 adds injury
+#   application and BattlesSurvived, and forbids resolving downed colonists. The time-authority
+#   GDD Rule 8 has not caught up, so this entry is NOT reworded here -- see the GDD Revision
+#   Flag in the review report.
 
 requirements:
 

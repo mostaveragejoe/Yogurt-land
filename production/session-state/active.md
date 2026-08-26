@@ -472,3 +472,73 @@ Prosthetics are unlockable technology (not a scope candidate) · camera is one f
 - **Pose extensions as options; do not apply them unilaterally.** The user corrected this twice.
 - **Do not dramatize ordinary gaps in an early concept.** Missing systems get a line in §8 and the work continues.
 - The four quick-specs are **the easy half** — five of six documented systems serve Pillar 1. Combat and rebuild are unwritten.
+
+## Session Extract — /architecture-review 2026-08-26
+
+- **Verdict: CONCERNS** (full mode, 2 GDDs, 6 ADRs, 4 quick-specs)
+- **Requirements: 97 total — 80 covered, 15 partial, 2 known-wrong, 0 gaps.** Previous header
+  read 77/20/1, which summed to 98; matrix body actually held 76/21. Corrected.
+- **CI IS GREEN** — carried blocker from 2026-08-24/25 discharged. 4/4 runs `success` on
+  `main`, latest `d364992`; both architecture grep gates pass.
+- New TR-IDs registered: **None** — both GDDs changed since 2026-08-08, but every change was an
+  ownership-table refinement or open-question closure, not a new requirement.
+- **GDD revision flags: time-authority-mode-switch.md** (Rule 8 reconcile duties stale vs
+  ADR-0003's 2026-08-24 Downed/injury amendment). Systems-index status change to
+  `Needs Revision` was drafted but **NOT applied** — needs approval.
+- Top ADR gaps: **None net-new.** Remaining work is amendments + promotions, not new ADRs.
+
+### The two blocking findings
+
+1. **🔴 Pathfinding registration conflict — NEW, previously unrecorded.** ADR-0001:195
+   (Accepted) lists Pathfinding in the tickable table under both authorities; the Pathfinding
+   quick-spec §4 (2026-08-24) says it "registers no `ITickable`, owns no `Tick()`." A downstream
+   quick-spec overturned an Accepted Foundation ADR with no amendment — the **same governance
+   failure the 2026-08-24 gate-check named for the sparse damage overlay**, recurring. The
+   quick-spec is probably right (ADR-0006 dispatches invalidation at priority 10, so a pure
+   query service needs no tick). Recommended fix: amend ADR-0001. `architecture.md` §7.5's
+   "the one open conflict" is now two.
+2. **🔴 QQ-01 re-scoped.** Only **TR-time-026**'s cross-save clause conflicts with the
+   save-scum ruling. **TR-time-027 is NOT overturned** — it governs mid-battle checkpoint
+   resume, a different reload point (OQ 3a, closed 2026-08-02). Reclassified ✅.
+   **Unstated consequence now recorded**: an attempt counter stored *in the colony save*
+   restores with the save and re-rolls nothing. It must survive **outside** the save file — at
+   which point bit-identical-replay-from-fixed-seed is false by construction, so TR-time-026
+   needs a **carve-out**, not just a different derivation key.
+
+### Six documentation-integrity defects — NOT yet fixed
+
+1. **ADR-0002 contradicts its own header** — line 4 says Accepted (2026-08-24); lines 6 and 416
+   still say it "remains Proposed." Stories auto-block on Proposed ADRs and ADR-0002 gates
+   11 of 35 systems, so line 416 falsely blocks all terrain work.
+2. `technical-preferences.md:97` records ADR-0002 as Proposed; line 101's "Next" is stale.
+3. `systems-index.md:123` records ADR-002 as Proposed — third such location.
+4. **ADR-0006 missing from the Architecture Decisions Log** in `technical-preferences.md`,
+   while three of its rules are already Forbidden Patterns at lines 72–74.
+5. ADR-0004's dependency field calls ADR-0002 "Proposed" and names "Seeded RNG ADR (pending)"
+   rather than ADR-0005.
+6. **ADR-0006 migration item 1 unapplied** — `terrain-rendering-cutaway.md:125` still reads
+   `OnTerrainChanged(/* batch */)`, the exact placeholder ADR-0006 exists to close.
+
+### Registry scope gap
+
+The 4 quick-specs carry **71 ACs and 1 TR-ID between them**. `/create-stories` embeds a TR-ID
+and `/story-readiness` validates it, so quick-spec-sourced stories have nothing to cite.
+Decide before story authoring: register quick-spec ACs as TR-IDs, or exempt them.
+
+### Clean
+
+- Engine compatibility: **6/6 ADRs** have the section, all pin 4.7.1, all declare Post-Cutoff
+  APIs: None, **0 deprecated-API references** (all 22 entries cross-checked).
+- Dependency graph acyclic; **ADR-0003 status inversion resolved**. ADR-0004◄──►ADR-0005 is a
+  declared co-promotion pair, not a cycle. ADR-0006 blocked on QQ-24 (composition root).
+- **Pre-gate checklist all ✅** — `/gate-check pre-production` is reachable.
+
+### Not done
+
+- **godot-specialist consultation skipped** — this session is configured not to spawn subagents
+  unless asked. When next run, re-confirm the 2026-08-08 findings 1 (`File.Move(overwrite:true)`
+  vs `File.Replace`) and 4 (`SetItemMeshTransform` text precision) were folded.
+- `architecture.md` §7.4 (77/20/0) and §7.5 ("the one open conflict") are owed corrections;
+  outside this skill's write scope.
+
+- Report: `docs/architecture/architecture-review-2026-08-26.md`
