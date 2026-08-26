@@ -1,7 +1,114 @@
 # ADR-0004: Battle Checkpoint Architecture
 
 ## Status
-**Proposed**
+**Proposed** · **Amended 2026-08-26** (QQ-25 buffer framing; QQ-26 lock boundary + join timeout)
+
+> ### Amendment 2026-08-26 — Container format and threading boundary (closes QQ-25, QQ-26)
+>
+> Both were LP-FEASIBILITY findings rated **HIGH**: QQ-25 *"blocks ADR-0004/0005 implementation
+> entirely"*, QQ-26 *"blocks ADR-0004 implementation"*. They are settled here so the async path
+> (QQ-02) can be built and measured.
+>
+> ---
+>
+> #### QQ-25 — Multi-owner buffer framing
+>
+> §1 has **7 independently-owned content items** writing into one pooled buffer via
+> `SnapshotInto`, with no ordering, length-prefixing or per-section versioning defined — so
+> `Restore` could not find any owner's section.
+>
+> **The premise that makes this easy: a battle checkpoint is transient, not archival.** It
+> exists for the duration of one battle and is cleared at battle end. It does **not** need the
+> forward/backward compatibility a colony save needs, so the container can demand exact schema
+> agreement and refuse anything else.
+>
+> **Container layout** — a section-framed file, written in a fixed declared order and read by id:
+>
+> ```
+> [FileHeader]
+>   magic "HDBC"            u32   container discriminator
+>   containerVersion        u16   this framing's own version
+>   buildFingerprint        u64   schema fingerprint of the writing build (see below)
+>   writerId                u16   AC-68 provenance, enforced at WRITE time (§ unchanged)
+>   tickSequence            u64   ┐ in-file monotonic save ordering (§2, never mtime)
+>   saveOrdinal             u32   ┘
+>   sectionCount            u16
+> [Section] × sectionCount
+>   ownerId                 u16   stable, append-only OwnerId enum
+>   ownerSchemaVersion      u16   owned and bumped by that owner alone
+>   byteLength              u32   payload length, back-patched by the writer
+>   payload                 byte[byteLength]
+> ```
+>
+> **Rules:**
+>
+> 1. **`OwnerId` is a stable append-only enum**, never renumbered — the same discipline
+>    `RngStream` keys (ADR-0005) and `EntityId` kinds (ADR-0003) already use. Precedent exists;
+>    this introduces no new concept.
+> 2. **Owners never see the file buffer.** The checkpoint writer hands each owner a
+>    **section-scoped writer**, records the start offset, lets the owner write, then back-patches
+>    `byteLength`. Handing seven owners a raw `IBufferWriter<byte>` means one overrun silently
+>    corrupts the next owner's section — the exact bug class this framing exists to prevent.
+>    `SnapshotInto`'s obligation on ADR-0002/0003 is therefore *section-scoped*, not file-scoped.
+> 3. **Write order is fixed and declared** (ascending `OwnerId`) so output is byte-deterministic
+>    for identical state — required by ADR-0002 rule 8's determinism posture and testable.
+>    **Read order is whatever the file says**, dispatched by `ownerId` to the registered owner.
+> 4. **An owner with nothing to write still emits a zero-length section.** "Absent" and "empty"
+>    must be distinguishable, or a silently-skipped owner reads as legitimately empty.
+> 5. **`ownerSchemaVersion` is owned by that owner alone** and bumped when its payload layout
+>    changes — no central registry to keep in sync, and one owner's change cannot invalidate
+>    another's parser.
+> 6. **`buildFingerprint` is the hash of the full `(OwnerId, ownerSchemaVersion)` set.** One
+>    value proves every section parser agrees, checked before a single payload byte is read.
+> 7. **Any of these is a loud fallback, never a partial restore**: fingerprint mismatch, unknown
+>    `ownerId`, duplicate section, missing required section, `byteLength` overrunning the file,
+>    or trailing bytes after the last section. All route to the **existing corrupt-checkpoint
+>    path** (§ loud fallback → next-newest valid save → battle restarts from its start). A
+>    partially-restored battle is worse than a restarted one.
+>
+> **Player-visible consequence, stated rather than buried**: if the game updates while a battle
+> is suspended, the fingerprint changes and the checkpoint will not load — the player falls back
+> to the battle-start autosave and replays that battle. This is the correct trade for a transient
+> file (the alternative is maintaining migration paths for combat-transient state that lives for
+> one battle), and it reuses a recovery path that already exists. **It is not silent**: the
+> existing loud-fallback dialog covers it.
+>
+> ---
+>
+> #### QQ-26 — Lock boundary and join timeout
+>
+> §3 requires *"the sim never waits"* and notes only that *"buffer handoff … is guarded by a lock
+> or interlocked exchange"*. The obvious implementation holds that lock across gzip/write/fsync,
+> which makes the sim wait on disk — silently breaking the requirement the ADR is built on.
+>
+> **1. The lock covers the buffer-state transition ONLY — never I/O.** The guarded region is the
+> three-state swap (*free* → *pending* → *in-flight* → *free*), which is an O(1) enum/reference
+> exchange. `GZipStream`, `FileStream.Write`, `Flush`, and the atomic replace all execute
+> **outside** the lock. The writer's claim sequence, per §3's existing ordering requirement, is
+> one guarded region: *release the finished buffer, then claim the pending one* — both inside the
+> lock, so there is never an instant with no free buffer, then compress and write unguarded.
+>
+> **2. Debug-asserted, because "don't hold the lock across I/O" is a comment otherwise.** A
+> `[ThreadStatic]` lock-depth counter, asserted zero at every entry to the compression/write/
+> replace path. This is the QQ-26 failure mode made *detectable* rather than merely forbidden —
+> the same posture as the mutation-window assertion (ADR-0001) and the in-`Publish` flag
+> (ADR-0006 rule 5).
+>
+> **3. Every join is bounded. `Thread.Join()` with no timeout is banned on both paths.**
+> `CheckpointJoinTimeout` (default **5 s**, tuning knob) applies to the battle-end quiesce and
+> the quit-path flush-and-join alike. A stalled or disconnected disk must never hang the process
+> on quit.
+>
+> **4. On timeout, abandon the temp file — never the live slot.** This is safe *because* of the
+> atomic same-volume replace already specified: a write that never completed never replaced
+> anything, so the live checkpoint remains the previous valid one. The loss is the newest
+> activation — **exactly the bounded crash-lag case §3 already accepts and documents**, reached
+> by a different route. Log loudly; delete the orphaned temp file on next launch.
+>
+> **5. The lag bound gains an upper limit it did not have.** §3 says crash lag is *"bounded by
+> write duration, not by count; under sustained coalescing … unbounded in principle."* With a
+> bounded join, the **quit** path's worst case is now `CheckpointJoinTimeout`, not unbounded.
+> Crash lag is unchanged — nothing can bound that.
 
 > **Inherited 2026-08-24 — the checkpoint clause of ADR-0002's validation criterion 5 now lives here.** ADR-0002 was promoted to Accepted on its terrain clauses; the requirement to measure checkpoint snapshot+write at per-activation combat cadence on this ADR's double-buffered async path, confirming no frame-time impact during combat, transfers to **this** ADR's promotion gate. The move ends a circular block (ADR-0002 could not be Accepted without a measurement whose implementation was auto-blocked by ADR-0002 being Proposed) and puts the clause where the risk actually is. ADR-0005 remains co-dependent and promotes with this ADR.
 
@@ -180,6 +287,20 @@ Nothing ships yet — the save/load spike validated the colony path only. Save/L
 ## Validation Criteria
 1. AC-66 harness test: burst of resolved activations → exactly one snapshot each, at the `AwaitingPresentation → NextActor` beat, disk converges to newest, no mid-activation write, no UI event
 2. AC-67 harness test (with Seeded RNG ADR): resume from checkpoint reproduces an unquit control run bit-for-bit
+2b. **Container round-trip (Amendment 2026-08-26)**: all 7 owners write and restore through the
+    section framing; byte-identical output for identical state (fixed write order); an owner
+    with nothing to write emits a zero-length section that restores as empty, not absent.
+2c. **Container rejection**: fingerprint mismatch, unknown `ownerId`, duplicate section, missing
+    required section, `byteLength` overrun, and trailing bytes each route to the loud-fallback
+    path — **no partial restore reaches the world**.
+2d. **Section isolation**: an owner attempting to write beyond its section is caught, not
+    permitted to corrupt the next owner's payload.
+2e. **Lock boundary (QQ-26)**: the lock-depth assertion fires if compression, write, flush or
+    replace is entered while the handoff lock is held. Verified by a deliberately-planted
+    violation, matching the project's proven-gate standard.
+2f. **Bounded join**: with a stalled writer, both the quit path and the battle-end quiesce return
+    within `CheckpointJoinTimeout`; the live checkpoint slot is still the previous valid file and
+    the orphaned temp file is cleaned up on next launch.
 3. AC-68 test: the save API refuses a `Mode == TurnBased` tag from any non-checkpoint writer; a forged TurnBased-tagged file without the checkpoint writer-id is rejected on load
 4. `TickSequence` continuity across checkpoint restore (cross-cutting contract #2's blocking CI gate) — testable now, without the Seeded RNG ADR
 5. Load-window exemption test: checkpoint restore writes all field groups via the sanctioned restore writer without tripping assertions — and the assertions still fire outside the load window

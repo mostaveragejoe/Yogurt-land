@@ -629,3 +629,64 @@ GDD OQ 3b closed; systems-index checklist item ticked.
 
 **ADR-0005 promotion is no longer blocked by QQ-01** — remaining gate is QQ-02 (build ADR-0004's
 async checkpoint path to measure it), shared with ADR-0004 as a co-promotion pair.
+
+## QQ-25 + QQ-26 CLOSED — ADR-0004 Amendment 2026-08-26
+
+User asked to move forward with QQ-02 (build the async checkpoint path). **QQ-02 was not
+actually reachable**, for two reasons:
+
+1. **No .NET toolchain in the remote container** (`dotnet` absent). More decisive: QQ-02's gate
+   is "no frame-time impact during combat", which needs the real game loop on **target
+   hardware** — the same reason the terrain spike was re-run on the RTX 3060 Ti after software
+   Vulkan gave no signal. A headless container measurement would not discharge it.
+2. **The project's own register blocked it**: QQ-25 rated HIGH, "blocks ADR-0004/0005
+   implementation **entirely**"; QQ-26 "blocks ADR-0004 implementation".
+
+So the actionable step was QQ-25 + QQ-26 — design work, which this environment does fine.
+**Both are now closed.**
+
+### QQ-25 — container framing
+
+Key premise that made it tractable: **a battle checkpoint is transient, not archival.** It lives
+for one battle, so it does not need a colony save's compatibility story and can demand exact
+schema agreement.
+
+`[FileHeader][ownerId u16, ownerSchemaVersion u16, byteLength u32, payload]×N`
+
+- `OwnerId` append-only enum (same discipline as `RngStream` keys / `EntityId` kinds)
+- **Section-scoped writers** — no owner sees the file buffer; a raw `IBufferWriter<byte>` handed
+  to 7 owners means one overrun silently corrupts the next owner's section
+- Fixed write order (byte-deterministic output); read dispatched by id
+- Zero-length section for an owner with nothing to write — "absent" vs "empty" must differ
+- `buildFingerprint` = hash of the whole `(OwnerId, schemaVersion)` set, checked before any
+  payload byte is read
+- Every framing fault → **existing loud-fallback path**, never a partial restore
+
+**Player-visible consequence, deliberately surfaced not buried**: updating the game while a
+battle is suspended invalidates the checkpoint → fall back to battle-start autosave and replay
+that battle. Correct trade for a transient file; reuses a recovery path that already exists;
+the existing dialog makes it loud. **Flag for the user if they want it different.**
+
+### QQ-26 — lock boundary + join timeout
+
+- Lock covers the three-state buffer swap (*free*/*pending*/*in-flight*) **only**. gzip, write,
+  flush, atomic replace all outside it. Writer's release-then-claim stays one guarded region.
+- **`[ThreadStatic]` lock-depth assertion** so "don't hold the lock across I/O" is detectable,
+  not just a comment — same posture as the mutation-window and in-`Publish` assertions.
+- **`CheckpointJoinTimeout` (default 5 s)** on both the battle-end quiesce and the quit join.
+  Unbounded `Thread.Join()` banned.
+- On timeout: abandon the **temp** file. Safe because atomic replace means an incomplete write
+  never replaced anything — the previous valid slot stays live. Loss = newest activation, which
+  is the bounded crash-lag case §3 already accepts, reached another way.
+- Bonus: the **quit** path's lag is now bounded by the timeout, where §3 previously called it
+  unbounded under sustained coalescing. Crash lag unchanged — nothing can bound that.
+
+6 new validation criteria (2b–2f) incl. the planted-violation test for the lock assertion,
+matching the project's proven-gate standard. 3 new Forbidden Patterns.
+
+### Next
+
+**QQ-02 is now unblocked but needs YOUR machine** — write the spike, run it on target hardware.
+That is the last gate on ADR-0004 + ADR-0005 promotion (co-promotion pair).
+Remaining blocking open question: **QQ-24, the composition root** (30 refs, 0 definitions) —
+which also blocks ADR-0006 implementation and the first entity store.
