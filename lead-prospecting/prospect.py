@@ -104,10 +104,12 @@ def cmd_rank(args) -> int:
 def cmd_show(args) -> int:
     conn = db.connect(args.database)
     partner = _resolve(conn, args.id)
-    conn.close()
     if not partner:
+        conn.close()
         return 1
-    print(report.detail(score_partner(partner)))
+    contacts = db.contacts_for(conn, partner.id)
+    conn.close()
+    print(report.detail(score_partner(partner), contacts))
     return 0
 
 
@@ -175,7 +177,7 @@ def cmd_touch(args) -> int:
     refreshed = score_partner(db.get(conn, args.id))
     db.upsert(conn, refreshed)
     conn.commit()
-    print(report.detail(refreshed))
+    print(report.detail(refreshed, db.contacts_for(conn, args.id)))
     conn.close()
     return 0
 
@@ -223,66 +225,104 @@ def cmd_log(args) -> int:
     conn = db.connect(args.database)
     when = args.date or dt.date.today().isoformat()
     kind = args.event
+    queries = [q.strip() for q in args.id.split(",") if q.strip()]
+
+    if args.to and len(queries) > 1:
+        print("--to names one person, so it cannot be used with several "
+              "partners at once.", file=sys.stderr)
+        conn.close()
+        return 1
 
     touched = []
-    for query in [q.strip() for q in args.id.split(",") if q.strip()]:
+    for query in queries:
         partner = _resolve(conn, query)
         if not partner:
             conn.close()
             return 1
 
-        db.add_event(conn, partner.id, kind, when, args.note or "")
+        if args.to:
+            contact = _resolve_contact(conn, partner, args.to)
+            if not contact:
+                conn.close()
+                return 1
+        else:
+            contact = _auto_contact(conn, partner)
+
+        contact_id = contact["id"] if contact else None
+        db.add_event(conn, partner.id, kind, when, args.note or "",
+                     contact_id=contact_id)
+
+        # A reply from a person revives them; nothing else changes status.
+        if contact and kind in cadence.INBOUND:
+            db.update_contact(conn, contact_id, status="active")
+        elif contact and contact["status"] == "untried" and kind in cadence.OUTBOUND:
+            db.update_contact(conn, contact_id, status="active")
 
         _label, new_stage = cadence.EVENT_KINDS[kind]
         stage = new_stage or partner.stage
-        unanswered = db.unanswered_touches(conn, partner.id)
 
-        # Silence parks a weak prospect. A strong one gets routed to a
-        # different contact instead -- see cadence.should_park.
-        parked = False
-        retry_other_contact = False
-        if stage == Stage.CONTACTED.value and unanswered >= cadence.MAX_UNANSWERED:
-            if cadence.should_park(unanswered, partner.tier):
+        # Silence is judged per person, then escalated to the institution.
+        unanswered = (db.contact_unanswered(conn, contact_id) if contact_id
+                      else db.unanswered_touches(conn, partner.id))
+        disposition, explanation = "continue", ""
+        if stage == Stage.CONTACTED.value:
+            others = [c for c in db.untried_contacts(conn, partner.id)
+                      if c["id"] != contact_id]
+            disposition, explanation = cadence.route_after_silence(
+                unanswered, partner.tier, others)
+
+            if disposition != "continue" and contact_id:
+                db.update_contact(conn, contact_id, status="cold")
+            if disposition == "park_partner":
                 stage = Stage.DORMANT.value
-                parked = True
-            else:
-                retry_other_contact = True
 
         due = cadence.next_due(stage, partner.partner_type,
                                dt.date.fromisoformat(when))
-        if retry_other_contact:
+        if disposition in ("switch_contact", "find_contact"):
             due = cadence.add_business_days(
-                dt.date.fromisoformat(when), cadence.ANOTHER_CONTACT_DAYS).isoformat()
+                dt.date.fromisoformat(when),
+                cadence.ANOTHER_CONTACT_DAYS).isoformat()
 
         changes = {
             "stage": stage,
             "last_touch": when,
-            "next_action": cadence.suggest_action(
+            "next_action": explanation or cadence.suggest_action(
                 stage, unanswered, partner.partner_type, partner.tier),
             "next_action_due": due,
         }
         if args.note:
-            stamped = f"[{when}] {kind}: {args.note}"
+            who = f" [{contact['name']}]" if contact else ""
+            stamped = f"[{when}] {kind}{who}: {args.note}"
             changes["notes"] = (f"{partner.notes}\n{stamped}".strip()
                                 if partner.notes else stamped)
         db.update_fields(conn, partner.id, **changes)
-        touched.append((partner, changes, parked, retry_other_contact))
+        touched.append((partner, contact, changes, disposition))
 
     conn.commit()
 
-    for partner, changes, parked, retry_other_contact in touched:
+    for partner, contact, changes, disposition in touched:
         due = changes["next_action_due"] or "--"
         print(f"{partner.name}")
-        print(f"  logged     : {kind}  ({when})")
+        # contact is None whenever no person is on file for this partner --
+        # the ordinary case before any contacts have been added.
+        who = ""
+        if contact:
+            who = contact["name"] + (f" ({contact['title']})"
+                                     if contact["title"] else "")
+        print(f"  logged     : {kind}  ({when})"
+              + (f"  -> {who}" if contact else "  [no contact on file]"))
         print(f"  stage      : {changes['stage']}")
         print(f"  next       : {changes['next_action']}")
         print(f"  due        : {due}")
-        if parked:
-            print(f"  PARKED     : {cadence.MAX_UNANSWERED} touches, no reply. "
-                  f"Tier {partner.tier} -- revisit in ~90 days.")
-        if retry_other_contact:
-            print(f"  KEEP GOING : tier {partner.tier} at {partner.total_score:.0f} "
-                  "is worth a second contact, not the parking lot.")
+        if disposition == "switch_contact" and who:
+            print(f"  CONTACT COLD: {who} marked cold. The institution is "
+                  "still live.")
+        elif disposition == "find_contact":
+            print(f"  KEEP GOING : tier {partner.tier} at "
+                  f"{partner.total_score:.0f} -- add another name with "
+                  f"`contact {partner.id} \"Name\" --title ...`")
+        elif disposition == "park_partner":
+            print(f"  PARKED     : no routes left. Revisit in ~90 days.")
         if (partner.partner_type == PartnerType.CPA_FIRM.value
                 and due != "--"
                 and cadence.in_tax_season(dt.date.fromisoformat(when))):
@@ -304,9 +344,22 @@ def cmd_due(args) -> int:
         if p.do_not_contact or p.stage in (Stage.DEAD.value, Stage.NOT_CONTACTED.value):
             continue
         overdue = cadence.days_overdue(p.next_action_due, today)
-        unanswered = db.unanswered_touches(conn, p.id)
+        live = db.untried_contacts(conn, p.id)
+        # Silence is per person: counting every touch across three contacts
+        # would read as "9 unanswered" when nobody was messaged more than
+        # three times.
+        unanswered = (db.contact_unanswered(conn, live[0]["id"]) if live
+                      else db.unanswered_touches(conn, p.id))
+        next_contact = ""
+        if live:
+            person = live[0]
+            next_contact = person["name"] + (f" ({person['title']})"
+                                             if person["title"] else "")
+            if len(live) > 1:
+                next_contact += f"   +{len(live)-1} other live contact(s)"
         rows.append({
             "partner": p,
+            "contact": next_contact,
             "overdue": overdue,
             "unanswered": unanswered,
             "stale": cadence.is_stale(p.stage, p.last_touch, p.partner_type, today),
@@ -343,6 +396,98 @@ def _outcome_inputs(conn, partner_type=None, state=None):
         deals_by_partner.setdefault(deal["partner_id"], []).append(deal)
     first_contacts = {p.id: db.first_contact_date(conn, p.id) for p in partners}
     return partners, deals_by_partner, first_contacts
+
+
+
+def _resolve_contact(conn, partner, query):
+    """Resolve a contact within one partner, or explain the ambiguity."""
+    matches = db.find_contact(conn, partner.id, query)
+    if not matches:
+        print(f"No contact matching {query!r} at {partner.name}.", file=sys.stderr)
+        return None
+    if len(matches) > 1:
+        print(f"{query!r} matches {len(matches)} contacts at {partner.name}:",
+              file=sys.stderr)
+        for m in matches:
+            print(f"  #{m['id']:<5} {m['name']} -- {m['title'] or 'no title'}",
+                  file=sys.stderr)
+        return None
+    return matches[0]
+
+
+def _auto_contact(conn, partner):
+    """Pick the contact a touch belongs to when none was named.
+
+    With exactly one live route into the institution there is no ambiguity, so
+    attribute silently. With several, stay partner-level rather than guessing
+    wrong and corrupting a person's touch history.
+    """
+    live = db.untried_contacts(conn, partner.id)
+    return live[0] if len(live) == 1 else None
+
+
+def cmd_contact_add(args) -> int:
+    conn = db.connect(args.database)
+    partner = _resolve(conn, args.id)
+    if not partner:
+        conn.close()
+        return 1
+    contact_id = db.add_contact(
+        conn, partner.id, args.name, title=args.title or "",
+        linkedin_url=args.linkedin or "", email=args.email or "",
+        phone=args.phone or "", is_primary=args.primary, note=args.note or "")
+    conn.commit()
+    print(f"Contact #{contact_id} added to {partner.name}")
+    print(f"  {args.name}" + (f" -- {args.title}" if args.title else ""))
+    print(f"  Log a touch to them:  prospect.py log {args.id} messaged "
+          f"--to {contact_id}")
+    conn.close()
+    return 0
+
+
+def cmd_contacts(args) -> int:
+    conn = db.connect(args.database)
+    partner = _resolve(conn, args.id)
+    if not partner:
+        conn.close()
+        return 1
+    rows = db.contacts_for(conn, partner.id)
+    stats = {r["id"]: db.contact_unanswered(conn, r["id"]) for r in rows}
+    print(report.contact_roster(partner, rows, stats))
+    conn.close()
+    return 0
+
+
+def cmd_contact_set(args) -> int:
+    conn = db.connect(args.database)
+    if not db.get_contact(conn, args.contact_id):
+        print(f"No contact #{args.contact_id}.", file=sys.stderr)
+        conn.close()
+        return 1
+    changed = db.update_contact(
+        conn, args.contact_id, status=args.status, title=args.title,
+        linkedin_url=args.linkedin, email=args.email, phone=args.phone,
+        name=args.name, is_primary=True if args.primary else None,
+        note=args.note)
+    conn.commit()
+    if not changed:
+        print("Nothing to change. Pass at least one field.", file=sys.stderr)
+        conn.close()
+        return 1
+    contact = db.get_contact(conn, args.contact_id)
+    partner = db.get(conn, contact["partner_id"])
+    print(f"Contact #{args.contact_id} updated -- {contact['name']} at "
+          f"{partner.name if partner else contact['partner_id']}")
+    print(f"  status: {contact['status']}")
+    remaining = db.untried_contacts(conn, contact["partner_id"])
+    if contact["status"] in db.CONTACT_EXHAUSTED:
+        if remaining:
+            print("  still live at this partner: "
+                  + ", ".join(r["name"] for r in remaining))
+        else:
+            print("  no live contacts left here -- find another name or park it.")
+    conn.close()
+    return 0
 
 
 def cmd_deal(args) -> int:
@@ -574,6 +719,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id", help="partner id or name fragment; comma-separate for several")
     p.add_argument("event", choices=sorted(cadence.EVENT_KINDS))
     p.add_argument("note", nargs="?", default="")
+    p.add_argument("--to", help="contact id or name at this partner")
     p.add_argument("--date", help="defaults to today; use to backdate")
     p.set_defaults(func=cmd_log)
 
@@ -638,6 +784,33 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("calibrate", help="did the tiers predict anything?")
     p.add_argument("--state")
     p.set_defaults(func=cmd_calibrate)
+
+    p = sub.add_parser("contact", help="add a person at a partner")
+    p.add_argument("id", help="partner id or name fragment")
+    p.add_argument("name")
+    p.add_argument("--title")
+    p.add_argument("--linkedin")
+    p.add_argument("--email")
+    p.add_argument("--phone")
+    p.add_argument("--primary", action="store_true")
+    p.add_argument("--note")
+    p.set_defaults(func=cmd_contact_add)
+
+    p = sub.add_parser("contacts", help="list the people at a partner")
+    p.add_argument("id")
+    p.set_defaults(func=cmd_contacts)
+
+    p = sub.add_parser("contact-set", help="update one contact")
+    p.add_argument("contact_id", type=int)
+    p.add_argument("--status", choices=list(db.CONTACT_STATUSES))
+    p.add_argument("--name")
+    p.add_argument("--title")
+    p.add_argument("--linkedin")
+    p.add_argument("--email")
+    p.add_argument("--phone")
+    p.add_argument("--primary", action="store_true")
+    p.add_argument("--note")
+    p.set_defaults(func=cmd_contact_set)
 
     return parser
 

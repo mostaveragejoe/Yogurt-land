@@ -110,6 +110,41 @@ def should_park(unanswered: int, tier: str) -> bool:
     return unanswered >= MAX_UNANSWERED and tier not in PERSIST_TIERS
 
 
+def route_after_silence(unanswered: int, tier: str,
+                        untried: list) -> tuple[str, str]:
+    """Decide what silence from one person means for the institution.
+
+    This is the distinction the single contact_name field could not express.
+    Outreach fails at the person level: a chief lending officer who never
+    opens LinkedIn says nothing about whether the CEO would answer. So the
+    contact goes cold, not the partner -- and the partner is only parked once
+    every route in is exhausted.
+
+    Returns (disposition, explanation) where disposition is one of
+    "continue", "switch_contact", "find_contact", "park_partner".
+    """
+    if unanswered < MAX_UNANSWERED:
+        return "continue", ""
+
+    if untried:
+        names = ", ".join(
+            f"{c['name']}{' (' + c['title'] + ')' if c.get('title') else ''}"
+            for c in untried[:3])
+        return "switch_contact", (
+            f"{unanswered} touches, no reply. Switch to {names} -- "
+            "the person is exhausted, the institution is not.")
+
+    if tier in PERSIST_TIERS:
+        return "find_contact", (
+            f"{unanswered} touches and no other contact on file. Tier {tier} "
+            "is worth finding one: try the CEO, VP Business Lending, or "
+            "another partner at the firm.")
+
+    return "park_partner", (
+        f"{unanswered} touches, no reply, no other contact. Tier {tier} -- "
+        "park it and revisit in about 90 days.")
+
+
 def suggest_action(stage: str, unanswered: int, partner_type: str,
                    tier: str = "") -> str:
     """Plain-language next action, so the due list is directly workable."""

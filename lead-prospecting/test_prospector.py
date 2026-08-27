@@ -724,3 +724,197 @@ class EmptyDatabaseRegression(unittest.TestCase):
                     stage=Stage.CONTACTED.value)
         message = report.worklist([p])
         self.assertIn("Nothing unworked", message)
+
+
+# ---------------------------------------------------------------------------
+# Contacts -- people inside an institution
+# ---------------------------------------------------------------------------
+
+class ContactRouting(unittest.TestCase):
+    """Silence is a property of a person, not of the institution."""
+
+    def _people(self, n=2):
+        return [{"name": f"Person {i}", "title": "CEO"} for i in range(n)]
+
+    def test_below_the_ceiling_nothing_changes(self):
+        disposition, _ = cadence.route_after_silence(2, "A", self._people())
+        self.assertEqual(disposition, "continue")
+
+    def test_alternates_available_means_switch_not_park(self):
+        disposition, why = cadence.route_after_silence(3, "A", self._people())
+        self.assertEqual(disposition, "switch_contact")
+        self.assertIn("institution is not", why)
+
+    def test_weak_partner_with_alternates_still_switches(self):
+        """A free shot at another person is worth taking regardless of tier."""
+        disposition, _ = cadence.route_after_silence(3, "D", self._people())
+        self.assertEqual(disposition, "switch_contact")
+
+    def test_strong_partner_with_no_alternates_seeks_one(self):
+        disposition, why = cadence.route_after_silence(3, "A", [])
+        self.assertEqual(disposition, "find_contact")
+        self.assertIn("worth finding one", why)
+
+    def test_weak_partner_with_no_alternates_parks(self):
+        disposition, _ = cadence.route_after_silence(3, "D", [])
+        self.assertEqual(disposition, "park_partner")
+
+    def test_switch_message_names_the_people(self):
+        _, why = cadence.route_after_silence(3, "A", self._people(2))
+        self.assertIn("Person 0", why)
+        self.assertIn("Person 1", why)
+
+
+class ContactRecords(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "t.db")
+        db.upsert(self.conn, cu(id="c", total_assets=1e8))
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_new_contacts_start_untried(self):
+        cid = db.add_contact(self.conn, "c", "Dana Whitfield", title="CLO")
+        self.assertEqual(db.get_contact(self.conn, cid)["status"], "untried")
+
+    def test_primary_sorts_first(self):
+        db.add_contact(self.conn, "c", "Second")
+        db.add_contact(self.conn, "c", "First", is_primary=True)
+        self.assertEqual(db.contacts_for(self.conn, "c")[0]["name"], "First")
+
+    def test_untried_excludes_exhausted_statuses(self):
+        live = db.add_contact(self.conn, "c", "Live")
+        gone = db.add_contact(self.conn, "c", "Gone")
+        db.update_contact(self.conn, gone, status="cold")
+        remaining = db.untried_contacts(self.conn, "c")
+        self.assertEqual([r["id"] for r in remaining], [live])
+
+    def test_unanswered_is_counted_per_person(self):
+        """Three touches each to two people is 3 apiece, not 6."""
+        a = db.add_contact(self.conn, "c", "Person A")
+        b = db.add_contact(self.conn, "c", "Person B")
+        for _ in range(3):
+            db.add_event(self.conn, "c", "messaged", "2026-06-01", contact_id=a)
+        db.add_event(self.conn, "c", "messaged", "2026-06-01", contact_id=b)
+        self.assertEqual(db.contact_unanswered(self.conn, a), 3)
+        self.assertEqual(db.contact_unanswered(self.conn, b), 1)
+
+    def test_a_reply_resets_that_persons_count_only(self):
+        a = db.add_contact(self.conn, "c", "Person A")
+        b = db.add_contact(self.conn, "c", "Person B")
+        db.add_event(self.conn, "c", "messaged", "2026-06-01", contact_id=a)
+        db.add_event(self.conn, "c", "messaged", "2026-06-01", contact_id=b)
+        db.add_event(self.conn, "c", "replied", "2026-06-05", contact_id=a)
+        self.assertEqual(db.contact_unanswered(self.conn, a), 0)
+        self.assertEqual(db.contact_unanswered(self.conn, b), 1)
+
+    def test_find_contact_by_name_fragment(self):
+        cid = db.add_contact(self.conn, "c", "Dana Whitfield")
+        self.assertEqual(db.find_contact(self.conn, "c", "dana")[0]["id"], cid)
+
+    def test_find_contact_by_id(self):
+        cid = db.add_contact(self.conn, "c", "Dana Whitfield")
+        self.assertEqual(db.find_contact(self.conn, "c", str(cid))[0]["id"], cid)
+
+    def test_contact_lookup_is_scoped_to_its_partner(self):
+        """An id belonging to another partner must not resolve here."""
+        db.upsert(self.conn, cu(id="other", total_assets=1e8))
+        cid = db.add_contact(self.conn, "other", "Elsewhere")
+        self.assertEqual(db.find_contact(self.conn, "c", str(cid)), [])
+
+    def test_events_without_a_contact_still_work(self):
+        """Partner-level logging predates contacts and must keep working."""
+        db.add_event(self.conn, "c", "messaged", "2026-06-01")
+        self.assertEqual(db.unanswered_touches(self.conn, "c"), 1)
+
+
+class LegacyContactMigration(unittest.TestCase):
+    """The single contact_name field lifts into a contacts row, once."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = Path(self.tmp.name) / "t.db"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _seed_legacy(self):
+        conn = db.connect(self.path)
+        db.upsert(conn, cu(id="c", total_assets=1e8))
+        db.update_fields(conn, "c", contact_name="Dana Whitfield",
+                         contact_title="CLO")
+        conn.commit()
+        conn.close()
+
+    def test_legacy_field_becomes_a_contact(self):
+        self._seed_legacy()
+        conn = db.connect(self.path)
+        rows = db.contacts_for(conn, "c")
+        conn.close()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["name"], "Dana Whitfield")
+        self.assertEqual(rows[0]["title"], "CLO")
+        self.assertTrue(rows[0]["is_primary"])
+
+    def test_migration_does_not_duplicate_on_reopen(self):
+        self._seed_legacy()
+        for _ in range(3):
+            db.connect(self.path).close()
+        conn = db.connect(self.path)
+        rows = db.contacts_for(conn, "c")
+        conn.close()
+        self.assertEqual(len(rows), 1)
+
+    def test_partners_without_a_legacy_contact_get_nothing(self):
+        conn = db.connect(self.path)
+        db.upsert(conn, cu(id="empty", total_assets=1e8))
+        conn.commit()
+        conn.close()
+        conn = db.connect(self.path)
+        rows = db.contacts_for(conn, "empty")
+        conn.close()
+        self.assertEqual(rows, [])
+
+
+class NoContactRegression(unittest.TestCase):
+    """`log` crashed on any partner with no contacts on file.
+
+    The output path built a display name from the contact dict without
+    checking it existed. That is the ordinary case before any contacts have
+    been added -- i.e. every partner on day one. Unit tests missed it because
+    it lived in the print path, not the data layer; the end-to-end sweep
+    caught it.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "t.db")
+        db.upsert(self.conn, cu(id="c", total_assets=1e8))
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_partner_with_no_contacts_has_no_auto_contact(self):
+        self.assertEqual(db.untried_contacts(self.conn, "c"), [])
+
+    def test_routing_still_works_with_no_contacts(self):
+        disposition, why = cadence.route_after_silence(3, "A", [])
+        self.assertEqual(disposition, "find_contact")
+        self.assertTrue(why)
+
+    def test_partner_level_events_are_counted_when_no_contact_exists(self):
+        for _ in range(3):
+            db.add_event(self.conn, "c", "messaged", "2026-06-01")
+        self.assertEqual(db.unanswered_touches(self.conn, "c"), 3)
+
+    def test_dossier_renders_without_contacts(self):
+        partner = score_partner(db.get(self.conn, "c"))
+        self.assertIn(partner.name, report.detail(partner, []))
+
+    def test_roster_renders_without_contacts(self):
+        partner = score_partner(db.get(self.conn, "c"))
+        self.assertIn("No contacts on file",
+                      report.contact_roster(partner, [], {}))

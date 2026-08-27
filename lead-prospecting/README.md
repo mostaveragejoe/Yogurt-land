@@ -191,6 +191,58 @@ python3 prospect.py --database /tmp/demo.db channels
 Every record it writes is synthetic and prefixed `[DEMO]`. Never point it at
 your real database.
 
+## Contacts: people inside an institution
+
+A partner is an institution; a contact is a person inside it. The distinction
+matters because **outreach fails at the person level, not the institution
+level** — a chief lending officer who never opens LinkedIn tells you nothing
+about whether the CEO would answer.
+
+```bash
+python3 prospect.py contact northgate "Dana Whitfield" --title "Chief Lending Officer" --primary
+python3 prospect.py contact northgate "Pat Larsen" --title "CEO"
+python3 prospect.py contacts northgate            # the roster
+python3 prospect.py log northgate messaged --to dana
+python3 prospect.py contact-set 1 --status left_company
+```
+
+`--to` takes a contact id or a name fragment. Omit it and the touch attaches
+to the only live contact when there is exactly one; with several it stays at
+partner level rather than guessing wrong and corrupting someone's history.
+Partners with no contacts on file keep working exactly as before.
+
+### What this changes about silence
+
+Three unanswered touches used to park the whole partner. Now they park the
+**person**, and the partner is only parked once every route in is exhausted:
+
+| Situation | What happens |
+|---|---|
+| Other contacts on file | That contact goes cold; the tool names who to try next |
+| No others, tier A or B | Contact goes cold, partner stays live — go find another name |
+| No others, tier C or D | Partner parks for ~90 days |
+
+```
+  next       : 3 touches, no reply. Switch to Pat Larsen (CEO),
+               Sam Ruiz (VP Business Lending) -- the person is
+               exhausted, the institution is not.
+  CONTACT COLD: Dana Whitfield (Chief Lending Officer) marked cold.
+               The institution is still live.
+```
+
+A reply revives a cold contact and un-parks the partner. Unanswered counts are
+per person: three touches each to two people reads as 3 and 3, not 6.
+
+The `due` list names the next live contact, so it tells you *who* to message,
+not just which institution.
+
+### Upgrading an existing database
+
+The old single `contact_name` field is lifted into a contacts row
+automatically on first open — marked primary, noted as migrated. It runs once
+and is idempotent, and the legacy columns are left in place rather than
+dropped. Nothing to do by hand.
+
 ## Follow-up rules
 
 `due` sorts by lateness, but **an unanswered reply carries 3× weight** — a warm

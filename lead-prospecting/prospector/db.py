@@ -38,13 +38,19 @@ def connect(path: str | Path = DEFAULT_DB) -> sqlite3.Connection:
     conn.execute(_ddl())
     conn.execute(_EVENTS_DDL)
     conn.execute(_DEALS_DDL)
+    conn.execute(_CONTACTS_DDL)
     _migrate(conn)
+    _migrate_legacy_contacts(conn)
     conn.commit()
     return conn
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
     """Add any columns introduced since the database was created."""
+    event_cols = {r["name"] for r in conn.execute("PRAGMA table_info(events)")}
+    if "contact_id" not in event_cols:
+        conn.execute("ALTER TABLE events ADD COLUMN contact_id INTEGER")
+
     existing = {r["name"] for r in conn.execute("PRAGMA table_info(partners)")}
     for name in COLUMNS:
         if name not in existing:
@@ -125,11 +131,12 @@ CREATE TABLE IF NOT EXISTS events (
 
 
 def add_event(conn: sqlite3.Connection, partner_id: str, kind: str,
-              date: str, note: str = "") -> None:
+              date: str, note: str = "", contact_id: int | None = None) -> None:
     conn.execute(
-        "INSERT INTO events (partner_id, date, kind, note, created_at) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (partner_id, date, kind, note, _dt.datetime.now().isoformat(timespec="seconds")),
+        "INSERT INTO events (partner_id, date, kind, note, contact_id, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (partner_id, date, kind, note, contact_id,
+         _dt.datetime.now().isoformat(timespec="seconds")),
     )
 
 
@@ -250,3 +257,135 @@ def first_contact_date(conn: sqlite3.Connection, partner_id: str) -> str | None:
         "SELECT MIN(date) AS d FROM events WHERE partner_id = ? "
         "AND kind IN ('messaged', 'nudge')", (partner_id,)).fetchone()
     return row["d"] if row and row["d"] else None
+
+
+# --- Contacts -----------------------------------------------------------
+# A partner is an institution; a contact is a person inside it. The
+# distinction matters because outreach fails at the person level, not the
+# institution level: the CLO who never opens LinkedIn says nothing about
+# whether the CEO would answer.
+
+CONTACT_STATUSES = ("untried", "active", "cold", "bounced", "left_company",
+                    "do_not_contact")
+# Statuses that mean this person is no longer a route into the institution.
+CONTACT_EXHAUSTED = ("cold", "bounced", "left_company", "do_not_contact")
+
+_CONTACTS_DDL = """
+CREATE TABLE IF NOT EXISTS contacts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id   TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    title        TEXT,
+    linkedin_url TEXT,
+    email        TEXT,
+    phone        TEXT,
+    is_primary   INTEGER DEFAULT 0,
+    status       TEXT NOT NULL DEFAULT 'untried',
+    note         TEXT,
+    created_at   TEXT NOT NULL
+)
+"""
+
+
+def add_contact(conn: sqlite3.Connection, partner_id: str, name: str,
+                title: str = "", linkedin_url: str = "", email: str = "",
+                phone: str = "", is_primary: bool = False,
+                note: str = "") -> int:
+    cur = conn.execute(
+        "INSERT INTO contacts (partner_id, name, title, linkedin_url, email, "
+        "phone, is_primary, status, note, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 'untried', ?, ?)",
+        (partner_id, name, title, linkedin_url, email, phone,
+         int(bool(is_primary)), note,
+         _dt.datetime.now().isoformat(timespec="seconds")),
+    )
+    return cur.lastrowid
+
+
+def contacts_for(conn: sqlite3.Connection, partner_id: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM contacts WHERE partner_id = ? "
+        "ORDER BY is_primary DESC, id", (partner_id,))
+    return [dict(r) for r in rows]
+
+
+def get_contact(conn: sqlite3.Connection, contact_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM contacts WHERE id = ?",
+                       (contact_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def update_contact(conn: sqlite3.Connection, contact_id: int, **changes) -> bool:
+    allowed = {"name", "title", "linkedin_url", "email", "phone",
+               "is_primary", "status", "note"}
+    changes = {k: v for k, v in changes.items() if k in allowed and v is not None}
+    if not changes:
+        return False
+    if "is_primary" in changes:
+        changes["is_primary"] = int(bool(changes["is_primary"]))
+    sets = ", ".join(f"{k}=?" for k in changes)
+    cur = conn.execute(f"UPDATE contacts SET {sets} WHERE id=?",
+                       [*changes.values(), contact_id])
+    return cur.rowcount > 0
+
+
+def find_contact(conn: sqlite3.Connection, partner_id: str,
+                 query: str) -> list[dict]:
+    """Resolve a contact within one partner by id or name fragment."""
+    if str(query).isdigit():
+        found = get_contact(conn, int(query))
+        if found and found["partner_id"] == partner_id:
+            return [found]
+        return []
+    like = f"%{str(query).strip().lower()}%"
+    rows = conn.execute(
+        "SELECT * FROM contacts WHERE partner_id = ? AND lower(name) LIKE ? "
+        "ORDER BY is_primary DESC, id", (partner_id, like))
+    return [dict(r) for r in rows]
+
+
+def untried_contacts(conn: sqlite3.Connection, partner_id: str) -> list[dict]:
+    """People at this institution not yet exhausted -- the remaining routes in."""
+    return [c for c in contacts_for(conn, partner_id)
+            if c["status"] not in CONTACT_EXHAUSTED]
+
+
+def contact_unanswered(conn: sqlite3.Connection, contact_id: int) -> int:
+    """Outbound touches to one person since they last responded."""
+    from .cadence import INBOUND, OUTBOUND
+    rows = conn.execute(
+        "SELECT kind FROM events WHERE contact_id = ? ORDER BY date, id",
+        (contact_id,))
+    count = 0
+    for row in reversed(list(rows)):
+        if row["kind"] in INBOUND:
+            break
+        if row["kind"] in OUTBOUND:
+            count += 1
+    return count
+
+
+def _migrate_legacy_contacts(conn: sqlite3.Connection) -> int:
+    """Lift each partner's single contact_name field into a contacts row.
+
+    Runs once and is idempotent: a partner that already has any contact row is
+    skipped, so re-running never duplicates. The legacy columns are left in
+    place rather than dropped -- nothing reads them for outreach any more, but
+    destroying data during an automatic migration is not worth the tidiness.
+    """
+    migrated = 0
+    rows = conn.execute(
+        "SELECT id, contact_name, contact_title, linkedin_url FROM partners "
+        "WHERE contact_name IS NOT NULL AND contact_name != ''").fetchall()
+    for row in rows:
+        existing = conn.execute(
+            "SELECT COUNT(*) AS n FROM contacts WHERE partner_id = ?",
+            (row["id"],)).fetchone()
+        if existing["n"]:
+            continue
+        add_contact(conn, row["id"], row["contact_name"],
+                    title=row["contact_title"] or "",
+                    linkedin_url=row["linkedin_url"] or "",
+                    is_primary=True, note="migrated from partner record")
+        migrated += 1
+    return migrated

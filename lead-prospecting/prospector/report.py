@@ -93,7 +93,7 @@ def ranked_table(partners: list[Partner], limit: int = 25) -> str:
     return "\n".join(out)
 
 
-def detail(partner: Partner) -> str:
+def detail(partner: Partner, contacts: list[dict] | None = None) -> str:
     """Full dossier for one partner -- what you read before you message them."""
     lines = [
         "=" * 74,
@@ -102,7 +102,19 @@ def detail(partner: Partner) -> str:
         f"Type      : {partner.partner_type}",
         f"Location  : {partner.city}, {partner.state}",
     ]
-    if partner.contact_name:
+    if contacts:
+        from .db import CONTACT_EXHAUSTED
+        live = [c for c in contacts if c["status"] not in CONTACT_EXHAUSTED]
+        lines.append(f"Contacts  : {len(contacts)} on file, {len(live)} live")
+        for c in contacts:
+            mark = "*" if c["is_primary"] else " "
+            lines.append(f"  {mark}#{c['id']} {c['name']}"
+                         + (f" -- {c['title']}" if c["title"] else "")
+                         + f"  [{c['status']}]")
+        if not live:
+            lines.append("            every route here is exhausted -- "
+                         "find another name")
+    elif partner.contact_name:
         lines.append(f"Contact   : {partner.contact_name} -- {partner.contact_title}")
     for label, value in (("Website", partner.website), ("Phone", partner.phone),
                          ("LinkedIn", partner.linkedin_url)):
@@ -270,6 +282,8 @@ def due_list(rows: list[dict], today=None, show_upcoming: bool = False) -> str:
             flag = "  <-- REPLIED, UNANSWERED" if p.stage == Stage.RESPONDED.value else ""
             out.append(f"  {r['overdue']:>3}d late  [{p.tier}] {p.total_score:>5.1f}  "
                        f"{p.name[:40]:<40}{flag}")
+            if r.get("contact"):
+                out.append(f"            -> {r['contact']}")
             out.append(f"            {p.stage:<14} {r['action']}")
             if r["unanswered"]:
                 out.append(f"            {r['unanswered']} unanswered touch(es)")
@@ -468,4 +482,33 @@ def calibration_report(rows: dict, can_run: bool, gate_reason: str,
     else:
         out.append(f"  Withheld. {gate_reason}")
 
+    return "\n".join(out)
+
+
+def contact_roster(partner, contacts: list[dict], unanswered: dict) -> str:
+    """The people at one institution, and which routes in are still open."""
+    from .db import CONTACT_EXHAUSTED
+
+    if not contacts:
+        return (f"{partner.name}\n\nNo contacts on file.\n"
+                f"  Add one:  prospect.py contact {partner.id} \"Name\" "
+                "--title \"Chief Lending Officer\"")
+
+    live = [c for c in contacts if c["status"] not in CONTACT_EXHAUSTED]
+    out = [f"{partner.name}   [{partner.tier}] {partner.total_score:.1f}",
+           f"{len(contacts)} contact(s), {len(live)} still live", "",
+           f"{'#':>4}  {'NAME':<26} {'TITLE':<28} {'STATUS':<13} {'UNANSWERED':>10}",
+           "-" * 88]
+    for c in contacts:
+        marker = "*" if c["is_primary"] else " "
+        out.append(f"{c['id']:>4}{marker} {c['name'][:26]:<26} "
+                   f"{(c['title'] or '--')[:28]:<28} {c['status']:<13} "
+                   f"{unanswered.get(c['id'], 0):>10}")
+    out.append("")
+    if not live:
+        out.append("Every contact here is exhausted. Find another name at the "
+                   "firm, or let it park.")
+    for c in contacts:
+        if c["linkedin_url"]:
+            out.append(f"  #{c['id']} {c['name']}: {c['linkedin_url']}")
     return "\n".join(out)
