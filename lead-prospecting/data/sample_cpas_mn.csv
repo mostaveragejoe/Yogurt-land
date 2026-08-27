@@ -1,0 +1,11 @@
+name,partner_type,city,state,contact_name,contact_title,headcount,does_attest_work,has_advisory_practice,industry_specialties,active_listings,years_active,warm_intro_path,notes
+Halvorsen & Reed CPAs,cpa_firm,Minneapolis,MN,,Managing Partner,42,yes,yes,construction|trucking,,,,"Synthetic sample row"
+Birchwood Tax Advisors,cpa_firm,Saint Paul,MN,,Principal,8,no,yes,dental|medical,,,,"Synthetic sample row"
+Kessler Agricultural Accounting,cpa_firm,Willmar,MN,,Owner,5,no,no,agriculture,,,,"Synthetic sample row"
+Summit Ridge CPA Group,cpa_firm,Rochester,MN,,Partner,95,yes,yes,healthcare,,,,"Synthetic sample row"
+Lakes Region Bookkeeping,cpa_firm,Brainerd,MN,,Owner,2,no,no,,,,,"Synthetic sample row"
+Northstar Business Brokers,business_broker,Minneapolis,MN,,Broker,6,,,,34,12,,"Synthetic sample row"
+Mill City Business Advisors,business_broker,Minneapolis,MN,,Managing Broker,3,,,,11,6,"mutual: intro via chamber","Synthetic sample row"
+Twin Ports Commercial Realty,cre_broker,Duluth,MN,,Principal,9,,,,22,15,,"Synthetic sample row"
+Heartland Equipment Sales,equipment_dealer,Saint Cloud,MN,,Sales Manager,28,,,,,19,,"Synthetic sample row"
+Gopher State Medical Billing,medical_adjacent,Bloomington,MN,,Director,17,,,,,9,,"Synthetic sample row"

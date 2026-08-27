@@ -1,0 +1,9 @@
+# Local database and working data -- partner records are business data,
+# not source. Sample fixtures are tracked deliberately.
+data/*.db
+data/*.csv
+!data/sample_*.csv
+data/partner_import_template.csv
+out/
+__pycache__/
+*.pyc
