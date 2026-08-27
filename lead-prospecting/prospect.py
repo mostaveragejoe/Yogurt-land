@@ -23,8 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from prospector import cadence, db, ingest_csv, ingest_ncua, report
-from prospector.models import PartnerType, Stage
+from prospector import analytics, cadence, db, ingest_csv, ingest_ncua, report
+from prospector.models import PRODUCTS, PartnerType, Stage
 from prospector.scoring import score_all, score_partner
 
 DB_DEFAULT = str(Path(__file__).resolve().parent / "data" / "partners.db")
@@ -322,6 +322,162 @@ def cmd_history(args) -> int:
     return 0
 
 
+
+def _outcome_inputs(conn, partner_type=None, state=None):
+    """Shared loading for the outcome reports."""
+    partners = db.all_partners(conn, partner_type=partner_type, state=state)
+    deals_by_partner = {}
+    for deal in db.all_deals(conn):
+        deals_by_partner.setdefault(deal["partner_id"], []).append(deal)
+    first_contacts = {p.id: db.first_contact_date(conn, p.id) for p in partners}
+    return partners, deals_by_partner, first_contacts
+
+
+def cmd_deal(args) -> int:
+    """Record that a partner sent us a deal."""
+    conn = db.connect(args.database)
+    partner = _resolve(conn, args.id)
+    if not partner:
+        conn.close()
+        return 1
+
+    when = args.date or dt.date.today().isoformat()
+    deal_id = db.add_deal(conn, partner.id, args.product, when,
+                          amount=args.amount, note=args.note or "")
+
+    # A referral is also an interaction: log it so cadence and history stay
+    # consistent rather than diverging from the deal record.
+    db.add_event(conn, partner.id, "referral", when,
+                 f"{args.product} deal #{deal_id}")
+    db.update_fields(
+        conn, partner.id,
+        stage=Stage.PRODUCING.value,
+        last_touch=when,
+        next_action=cadence.suggest_action(
+            Stage.PRODUCING.value, 0, partner.partner_type, partner.tier),
+        next_action_due=cadence.next_due(
+            Stage.PRODUCING.value, partner.partner_type,
+            dt.date.fromisoformat(when)),
+    )
+    conn.commit()
+
+    first = db.first_contact_date(conn, partner.id)
+    gap = analytics.days_between(first, when)
+    print(f"Deal #{deal_id} recorded")
+    print(f"  partner : {partner.name}")
+    print(f"  product : {args.product}")
+    if args.amount:
+        print(f"  amount  : ${args.amount:,.0f}")
+    print(f"  status  : referred")
+    if gap is not None and gap >= 0:
+        print(f"  {gap} days from first contact to first deal")
+    print()
+    print(f"  When it closes:  prospect.py deal-won {deal_id} --revenue N")
+    print(f"  If it dies:      prospect.py deal-lost {deal_id}")
+    conn.close()
+    return 0
+
+
+def _close_deal(args, status: str) -> int:
+    conn = db.connect(args.database)
+    deal = db.get_deal(conn, args.deal_id)
+    if not deal:
+        print(f"No deal #{args.deal_id}.", file=sys.stderr)
+        conn.close()
+        return 1
+    db.update_deal(conn, args.deal_id, status,
+                   closed_date=args.date,
+                   amount=getattr(args, "amount", None),
+                   revenue=getattr(args, "revenue", None),
+                   note=args.note)
+    conn.commit()
+    updated = db.get_deal(conn, args.deal_id)
+    partner = db.get(conn, deal["partner_id"])
+    print(f"Deal #{args.deal_id} -> {status}")
+    print(f"  partner : {partner.name if partner else deal['partner_id']}")
+    if updated["amount"]:
+        print(f"  amount  : ${updated['amount']:,.0f}")
+    if updated["revenue"]:
+        print(f"  revenue : ${updated['revenue']:,.0f}")
+    conn.close()
+    return 0
+
+
+def cmd_deal_status(args) -> int:
+    return _close_deal(args, args.status)
+
+
+def cmd_deal_won(args) -> int:
+    return _close_deal(args, "funded")
+
+
+def cmd_deal_lost(args) -> int:
+    return _close_deal(args, args.reason)
+
+
+def cmd_deals(args) -> int:
+    conn = db.connect(args.database)
+    partner_id = None
+    if args.partner:
+        partner = _resolve(conn, args.partner)
+        if not partner:
+            conn.close()
+            return 1
+        partner_id = partner.id
+
+    deals = db.all_deals(conn, partner_id=partner_id, status=args.status)
+    if not deals:
+        print("No deals recorded.")
+        conn.close()
+        return 0
+
+    names = {p.id: p.name for p in db.all_partners(conn)}
+    print(f"{'#':>4}  {'DATE':<12} {'PARTNER':<32} {'PRODUCT':<22} "
+          f"{'STATUS':<12} {'AMOUNT':>10} {'REVENUE':>9}")
+    print("-" * 108)
+    for d in deals:
+        amount = f"${d['amount']:,.0f}" if d["amount"] else "--"
+        revenue = f"${d['revenue']:,.0f}" if d["revenue"] else "--"
+        print(f"{d['id']:>4}  {d['referred_date']:<12} "
+              f"{names.get(d['partner_id'], d['partner_id'])[:32]:<32} "
+              f"{(d['product'] or '')[:22]:<22} {d['status']:<12} "
+              f"{amount:>10} {revenue:>9}")
+    conn.close()
+    return 0
+
+
+def cmd_channels(args) -> int:
+    conn = db.connect(args.database)
+    partners, deals_by_partner, first_contacts = _outcome_inputs(
+        conn, state=args.state)
+    stats = analytics.channel_stats(conn, partners, deals_by_partner, first_contacts)
+    can_rank, reason = analytics.can_rank_channels(stats)
+    print(report.channels_report(stats, can_rank, reason))
+    conn.close()
+    return 0
+
+
+def cmd_producers(args) -> int:
+    conn = db.connect(args.database)
+    partners, deals_by_partner, first_contacts = _outcome_inputs(
+        conn, partner_type=args.type, state=args.state)
+    rows = analytics.producer_stats(partners, deals_by_partner, first_contacts)
+    print(report.producers_report(rows, show_all=args.all))
+    conn.close()
+    return 0
+
+
+def cmd_calibrate(args) -> int:
+    conn = db.connect(args.database)
+    partners, deals_by_partner, _ = _outcome_inputs(conn, state=args.state)
+    rows = analytics.tier_calibration(partners, deals_by_partner)
+    can_run, reason = analytics.can_calibrate(rows)
+    verdict = analytics.calibration_verdict(rows) if can_run else ""
+    print(report.calibration_report(rows, can_run, reason, verdict))
+    conn.close()
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="prospect",
@@ -408,6 +564,57 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("history", help="interaction log for one partner")
     p.add_argument("id")
     p.set_defaults(func=cmd_history)
+
+    p = sub.add_parser("deal", help="record a deal a partner sent us")
+    p.add_argument("id", help="partner id or name fragment")
+    p.add_argument("product", choices=PRODUCTS)
+    p.add_argument("--amount", type=float, help="deal size in dollars")
+    p.add_argument("--date", help="defaults to today")
+    p.add_argument("--note")
+    p.set_defaults(func=cmd_deal)
+
+    p = sub.add_parser("deal-won", help="mark a deal funded")
+    p.add_argument("deal_id", type=int)
+    p.add_argument("--revenue", type=float, help="what we earned")
+    p.add_argument("--amount", type=float, help="corrected deal size")
+    p.add_argument("--date")
+    p.add_argument("--note")
+    p.set_defaults(func=cmd_deal_won)
+
+    p = sub.add_parser("deal-lost", help="mark a deal dead")
+    p.add_argument("deal_id", type=int)
+    p.add_argument("--reason", choices=["declined", "withdrawn"], default="declined")
+    p.add_argument("--date")
+    p.add_argument("--note")
+    p.set_defaults(func=cmd_deal_lost)
+
+    p = sub.add_parser("deal-status", help="set a deal's status explicitly")
+    p.add_argument("deal_id", type=int)
+    p.add_argument("status", choices=list(db.DEAL_STATUSES))
+    p.add_argument("--revenue", type=float)
+    p.add_argument("--amount", type=float)
+    p.add_argument("--date")
+    p.add_argument("--note")
+    p.set_defaults(func=cmd_deal_status)
+
+    p = sub.add_parser("deals", help="list recorded deals")
+    p.add_argument("--partner")
+    p.add_argument("--status", choices=list(db.DEAL_STATUSES))
+    p.set_defaults(func=cmd_deals)
+
+    p = sub.add_parser("channels", help="where the time is paying off")
+    p.add_argument("--state")
+    p.set_defaults(func=cmd_channels)
+
+    p = sub.add_parser("producers", help="which partners pay, which are dead weight")
+    p.add_argument("--type", choices=[t.value for t in PartnerType])
+    p.add_argument("--state")
+    p.add_argument("--all", action="store_true")
+    p.set_defaults(func=cmd_producers)
+
+    p = sub.add_parser("calibrate", help="did the tiers predict anything?")
+    p.add_argument("--state")
+    p.set_defaults(func=cmd_calibrate)
 
     return parser
 

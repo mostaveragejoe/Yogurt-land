@@ -373,3 +373,237 @@ class FuzzyLookup(unittest.TestCase):
 
     def test_no_match_returns_empty(self):
         self.assertEqual(db.find(self.conn, "zzzz"), [])
+
+
+# ---------------------------------------------------------------------------
+# Outcome tracking and calibration
+# ---------------------------------------------------------------------------
+
+from prospector import analytics
+
+
+class WilsonInterval(unittest.TestCase):
+    def test_point_estimate_is_the_raw_proportion(self):
+        point, _, _ = analytics.wilson(3, 8)
+        self.assertAlmostEqual(point, 0.375)
+
+    def test_interval_brackets_the_estimate(self):
+        point, low, high = analytics.wilson(3, 8)
+        self.assertLess(low, point)
+        self.assertGreater(high, point)
+
+    def test_small_samples_give_wide_intervals(self):
+        """The entire reason Wilson was chosen over a raw percentage."""
+        _, small_low, small_high = analytics.wilson(3, 8)
+        _, big_low, big_high = analytics.wilson(30, 80)
+        self.assertGreater(small_high - small_low, (big_high - big_low) * 2)
+
+    def test_zero_successes_still_has_an_upper_bound(self):
+        point, low, high = analytics.wilson(0, 5)
+        self.assertEqual(point, 0.0)
+        self.assertEqual(low, 0.0)
+        self.assertGreater(high, 0.3)      # 0/5 does not mean "never"
+
+    def test_all_successes_stays_within_bounds(self):
+        _, low, high = analytics.wilson(5, 5)
+        self.assertLessEqual(high, 1.0)
+        self.assertLess(low, 1.0)
+
+    def test_no_trials_is_not_a_crash(self):
+        self.assertEqual(analytics.wilson(0, 0), (0.0, 0.0, 0.0))
+
+
+class Gating(unittest.TestCase):
+    """The tool must refuse to declare winners on thin data."""
+
+    def _stats(self, spec):
+        stats = {}
+        for channel, worked, producing, deals in spec:
+            st = analytics.ChannelStats(channel)
+            st.total = st.worked = worked
+            st.producing = producing
+            st.deals = deals
+            stats[channel] = st
+        return stats
+
+    def test_too_few_deals_blocks_ranking(self):
+        ok, reason = analytics.can_rank_channels(
+            self._stats([("credit_union", 20, 2, 2), ("cpa_firm", 20, 1, 1)]))
+        self.assertFalse(ok)
+        self.assertIn("Need about", reason)
+
+    def test_one_eligible_channel_blocks_ranking(self):
+        ok, reason = analytics.can_rank_channels(
+            self._stats([("credit_union", 20, 8, 12), ("cpa_firm", 3, 1, 1)]))
+        self.assertFalse(ok)
+        self.assertIn("Need two", reason)
+
+    def test_sufficient_data_allows_ranking(self):
+        ok, _ = analytics.can_rank_channels(
+            self._stats([("credit_union", 20, 8, 10), ("cpa_firm", 20, 2, 3)]))
+        self.assertTrue(ok)
+
+    def test_thin_channel_reports_no_rate(self):
+        st = analytics.ChannelStats("cpa_firm")
+        st.worked = 3
+        self.assertFalse(st.has_enough_for_rate)
+
+
+class ChannelAggregation(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "t.db")
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def _partner(self, pid, ptype, stage):
+        p = score_partner(Partner(id=pid, name=pid, partner_type=ptype, stage=stage))
+        db.upsert(self.conn, p)
+        db.update_fields(self.conn, pid, stage=stage)
+        return db.get(self.conn, pid)
+
+    def test_untouched_partners_do_not_dilute_the_denominator(self):
+        """A list of 500 unworked prospects must not read as a 0% channel."""
+        worked = self._partner("a", "credit_union", Stage.CONTACTED.value)
+        self._partner("b", "credit_union", Stage.NOT_CONTACTED.value)
+        stats = analytics.channel_stats(self.conn, [worked, db.get(self.conn, "b")],
+                                        {}, {})
+        self.assertEqual(stats["credit_union"].total, 2)
+        self.assertEqual(stats["credit_union"].worked, 1)
+
+    def test_producing_counts_partners_not_deals(self):
+        p = self._partner("a", "credit_union", Stage.PRODUCING.value)
+        deals = {"a": [{"status": "funded", "amount": 100.0, "revenue": 3.0,
+                        "referred_date": "2026-05-01"},
+                       {"status": "funded", "amount": 200.0, "revenue": 6.0,
+                        "referred_date": "2026-06-01"}]}
+        stats = analytics.channel_stats(self.conn, [p], deals, {"a": "2026-04-01"})
+        st = stats["credit_union"]
+        self.assertEqual(st.producing, 1)
+        self.assertEqual(st.deals, 2)
+        self.assertEqual(st.revenue, 9.0)
+
+    def test_only_funded_deals_count_toward_revenue(self):
+        p = self._partner("a", "credit_union", Stage.PRODUCING.value)
+        deals = {"a": [{"status": "declined", "amount": 500.0, "revenue": None,
+                        "referred_date": "2026-05-01"}]}
+        stats = analytics.channel_stats(self.conn, [p], deals, {"a": "2026-04-01"})
+        self.assertEqual(stats["credit_union"].funded, 0)
+        self.assertEqual(stats["credit_union"].revenue, 0.0)
+
+    def test_time_to_first_deal_measures_from_first_contact(self):
+        p = self._partner("a", "credit_union", Stage.PRODUCING.value)
+        deals = {"a": [{"status": "funded", "amount": 1.0, "revenue": 1.0,
+                        "referred_date": "2026-05-01"}]}
+        stats = analytics.channel_stats(self.conn, [p], deals, {"a": "2026-04-01"})
+        self.assertEqual(stats["credit_union"].median_days_to_deal, 30)
+
+
+class Calibration(unittest.TestCase):
+    def _rows(self, spec):
+        rows = {}
+        for tier, worked, producing, deals in spec:
+            r = analytics.TierRow(tier)
+            r.worked, r.producing, r.deals = worked, producing, deals
+            rows[tier] = r
+        return rows
+
+    def test_thin_data_blocks_calibration(self):
+        ok, reason = analytics.can_calibrate(self._rows([("A", 3, 1, 1)]))
+        self.assertFalse(ok)
+        self.assertIn("at least two tiers", reason)
+
+    def test_enough_data_allows_calibration(self):
+        ok, _ = analytics.can_calibrate(
+            self._rows([("A", 20, 8, 8), ("D", 20, 1, 1)]))
+        self.assertTrue(ok)
+
+    def test_clear_separation_is_reported(self):
+        rows = self._rows([("A", 40, 24, 30), ("D", 40, 1, 1)])
+        self.assertIn("separated", analytics.calibration_verdict(rows))
+
+    def test_overlapping_intervals_report_no_separation(self):
+        rows = self._rows([("A", 10, 3, 3), ("D", 10, 2, 2)])
+        verdict = analytics.calibration_verdict(rows)
+        self.assertIn("NOT separated", verdict)
+        self.assertIn("Do not re-weight", verdict)
+
+
+class DealRecords(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "t.db")
+        db.upsert(self.conn, cu(id="c", total_assets=1e8))
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_new_deal_starts_as_referred(self):
+        did = db.add_deal(self.conn, "c", "sba_loans", "2026-05-01", amount=250000)
+        self.assertEqual(db.get_deal(self.conn, did)["status"], "referred")
+
+    def test_funding_sets_a_close_date(self):
+        did = db.add_deal(self.conn, "c", "sba_loans", "2026-05-01")
+        db.update_deal(self.conn, did, "funded", revenue=7500.0)
+        deal = db.get_deal(self.conn, did)
+        self.assertEqual(deal["revenue"], 7500.0)
+        self.assertTrue(deal["closed_date"])
+
+    def test_referred_status_does_not_set_a_close_date(self):
+        did = db.add_deal(self.conn, "c", "sba_loans", "2026-05-01")
+        db.update_deal(self.conn, did, "underwriting")
+        self.assertIsNone(db.get_deal(self.conn, did)["closed_date"])
+
+    def test_updating_a_missing_deal_fails_cleanly(self):
+        self.assertFalse(db.update_deal(self.conn, 999, "funded"))
+
+    def test_first_contact_ignores_non_outbound_events(self):
+        db.add_event(self.conn, "c", "note", "2026-01-01")
+        db.add_event(self.conn, "c", "messaged", "2026-03-15")
+        self.assertEqual(db.first_contact_date(self.conn, "c"), "2026-03-15")
+
+    def test_filtering_by_status(self):
+        db.add_deal(self.conn, "c", "sba_loans", "2026-05-01")
+        did = db.add_deal(self.conn, "c", "equipment_leasing", "2026-05-02")
+        db.update_deal(self.conn, did, "funded")
+        self.assertEqual(len(db.all_deals(self.conn, status="funded")), 1)
+
+
+class ProducerRanking(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "t.db")
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_agreed_but_silent_partners_are_included(self):
+        """The maintenance cost you are deciding whether to keep paying."""
+        p = Partner(id="a", name="Silent", partner_type="cpa_firm",
+                    stage=Stage.AGREEMENT.value)
+        rows = analytics.producer_stats([p], {}, {})
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].deals, 0)
+
+    def test_unworked_partners_are_excluded(self):
+        p = Partner(id="a", name="Cold", partner_type="cpa_firm",
+                    stage=Stage.NOT_CONTACTED.value)
+        self.assertEqual(analytics.producer_stats([p], {}, {}), [])
+
+    def test_rows_sort_by_revenue(self):
+        small = Partner(id="s", name="Small", partner_type="cpa_firm",
+                        stage=Stage.PRODUCING.value)
+        big = Partner(id="b", name="Big", partner_type="cpa_firm",
+                      stage=Stage.PRODUCING.value)
+        deals = {
+            "s": [{"status": "funded", "amount": 100.0, "revenue": 5.0,
+                   "referred_date": "2026-05-01"}],
+            "b": [{"status": "funded", "amount": 900.0, "revenue": 50.0,
+                   "referred_date": "2026-05-01"}],
+        }
+        rows = analytics.producer_stats([small, big], deals, {})
+        self.assertEqual(rows[0].partner.id, "b")

@@ -278,3 +278,180 @@ def history(partner, events: list[dict]) -> str:
         note = f"  {e['note']}" if e["note"] else ""
         lines.append(f"  {e['date']}  {e['kind']:<10}{note}")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Outcome reporting
+# ---------------------------------------------------------------------------
+
+def _pct(triple) -> str:
+    """Render a Wilson triple as 'point% [low-high]'."""
+    point, low, high = triple
+    return f"{point:5.0%}  [{low:.0%}-{high:.0%}]"
+
+
+def _money(value: float) -> str:
+    if not value:
+        return "--"
+    if value >= 1e6:
+        return f"${value/1e6:,.2f}M"
+    if value >= 1e3:
+        return f"${value/1e3:,.0f}k"
+    return f"${value:,.0f}"
+
+
+def channels_report(stats: dict, can_rank: bool, gate_reason: str) -> str:
+    """Where should the next month of time go?"""
+    from .analytics import MIN_WORKED_FOR_RATE, rank_channels
+
+    if not stats:
+        return "No partners recorded yet."
+
+    out = ["WHERE THE TIME IS PAYING OFF", "=" * 78, ""]
+    out.append(f"{'CHANNEL':<18} {'WORKED':>6} {'AGREED':>6} {'SENT':>5} "
+               f"{'DEALS':>5} {'FUNDED':>6} {'REVENUE':>10} {'DAYS':>5}")
+    out.append("-" * 78)
+
+    for st in sorted(stats.values(), key=lambda s: -s.worked):
+        days = st.median_days_to_deal
+        out.append(
+            f"{st.channel[:18]:<18} {st.worked:>6} {st.agreed:>6} "
+            f"{st.producing:>5} {st.deals:>5} {st.funded:>6} "
+            f"{_money(st.revenue):>10} {(f'{days:.0f}' if days is not None else '--'):>5}"
+        )
+
+    out += ["", "WORKED = partners actually contacted.  SENT = partners that sent "
+            "at least one deal.", "DAYS = median days from first contact to first "
+            "deal.", ""]
+
+    # Rates, with intervals, only where the denominator supports them.
+    rated = [s for s in stats.values() if s.has_enough_for_rate]
+    thin = [s for s in stats.values() if not s.has_enough_for_rate and s.worked]
+    if rated:
+        out += ["PRODUCTION RATE  (share of worked partners that sent a deal)",
+                "-" * 78]
+        for st in sorted(rated, key=lambda s: -s.production_rate[0]):
+            out.append(f"  {st.channel[:20]:<20} {_pct(st.production_rate)}"
+                       f"   n={st.worked}")
+        out.append("")
+    if thin:
+        out.append("Not enough worked partners for a rate "
+                   f"(need {MIN_WORKED_FOR_RATE}): "
+                   + ", ".join(f"{s.channel} (n={s.worked})" for s in thin))
+        out.append("")
+
+    # A channel with a real denominator and zero production is worth naming
+    # even when no comparative verdict is available. It is not proof the
+    # channel cannot work, but it is the most actionable fact on the page.
+    barren = [s for s in stats.values()
+              if s.has_enough_for_rate and s.producing == 0]
+    if barren:
+        out += ["WORTH NOTICING", "-" * 78]
+        for st in sorted(barren, key=lambda s: -s.worked):
+            label = st.channel.replace("_", " ")
+            out.append(f"  {st.worked} {label} partners worked, zero deals.")
+            if st.agreed:
+                out.append(f"  {st.agreed} of them agreed to refer and still sent "
+                           "nothing -- the ask may be landing, the follow-through "
+                           "is not.")
+        out += ["  Not proof the channel cannot work. It is a reason to change "
+                "the approach", "  before spending another month on it.", ""]
+
+    out += ["VERDICT", "-" * 78]
+    if can_rank:
+        ranked = rank_channels(stats)
+        best, worst = ranked[0], ranked[-1]
+        _, best_low, _ = best.production_rate
+        _, _, worst_high = worst.production_rate
+        if best_low > worst_high:
+            out.append(f"  Spend more time on {best.channel.replace('_',' ')}. "
+                       f"It out-produces {worst.channel.replace('_',' ')} and the "
+                       "intervals do not overlap.")
+        else:
+            out.append("  No channel is clearly ahead -- the confidence intervals "
+                       "still overlap.")
+            out.append("  Keep all channels running; do not reallocate on this yet.")
+    else:
+        out.append(f"  Withheld. {gate_reason}")
+        out.append("  The counts above are real. The comparison is not yet.")
+
+    return "\n".join(out)
+
+
+def producers_report(rows: list, show_all: bool = False) -> str:
+    """Which relationships pay, and which are maintenance cost."""
+    if not rows:
+        return ("No partners have reached an agreement or sent a deal yet.\n"
+                "Nothing to evaluate -- keep working the `due` list.")
+
+    producing = [r for r in rows if r.deals]
+    dead_weight = [r for r in rows if not r.deals]
+
+    out = ["PARTNER VALUE", "=" * 78, ""]
+
+    if producing:
+        out += [f"{'PARTNER':<34} {'TIER':>4} {'DEALS':>5} {'FUNDED':>6} "
+                f"{'VOLUME':>10} {'REVENUE':>10} {'DAYS':>5}", "-" * 78]
+        for r in producing:
+            days = r.days_to_first_deal
+            out.append(
+                f"{r.partner.name[:34]:<34} {r.partner.tier:>4} {r.deals:>5} "
+                f"{r.funded:>6} {_money(r.funded_amount):>10} "
+                f"{_money(r.revenue):>10} "
+                f"{(str(days) if days is not None else '--'):>5}")
+        total_rev = sum(r.revenue for r in producing)
+        out += ["-" * 78,
+                f"{'TOTAL':<34} {'':>4} {sum(r.deals for r in producing):>5} "
+                f"{sum(r.funded for r in producing):>6} "
+                f"{_money(sum(r.funded_amount for r in producing)):>10} "
+                f"{_money(total_rev):>10}", ""]
+
+    if dead_weight:
+        out += [f"AGREED BUT NEVER PRODUCED ({len(dead_weight)})", "-" * 78,
+                "These cost you check-ins and follow-ups. Decide which to keep.",
+                ""]
+        limit = len(dead_weight) if show_all else 15
+        for r in dead_weight[:limit]:
+            out.append(f"  [{r.partner.tier}] {r.partner.name[:40]:<40} "
+                       f"{r.partner.partner_type[:16]:<16} "
+                       f"last touch {r.partner.last_touch or '--'}")
+        if len(dead_weight) > limit:
+            out.append(f"  ... and {len(dead_weight)-limit} more (--all to list)")
+
+    return "\n".join(out)
+
+
+def calibration_report(rows: dict, can_run: bool, gate_reason: str,
+                       verdict: str) -> str:
+    """Did the A/B/C/D tiers predict anything?"""
+    from .analytics import MIN_PER_TIER
+
+    if not rows:
+        return "No worked partners yet -- nothing to calibrate."
+
+    out = ["TIER CALIBRATION", "=" * 78, "",
+           "Does the scoring model predict who actually produces?", "",
+           f"{'TIER':<6} {'WORKED':>7} {'SENT':>5} {'DEALS':>6} {'REVENUE':>10}"
+           f"   PRODUCTION RATE", "-" * 78]
+
+    for tier in ("A", "B", "C", "D"):
+        row = rows.get(tier)
+        if not row:
+            continue
+        rate = (_pct(row.production_rate) if row.worked >= MIN_PER_TIER
+                else f"n={row.worked}, too few")
+        out.append(f"{row.tier:<6} {row.worked:>7} {row.producing:>5} "
+                   f"{row.deals:>6} {_money(row.revenue):>10}   {rate}")
+
+    out += ["", "VERDICT", "-" * 78]
+    if can_run:
+        out.append("  " + verdict)
+        out += ["",
+                "  If the tiers did not separate, adjust the weights in",
+                "  prospector/scoring.py by hand and re-run `rescore`. This tool",
+                "  deliberately will not re-fit them for you -- at these sample",
+                "  sizes that reproduces noise and degrades the rankings."]
+    else:
+        out.append(f"  Withheld. {gate_reason}")
+
+    return "\n".join(out)

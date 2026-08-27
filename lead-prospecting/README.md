@@ -103,6 +103,89 @@ never decide when to follow up.
 python3 prospect.py history northgate         # the full interaction log
 ```
 
+## Recording outcomes
+
+The point of this half: **"which channel actually works" cannot be
+reconstructed later.** It is answerable in February only if you were recording
+in September. Recording costs seconds; not recording costs the answer.
+
+```bash
+python3 prospect.py deal northgate sba_loans --amount 340000
+python3 prospect.py deal-won 1 --revenue 11900        # it funded
+python3 prospect.py deal-lost 2 --note "went with their bank"
+python3 prospect.py deals                             # everything recorded
+```
+
+Recording a deal also logs a `referral` event and moves the partner to
+`producing`, so the pipeline and the deal ledger never drift apart.
+
+## Reading the outcomes
+
+```bash
+python3 prospect.py channels     # where the next month of time should go
+python3 prospect.py producers    # which relationships pay, which are cost
+python3 prospect.py calibrate    # did the A/B/C/D tiers predict anything?
+```
+
+**`channels`** is the one that earns its keep. It answers a calendar question,
+not a statistics question: keep spending Tuesdays on CPA coffees, or move that
+time to credit unions?
+
+```
+PRODUCTION RATE  (share of worked partners that sent a deal)
+  cre_broker             22%  [6%-55%]   n=9
+  credit_union           12%  [5%-27%]   n=34
+  cpa_firm                0%  [0%-13%]   n=26
+
+WORTH NOTICING
+  26 cpa firm partners worked, zero deals.
+  5 of them agreed to refer and still sent nothing -- the ask may be
+  landing, the follow-through is not.
+
+VERDICT
+  No channel is clearly ahead -- the confidence intervals still overlap.
+  Keep all channels running; do not reallocate on this yet.
+```
+
+Three deliberate design choices in that output:
+
+- **Every rate carries a confidence interval.** `3/8 = 38%` invites a decision;
+  `38% [14%-69%]` makes the uncertainty impossible to ignore. For this tool's
+  first year the interval is the most honest number on the page.
+- **Verdicts are gated, data never is.** Counts always show. A comparative
+  verdict is withheld until roughly 10 deals and two channels with 8+ worked
+  partners, and the tool says exactly what it is still waiting for.
+- **A channel with a real denominator and zero deals gets named anyway.** Not a
+  statistical claim — an observation worth acting on before spending another
+  month the same way.
+
+### What this deliberately does not do
+
+- **It will not re-fit the scoring weights from your outcomes.** Fitting
+  weights to twenty data points reproduces noise and would quietly degrade the
+  rankings while looking sophisticated. `calibrate` reports whether the tiers
+  separated; changing them is a human decision, made by editing the constants
+  in `prospector/scoring.py` and running `rescore`.
+- **No pipeline value forecasting.** Expected-value projections need base rates
+  you will not have for a year. A made-up number that feels like information is
+  worse than no number.
+- **No conversion funnel percentages.** At n=30 every stage rate is worth
+  plus-or-minus twenty points.
+
+### Seeing it populated before you have data
+
+The outcome reports pay off in month four, which makes it hard to judge whether
+the logging is worth it. This fills a throwaway database with six months of
+invented activity so you can see the reports with data in them:
+
+```bash
+python3 demo_seed.py --database /tmp/demo.db
+python3 prospect.py --database /tmp/demo.db channels
+```
+
+Every record it writes is synthetic and prefixed `[DEMO]`. Never point it at
+your real database.
+
 ## Follow-up rules
 
 `due` sorts by lateness, but **an unanswered reply carries 3× weight** — a warm

@@ -37,6 +37,7 @@ def connect(path: str | Path = DEFAULT_DB) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute(_ddl())
     conn.execute(_EVENTS_DDL)
+    conn.execute(_DEALS_DDL)
     _migrate(conn)
     conn.commit()
     return conn
@@ -165,3 +166,87 @@ def find(conn: sqlite3.Connection, query: str) -> list[Partner]:
         "SELECT * FROM partners WHERE lower(name) LIKE ? OR lower(id) LIKE ? "
         "ORDER BY total_score DESC", (like, like))
     return [Partner.from_row(r) for r in rows]
+
+
+# --- Deals --------------------------------------------------------------
+# What a partner actually sent us. The whole point of outcome tracking:
+# without this, "which channel works" is unanswerable forever, because it
+# cannot be reconstructed after the fact.
+
+DEAL_STATUSES = ("referred", "underwriting", "funded", "declined", "withdrawn")
+CLOSED_STATUSES = ("funded", "declined", "withdrawn")
+
+_DEALS_DDL = """
+CREATE TABLE IF NOT EXISTS deals (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id    TEXT NOT NULL,
+    product       TEXT,
+    status        TEXT NOT NULL,
+    referred_date TEXT NOT NULL,
+    closed_date   TEXT,
+    amount        REAL,
+    revenue       REAL,
+    note          TEXT,
+    created_at    TEXT NOT NULL
+)
+"""
+
+
+def add_deal(conn: sqlite3.Connection, partner_id: str, product: str,
+             referred_date: str, amount: float | None = None,
+             note: str = "") -> int:
+    cur = conn.execute(
+        "INSERT INTO deals (partner_id, product, status, referred_date, "
+        "amount, note, created_at) VALUES (?, ?, 'referred', ?, ?, ?, ?)",
+        (partner_id, product, referred_date, amount, note,
+         _dt.datetime.now().isoformat(timespec="seconds")),
+    )
+    return cur.lastrowid
+
+
+def update_deal(conn: sqlite3.Connection, deal_id: int, status: str,
+                closed_date: str | None = None, amount: float | None = None,
+                revenue: float | None = None, note: str | None = None) -> bool:
+    existing = get_deal(conn, deal_id)
+    if not existing:
+        return False
+    changes = {"status": status}
+    if status in CLOSED_STATUSES:
+        changes["closed_date"] = closed_date or _dt.date.today().isoformat()
+    if amount is not None:
+        changes["amount"] = amount
+    if revenue is not None:
+        changes["revenue"] = revenue
+    if note:
+        changes["note"] = f"{existing['note']} | {note}".strip(" |") \
+            if existing["note"] else note
+    sets = ", ".join(f"{k}=?" for k in changes)
+    conn.execute(f"UPDATE deals SET {sets} WHERE id=?",
+                 [*changes.values(), deal_id])
+    return True
+
+
+def get_deal(conn: sqlite3.Connection, deal_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def all_deals(conn: sqlite3.Connection, partner_id: str | None = None,
+              status: str | None = None) -> list[dict]:
+    query, params = "SELECT * FROM deals WHERE 1=1", []
+    if partner_id:
+        query += " AND partner_id = ?"
+        params.append(partner_id)
+    if status:
+        query += " AND status = ?"
+        params.append(status)
+    query += " ORDER BY referred_date, id"
+    return [dict(r) for r in conn.execute(query, params)]
+
+
+def first_contact_date(conn: sqlite3.Connection, partner_id: str) -> str | None:
+    """Date of the first outbound touch -- the clock start for time-to-deal."""
+    row = conn.execute(
+        "SELECT MIN(date) AS d FROM events WHERE partner_id = ? "
+        "AND kind IN ('messaged', 'nudge')", (partner_id,)).fetchone()
+    return row["d"] if row and row["d"] else None
