@@ -918,3 +918,131 @@ class NoContactRegression(unittest.TestCase):
         partner = score_partner(db.get(self.conn, "c"))
         self.assertIn("No contacts on file",
                       report.contact_roster(partner, [], {}))
+
+
+# ---------------------------------------------------------------------------
+# NCUA import validation
+# ---------------------------------------------------------------------------
+# This is the tool's only route to real credit-union data and the least
+# forgiving place to be wrong, because every failure mode here is silent.
+
+from prospector import ingest_ncua
+
+
+def _cu(name, assets, net_worth, loans):
+    return Partner(id=name, name=name, partner_type="credit_union",
+                   total_assets=assets, net_worth=net_worth,
+                   business_loans_outstanding=loans)
+
+
+def _codes(findings):
+    return {f["code"] for f in findings}
+
+
+def _errors(findings):
+    return {f["code"] for f in findings if f["level"] == "error"}
+
+
+class ScaleDetection(unittest.TestCase):
+    """A units mismatch does not crash -- it silently corrupts the ranking.
+
+    Cap pressure is a ratio and survives. Access scoring does not: every
+    institution reads as tiny, takes the maximum reachability score, and the
+    ordering shifts without any visible error.
+    """
+
+    def test_thousands_scaled_file_is_caught(self):
+        partners = [_cu("A", 486_000, 53_400, 55_900),
+                    _cu("B", 212_000, 19_800, 32_900)]
+        self.assertIn("scale", _errors(ingest_ncua.validate(partners)))
+
+    def test_dollar_scaled_file_passes(self):
+        partners = [_cu("A", 486e6, 53.4e6, 55.9e6),
+                    _cu("B", 212e6, 19.8e6, 32.9e6)]
+        self.assertNotIn("scale", _codes(ingest_ncua.validate(partners)))
+
+    def test_the_corruption_it_prevents_is_real(self):
+        """Pin the actual damage, so the guard is never removed as noise."""
+        correct = score_partner(_cu("A", 486e6, 53.4e6, 55.9e6))
+        mis_scaled = score_partner(_cu("A", 486e3, 53.4e3, 55.9e3))
+        self.assertAlmostEqual(cap_pressure(correct), cap_pressure(mis_scaled))
+        self.assertNotEqual(correct.access_score, mis_scaled.access_score)
+        self.assertNotEqual(correct.tier, mis_scaled.tier)
+
+    def test_rescale_restores_the_original_figures(self):
+        partners = [_cu("A", 486_000, 53_400, 55_900)]
+        ingest_ncua.rescale(partners, ingest_ncua.UNIT_FACTORS["thousands"])
+        self.assertEqual(partners[0].total_assets, 486_000_000)
+        self.assertEqual(ingest_ncua.validate(partners), [])
+
+    def test_rescale_leaves_missing_values_alone(self):
+        partners = [_cu("A", 486_000, None, None)]
+        ingest_ncua.rescale(partners, 1000.0)
+        self.assertIsNone(partners[0].net_worth)
+
+
+class ImpossibleValues(unittest.TestCase):
+    def test_net_worth_above_assets_is_an_error(self):
+        findings = ingest_ncua.validate([_cu("A", 53.4e6, 486e6, 10e6)])
+        self.assertIn("net_worth_exceeds_assets", _errors(findings))
+
+    def test_loans_above_assets_is_an_error(self):
+        findings = ingest_ncua.validate([_cu("A", 100e6, 10e6, 400e6)])
+        self.assertIn("loans_exceed_assets", _errors(findings))
+
+    def test_negative_figures_are_an_error(self):
+        findings = ingest_ncua.validate([_cu("A", -486e6, 53e6, 10e6)])
+        self.assertIn("negative", _errors(findings))
+
+    def test_a_healthy_file_produces_no_findings(self):
+        self.assertEqual(ingest_ncua.validate([_cu("A", 486e6, 53.4e6, 55.9e6)]), [])
+
+
+class CoverageChecks(unittest.TestCase):
+    def test_missing_business_loans_is_an_error(self):
+        """Cap pressure is the point of the import; without loans there is none."""
+        findings = ingest_ncua.validate([_cu("A", 486e6, 53e6, None),
+                                         _cu("B", 212e6, 20e6, None)])
+        self.assertIn("missing_business_loans", _errors(findings))
+
+    def test_mostly_missing_net_worth_is_a_warning_not_an_error(self):
+        partners = [_cu(f"P{i}", 486e6, None, 55e6) for i in range(4)]
+        findings = ingest_ncua.validate(partners)
+        self.assertIn("missing_net_worth", _codes(findings))
+        self.assertNotIn("missing_net_worth", _errors(findings))
+
+    def test_a_few_missing_assets_warn_but_do_not_block(self):
+        partners = [_cu(f"P{i}", 486e6, 53e6, 55e6) for i in range(9)]
+        partners.append(_cu("gap", None, 53e6, 55e6))
+        findings = ingest_ncua.validate(partners)
+        self.assertIn("missing_assets", _codes(findings))
+        self.assertNotIn("missing_assets", _errors(findings))
+
+    def test_mostly_missing_assets_blocks(self):
+        partners = [_cu("ok", 486e6, 53e6, 55e6),
+                    _cu("a", None, 53e6, 55e6), _cu("b", None, 53e6, 55e6)]
+        self.assertIn("missing_assets", _errors(ingest_ncua.validate(partners)))
+
+    def test_no_rows_at_all_is_an_error(self):
+        self.assertIn("empty", _errors(ingest_ncua.validate([])))
+
+
+class InspectHelpers(unittest.TestCase):
+    def test_sample_values_pair_headers_with_data(self):
+        """Account codes like ACCT_010 are unreadable without their values."""
+        pairs = dict(ingest_ncua.sample_values("data/sample_ncua_mn.csv", limit=2))
+        self.assertIn("CU_NAME", pairs)
+        self.assertEqual(pairs["CU_NAME"][0], "Northgate Community CU")
+
+    def test_suggested_mapping_is_paste_ready(self):
+        suggested = ingest_ncua.suggest_mapping("data/sample_ncua_mn.csv")
+        self.assertEqual(suggested["total_assets"], ["TOTAL_ASSETS"])
+        for value in suggested.values():
+            self.assertIsInstance(value, list)
+
+    def test_suggested_mapping_round_trips_as_an_override(self):
+        suggested = ingest_ncua.suggest_mapping("data/sample_ncua_mn.csv")
+        partners, diag = ingest_ncua.load("data/sample_ncua_mn.csv",
+                                          overrides=suggested)
+        self.assertEqual(len(partners), 15)
+        self.assertEqual(diag["columns_unmatched"], [])

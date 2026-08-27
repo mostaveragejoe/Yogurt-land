@@ -49,26 +49,70 @@ def cmd_init(args) -> int:
 
 def cmd_ingest_ncua(args) -> int:
     if args.inspect:
-        for header in ingest_ncua.inspect(args.path):
-            print(header)
+        print(f"Columns in {args.path}\n")
+        for header, values in ingest_ncua.sample_values(args.path):
+            shown = ", ".join(v[:22] for v in values if v) or "(empty)"
+            print(f"  {header[:34]:<34} {shown}")
+        print("\nMapping this file would use:\n")
+        suggested = ingest_ncua.suggest_mapping(args.path)
+        print("  " + json.dumps(suggested, indent=2).replace("\n", "\n  "))
+        unmatched = [f for f in ingest_ncua.DEFAULT_MAP if f not in suggested]
+        if unmatched:
+            print(f"\n  UNMATCHED: {', '.join(unmatched)}")
+            print("  Save the JSON above with the missing fields filled in, "
+                  "then pass --map.")
         return 0
 
     overrides = ingest_ncua.load_map(args.map)
     partners, diag = ingest_ncua.load(args.path, state=args.state, overrides=overrides)
+
+    factor = ingest_ncua.UNIT_FACTORS[args.units]
+    if factor != 1.0:
+        ingest_ncua.rescale(partners, factor)
+        print(f"Scaled every monetary column by {factor:,.0f} (--units {args.units}).\n")
 
     print(f"Read {diag['rows_read']} rows; {diag['matched_state']} in {args.state}.")
     print("Columns matched:")
     for field, header in sorted(diag["columns_matched"].items()):
         print(f"  {field:<28} <- {header}")
     if diag["columns_unmatched"]:
-        print("\n  WARNING: unmatched columns: " + ", ".join(diag["columns_unmatched"]))
-        print("  Cap-pressure scoring needs total_assets, net_worth and")
-        print("  business_loans_outstanding. Re-run with --inspect and pass --map.")
+        print("\n  Unmatched: " + ", ".join(diag["columns_unmatched"]))
+        print("  Run --inspect to see the file's columns and a paste-ready mapping.")
+
+    # --- validation -----------------------------------------------------
+    findings = ingest_ncua.validate(partners)
+    errors = [f for f in findings if f["level"] == "error"]
+    warnings = [f for f in findings if f["level"] == "warning"]
+
+    if findings:
+        print()
+        for f in errors:
+            print(f"  ERROR   [{f['code']}] {f['message']}")
+        for f in warnings:
+            print(f"  WARNING [{f['code']}] {f['message']}")
+
+    if errors and not args.force:
+        print("\nRefusing to import. These errors produce a plausible-looking "
+              "table with a\nquietly wrong ranking, which is worse than no "
+              "import at all.")
+        print("Fix the mapping or units, or pass --force to import anyway.")
+        return 1
+
+    scored = score_all(partners)
+
+    if args.dry_run:
+        print(f"\nDRY RUN -- nothing written. {len(scored)} would be imported.\n")
+        print(report.ranked_table(scored, limit=args.preview))
+        print("\nRe-run without --dry-run to write these.")
+        return 0
 
     conn = db.connect(args.database)
-    count = _rescore_and_store(conn, partners)
-    print(f"\nStored and scored {count} credit unions.")
-    print(report.ranked_table(db.all_partners(conn, partner_type="credit_union"), limit=15))
+    for partner in scored:
+        db.upsert(conn, partner)
+    conn.commit()
+    print(f"\nStored and scored {len(scored)} credit unions.")
+    print(report.ranked_table(db.all_partners(conn, partner_type="credit_union"),
+                              limit=15))
     conn.close()
     return 0
 
@@ -660,7 +704,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("path")
     p.add_argument("--state", default="MN")
     p.add_argument("--map", help="JSON file overriding column matching")
-    p.add_argument("--inspect", action="store_true", help="print headers and exit")
+    p.add_argument("--inspect", action="store_true",
+                   help="show columns with sample values and a paste-ready mapping")
+    p.add_argument("--dry-run", action="store_true",
+                   help="parse, validate and preview without writing")
+    p.add_argument("--units", choices=list(ingest_ncua.UNIT_FACTORS),
+                   default="dollars",
+                   help="scale of the monetary columns (default dollars)")
+    p.add_argument("--preview", type=int, default=12,
+                   help="rows to show in a dry run")
+    p.add_argument("--force", action="store_true",
+                   help="import despite validation errors")
     p.set_defaults(func=cmd_ingest_ncua)
 
     p = sub.add_parser("ingest-csv", help="load a hand-built partner CSV")

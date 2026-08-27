@@ -44,15 +44,55 @@ python3 prospect.py ingest-ncua path/to/ncua.csv --state MN --inspect   # see he
 python3 prospect.py ingest-ncua path/to/ncua.csv --state MN
 ```
 
-Header names change between export vintages, so the ingest matches columns
-loosely and **reports what it matched and what it did not**. If it warns that
-`total_assets`, `net_worth` or `business_loans_outstanding` are unmatched,
-cap-pressure scoring is degraded — run `--inspect` and pass a mapping:
+Work in this order — `--inspect`, then `--dry-run`, then the real import:
 
 ```bash
-echo '{"net_worth": ["ACCT_997"], "business_loans_outstanding": ["ACCT_400A"]}' > map.json
-python3 prospect.py ingest-ncua path/to/ncua.csv --map map.json
+python3 prospect.py ingest-ncua ncua.csv --inspect            # what is in the file
+python3 prospect.py ingest-ncua ncua.csv --dry-run            # what would be imported
+python3 prospect.py ingest-ncua ncua.csv                      # write it
 ```
+
+`--inspect` prints each column **with its first few values** and a paste-ready
+JSON mapping. Header names change between export vintages and NCUA account
+codes are unreadable on their own — `ACCT_010` means nothing until you see
+`486000000` under it.
+
+If a field can't be resolved, save the suggested JSON with the gaps filled in
+and pass it back:
+
+```bash
+echo '{"business_loans_outstanding": ["ACCT_400A"]}' > map.json
+python3 prospect.py ingest-ncua ncua.csv --map map.json
+```
+
+### The import refuses when it would be silently wrong
+
+Every failure mode in this import is quiet — a mis-mapped or mis-scaled column
+produces a plausible table with a corrupted ranking rather than an error. So
+the import validates before writing and **refuses on anything that would
+corrupt the scoring**:
+
+| Check | Why it matters |
+|---|---|
+| Assets implausibly small | The file is in thousands. See below. |
+| Net worth above assets | Columns are mapped to the wrong fields |
+| Loans above assets | Business-loan column is wrong |
+| Negative figures | Column mismatch |
+| No business-loan figure | Cap pressure is the entire point of this import |
+| Most rows missing assets | Cannot score reachability |
+
+**The units trap is the one worth understanding.** Some NCUA exports report in
+thousands. Cap pressure is a ratio, so it still looks correct — but access
+scoring reads every institution as sub-$250M, hands out the maximum
+reachability score, and the ranking silently shifts (an A-tier drops to B).
+Nothing errors. The import detects it and tells you to re-run:
+
+```bash
+python3 prospect.py ingest-ncua ncua.csv --units thousands
+```
+
+`--force` imports despite errors, if you're certain. Warnings (partial missing
+net worth, a few missing assets) never block.
 
 ### Everyone else — hand-built CSV
 
