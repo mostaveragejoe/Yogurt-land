@@ -13,6 +13,7 @@ DEFAULT_DB = Path("data/partners.db")
 _NUMERIC = {
     "total_assets", "net_worth", "business_loans_outstanding",
     "business_loan_count", "headcount", "active_listings", "years_active",
+    "risk_based_capital", "cre_loans", "construction_loans",
     "fit_score", "capacity_score", "access_score", "total_score",
     "low_income_designated", "has_advisory_practice", "do_not_contact",
     "does_attest_work",
@@ -74,6 +75,13 @@ def upsert(conn: sqlite3.Connection, partner: Partner) -> None:
                 row[guarded] = prior[guarded]
         if prior["do_not_contact"]:
             row["do_not_contact"] = 1
+        # A source that does not carry a field must not erase it. A LinkedIn
+        # export has no call-report figures; without this it would blank the
+        # assets and capital an NCUA or FDIC import had already supplied, and
+        # the partner would silently drop tier.
+        for column in COLUMNS:
+            if row.get(column) in (None, "") and prior[column] not in (None, ""):
+                row[column] = prior[column]
     placeholders = ", ".join("?" for _ in COLUMNS)
     assignments = ", ".join(f"{c}=excluded.{c}" for c in COLUMNS if c != "id")
     conn.execute(
@@ -389,3 +397,87 @@ def _migrate_legacy_contacts(conn: sqlite3.Connection) -> int:
                     is_primary=True, note="migrated from partner record")
         migrated += 1
     return migrated
+
+
+# --- Identity reconciliation --------------------------------------------
+# The same institution arrives from different sources under different ids:
+# NCUA keys on the charter number, a LinkedIn export only has a company name.
+# Without reconciliation you get two records for one credit union -- and,
+# worse, the contacts land on one while the call-report figures land on the
+# other, so the scored record has nobody to call.
+
+# Words that carry no identity and differ freely between sources.
+_NAME_NOISE = {
+    "inc", "incorporated", "llc", "llp", "lp", "pa", "pc", "ltd", "limited",
+    "co", "company", "corp", "corporation", "the", "of", "and",
+}
+
+# Variants of the same institution word, mapped to one token.
+_NAME_SYNONYMS = [
+    (r"\bfederal credit union\b", "cu"),
+    (r"\bcredit union\b", "cu"),
+    (r"\bfcu\b", "cu"),
+    (r"\bc\s*u\b", "cu"),
+    (r"\bnational association\b", "bank"),
+    (r"\bnational bank\b", "bank"),
+    (r"\bbancorp\b", "bank"),
+    (r"\bbanc\b", "bank"),
+]
+
+
+def canonical_name(name: str) -> str:
+    """Reduce an institution name to a comparable key.
+
+    "Northgate Community Credit Union" and "Northgate Community CU" are the
+    same institution and must reconcile to the same key.
+    """
+    import re
+    text = (name or "").lower().replace("&", " and ")
+    for pattern, replacement in _NAME_SYNONYMS:
+        text = re.sub(pattern, replacement, text)
+    text = re.sub(r"[^a-z0-9\s]+", " ", text)
+    words = [w for w in text.split() if w and w not in _NAME_NOISE]
+    return " ".join(words)
+
+
+def match_by_name(conn: sqlite3.Connection, name: str,
+                  partner_type: str | None = None) -> Partner | None:
+    """Find an existing partner that is the same institution as `name`.
+
+    Scoped by type, so a credit union never merges into a similarly named
+    brokerage.
+    """
+    key = canonical_name(name)
+    if not key:
+        return None
+    query, params = "SELECT * FROM partners", []
+    if partner_type:
+        query += " WHERE partner_type = ?"
+        params.append(partner_type)
+    for row in conn.execute(query, params):
+        if canonical_name(row["name"]) == key:
+            return Partner.from_row(row)
+    return None
+
+
+def reconcile_ids(conn: sqlite3.Connection, partners: list) -> tuple[list, int]:
+    """Adopt existing ids for partners already known under another name.
+
+    Returns (partners, remapped) where remapped is {old_id: existing_id}.
+    Partners are mutated in place so the upsert updates rather than
+    duplicates, and the caller MUST apply the mapping to anything else
+    carrying a partner id -- contacts, above all. Without that the people
+    land on an id that was never inserted and the scored record has nobody
+    to call.
+
+    The incoming name wins only if the existing one is empty: a
+    charter-sourced name is not improved by a LinkedIn company string.
+    """
+    remapped: dict[str, str] = {}
+    for partner in partners:
+        existing = match_by_name(conn, partner.name, partner.partner_type)
+        if existing and existing.id != partner.id:
+            remapped[partner.id] = existing.id
+            partner.id = existing.id
+            partner.name = existing.name or partner.name
+    return partners, remapped

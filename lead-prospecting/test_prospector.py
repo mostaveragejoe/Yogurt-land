@@ -1,5 +1,6 @@
 """Self-tests. Run: python3 -m unittest test_prospector -v"""
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -1046,3 +1047,429 @@ class InspectHelpers(unittest.TestCase):
                                           overrides=suggested)
         self.assertEqual(len(partners), 15)
         self.assertEqual(diag["columns_unmatched"], [])
+
+
+# ---------------------------------------------------------------------------
+# Backup and restore
+# ---------------------------------------------------------------------------
+
+from prospector import backup, ingest_fdic, ingest_linkedin
+from prospector.scoring import (construction_concentration, cre_concentration,
+                                legal_lending_limit)
+
+
+class BackupRestore(unittest.TestCase):
+    """The database holds months of history no external source can rebuild."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.src = Path(self.tmp.name) / "src.db"
+        self.dst = Path(self.tmp.name) / "dst.db"
+        self.file = Path(self.tmp.name) / "backup.json"
+        conn = db.connect(self.src)
+        db.upsert(conn, score_partner(cu(id="c", total_assets=486e6,
+                                         net_worth=53e6,
+                                         business_loans_outstanding=55e6)))
+        cid = db.add_contact(conn, "c", "Dana Whitfield", title="CLO",
+                             is_primary=True)
+        db.add_event(conn, "c", "messaged", "2026-06-01", "hello", contact_id=cid)
+        did = db.add_deal(conn, "c", "sba_loans", "2026-07-01", amount=250000.0)
+        db.update_deal(conn, did, "funded", revenue=8000.0)
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _round_trip(self):
+        conn = db.connect(self.src)
+        counts = backup.write(conn, self.file)
+        conn.close()
+        target = db.connect(self.dst)
+        payload = backup.read(self.file)
+        restored = backup.restore(target, payload)
+        return counts, restored, target
+
+    def test_every_table_round_trips(self):
+        counts, restored, target = self._round_trip()
+        target.close()
+        self.assertEqual(counts, restored)
+        self.assertEqual(counts["partners"], 1)
+        self.assertEqual(counts["contacts"], 1)
+        self.assertEqual(counts["deals"], 1)
+
+    def test_relationship_history_survives(self):
+        _, _, target = self._round_trip()
+        self.assertEqual(db.contacts_for(target, "c")[0]["name"], "Dana Whitfield")
+        self.assertEqual(db.events_for(target, "c")[0]["note"], "hello")
+        self.assertEqual(db.all_deals(target)[0]["revenue"], 8000.0)
+        target.close()
+
+    def test_contact_attribution_survives(self):
+        _, _, target = self._round_trip()
+        contact = db.contacts_for(target, "c")[0]
+        self.assertEqual(db.contact_unanswered(target, contact["id"]), 1)
+        target.close()
+
+    def test_is_empty_distinguishes_a_fresh_database(self):
+        fresh = db.connect(Path(self.tmp.name) / "fresh.db")
+        self.assertTrue(backup.is_empty(fresh))
+        fresh.close()
+        conn = db.connect(self.src)
+        self.assertFalse(backup.is_empty(conn))
+        conn.close()
+
+    def test_a_non_backup_file_is_rejected(self):
+        bad = Path(self.tmp.name) / "bad.json"
+        bad.write_text('{"something": 1}')
+        with self.assertRaises(ValueError):
+            backup.read(bad)
+
+    def test_a_newer_format_version_is_rejected(self):
+        newer = Path(self.tmp.name) / "newer.json"
+        newer.write_text(json.dumps(
+            {"format_version": backup.BACKUP_FORMAT_VERSION + 1, "tables": {}}))
+        with self.assertRaises(ValueError):
+            backup.read(newer)
+
+    def test_unknown_columns_in_a_backup_are_dropped_not_fatal(self):
+        conn = db.connect(self.src)
+        payload = backup.dump(conn)
+        conn.close()
+        payload["tables"]["partners"][0]["a_column_since_removed"] = "x"
+        target = db.connect(self.dst)
+        self.assertIn("a_column_since_removed",
+                      backup.dropped_columns(target, payload).get("partners", []))
+        counts = backup.restore(target, payload)
+        target.close()
+        self.assertEqual(counts["partners"], 1)
+
+
+# ---------------------------------------------------------------------------
+# Identity reconciliation across sources
+# ---------------------------------------------------------------------------
+
+class CanonicalNames(unittest.TestCase):
+    """NCUA keys on charter, LinkedIn only has a company name. Without
+    reconciliation the contacts land on a scoreless stub."""
+
+    def test_credit_union_spellings_reconcile(self):
+        self.assertEqual(db.canonical_name("Northgate Community Credit Union"),
+                         db.canonical_name("Northgate Community CU"))
+
+    def test_fcu_reconciles(self):
+        self.assertEqual(db.canonical_name("Lakeshore FCU"),
+                         db.canonical_name("Lakeshore Federal Credit Union"))
+
+    def test_ampersand_and_the_word_and_reconcile(self):
+        self.assertEqual(db.canonical_name("Halvorsen & Reed CPAs"),
+                         db.canonical_name("Halvorsen and Reed CPAs"))
+
+    def test_legal_suffixes_are_ignored(self):
+        self.assertEqual(db.canonical_name("Acme Holdings LLC"),
+                         db.canonical_name("Acme Holdings"))
+
+    def test_genuinely_different_names_do_not_reconcile(self):
+        self.assertNotEqual(db.canonical_name("Northgate Community CU"),
+                            db.canonical_name("Southgate Community CU"))
+
+
+class Reconciliation(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "t.db")
+        db.upsert(self.conn, Partner(id="cu-90001", name="Northgate Community CU",
+                                     partner_type="credit_union",
+                                     total_assets=486e6))
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_an_incoming_partner_adopts_the_existing_id(self):
+        incoming = [Partner(id="cu-northgate-community-credit-union",
+                            name="Northgate Community Credit Union",
+                            partner_type="credit_union")]
+        reconciled, remapped = db.reconcile_ids(self.conn, incoming)
+        self.assertEqual(len(remapped), 1)
+        self.assertEqual(reconciled[0].id, "cu-90001")
+
+    def test_matching_is_scoped_by_partner_type(self):
+        """A brokerage must never merge into a similarly named credit union."""
+        incoming = [Partner(id="creb-northgate-community",
+                            name="Northgate Community CU",
+                            partner_type="cre_broker")]
+        _, remapped = db.reconcile_ids(self.conn, incoming)
+        self.assertEqual(remapped, {})
+
+    def test_an_unrelated_partner_keeps_its_id(self):
+        incoming = [Partner(id="cu-other", name="Southgate Members CU",
+                            partner_type="credit_union")]
+        reconciled, remapped = db.reconcile_ids(self.conn, incoming)
+        self.assertEqual(remapped, {})
+        self.assertEqual(reconciled[0].id, "cu-other")
+
+
+# ---------------------------------------------------------------------------
+# LinkedIn Sales Navigator import
+# ---------------------------------------------------------------------------
+
+class LinkedInTypeInference(unittest.TestCase):
+    def test_recognises_each_institution_type(self):
+        cases = {
+            "Northgate Community Credit Union": PartnerType.CREDIT_UNION.value,
+            "Lakeshore FCU": PartnerType.CREDIT_UNION.value,
+            "First National Bank of Eagan": PartnerType.COMMUNITY_BANK.value,
+            "Halvorsen & Reed CPAs": PartnerType.CPA_FIRM.value,
+            "Kessler CPA": PartnerType.CPA_FIRM.value,
+            "Summit Accounting Group": PartnerType.CPA_FIRM.value,
+            "Northstar Business Brokers": PartnerType.BUSINESS_BROKER.value,
+            "Twin Ports Commercial Realty": PartnerType.CRE_BROKER.value,
+            "Heartland Equipment Sales": PartnerType.EQUIPMENT_DEALER.value,
+            "Bell & Voigt Attorneys": PartnerType.ATTORNEY.value,
+        }
+        for name, expected in cases.items():
+            ptype, confident = ingest_linkedin.infer_type(name)
+            self.assertTrue(confident, f"{name} was not recognised")
+            self.assertEqual(ptype, expected, name)
+
+    def test_ambiguous_names_are_not_guessed(self):
+        """Guessing scores the partner by the wrong rubric entirely."""
+        for name in ("Larson & Associates", "Acme Holdings LLC", "Midwest Group"):
+            _, confident = ingest_linkedin.infer_type(name)
+            self.assertFalse(confident, name)
+
+
+class LinkedInColumns(unittest.TestCase):
+    """A loose "name" candidate matched "Last Name" and silently reduced
+    every person to their surname."""
+
+    def test_first_and_last_name_resolve_separately(self):
+        cols = ingest_linkedin.resolve_columns(
+            ["First Name", "Last Name", "Title", "Company", "Profile URL"])
+        self.assertEqual(cols["first_name"], "First Name")
+        self.assertEqual(cols["last_name"], "Last Name")
+        self.assertNotIn("full_name", cols)
+
+    def test_a_full_name_export_still_resolves(self):
+        cols = ingest_linkedin.resolve_columns(["Full Name", "Title", "Company"])
+        self.assertEqual(cols["full_name"], "Full Name")
+
+    def test_no_two_fields_claim_the_same_column(self):
+        cols = ingest_linkedin.resolve_columns(
+            ["First Name", "Last Name", "Full Name", "Company", "Company Website"])
+        self.assertEqual(len(set(cols.values())), len(cols))
+
+
+class LinkedInLoad(unittest.TestCase):
+    def _write(self, body):
+        fh = tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False,
+                                         newline="")
+        fh.write(body)
+        fh.close()
+        return fh.name
+
+    def test_people_become_contacts_and_companies_become_partners(self):
+        path = self._write(
+            "First Name,Last Name,Title,Company,Profile URL\n"
+            "Dana,Whitfield,CLO,Northgate Community Credit Union,https://a\n"
+            "Pat,Larsen,CEO,Northgate Community Credit Union,https://b\n")
+        partners, contacts, diag, _ = ingest_linkedin.load(path)
+        self.assertEqual(len(partners), 1)
+        self.assertEqual(len(contacts), 2)
+        self.assertEqual(contacts[0]["name"], "Dana Whitfield")
+
+    def test_untyped_companies_are_held_back_not_defaulted(self):
+        path = self._write("First Name,Last Name,Company\n"
+                           "Alex,Chen,Larson & Associates\n")
+        partners, _, diag, unresolved = ingest_linkedin.load(path)
+        self.assertEqual(partners, [])
+        self.assertEqual(diag["unresolved_type"], 1)
+        self.assertEqual(unresolved[0]["name"], "Larson & Associates")
+
+    def test_an_explicit_default_type_adopts_the_untyped(self):
+        path = self._write("First Name,Last Name,Company\n"
+                           "Alex,Chen,Larson & Associates\n")
+        partners, _, diag, _ = ingest_linkedin.load(
+            path, default_type=PartnerType.CPA_FIRM.value)
+        self.assertEqual(len(partners), 1)
+        self.assertEqual(diag["unresolved_type"], 0)
+
+    def test_duplicate_people_are_collapsed(self):
+        path = self._write(
+            "First Name,Last Name,Company\n"
+            "Dana,Whitfield,Northgate Community Credit Union\n"
+            "Dana,Whitfield,Northgate Community Credit Union\n")
+        _, contacts, _, _ = ingest_linkedin.load(path)
+        self.assertEqual(len(contacts), 1)
+
+    def test_rows_with_no_company_are_skipped(self):
+        path = self._write("First Name,Last Name,Company\nDana,Whitfield,\n")
+        _, _, diag, _ = ingest_linkedin.load(path)
+        self.assertEqual(diag["skipped_no_company"], 1)
+
+    def test_a_file_with_no_company_column_fails_loudly(self):
+        path = self._write("First Name,Last Name\nDana,Whitfield\n")
+        with self.assertRaises(SystemExit):
+            ingest_linkedin.load(path)
+
+
+# ---------------------------------------------------------------------------
+# Community banks
+# ---------------------------------------------------------------------------
+
+def _bank(name, assets, capital, cre, construction=None):
+    return Partner(id=name, name=name,
+                   partner_type=PartnerType.COMMUNITY_BANK.value,
+                   total_assets=assets, risk_based_capital=capital,
+                   cre_loans=cre, construction_loans=construction)
+
+
+class BankScoring(unittest.TestCase):
+    """Banks have no MBL cap -- that is a credit-union statutory construct.
+    They are constrained by CRE concentration and a legal lending limit."""
+
+    def test_concentration_math(self):
+        self.assertAlmostEqual(
+            cre_concentration(_bank("A", 418e6, 41.5e6, 137e6)), 3.301, places=2)
+
+    def test_over_the_supervisory_trigger_scores_max_fit(self):
+        partner = score_partner(_bank("A", 418e6, 41.5e6, 137e6))
+        self.assertEqual(partner.fit_score, 40.0)
+        self.assertTrue(any("300%" in r for r in partner.score_rationale))
+
+    def test_low_concentration_scores_low_fit(self):
+        self.assertEqual(score_partner(_bank("B", 418e6, 41.5e6, 18e6)).fit_score, 8.0)
+
+    def test_construction_trigger_lifts_fit_on_its_own(self):
+        """A bank can be over the 100% construction criterion while under 300%."""
+        partner = score_partner(_bank("C", 418e6, 41.5e6, 60e6, 45e6))
+        self.assertGreaterEqual(partner.fit_score, 36.0)
+
+    def test_legal_lending_limit_is_fifteen_percent_of_capital(self):
+        self.assertAlmostEqual(legal_lending_limit(_bank("A", 418e6, 41.5e6, 1e6)),
+                               6.225e6)
+
+    def test_banks_are_not_scored_on_the_credit_union_cap(self):
+        """A bank with no net worth or MBL figures must still score on CRE."""
+        partner = score_partner(_bank("A", 418e6, 41.5e6, 137e6))
+        self.assertIsNone(cap_pressure(partner))
+        self.assertEqual(partner.fit_score, 40.0)
+
+    def test_access_falls_away_with_size(self):
+        small = score_partner(_bank("s", 300e6, 30e6, 95e6))
+        huge = score_partner(_bank("h", 20e9, 2e9, 6.2e9))
+        self.assertGreater(small.access_score, huge.access_score)
+
+    def test_products_differ_from_a_credit_union(self):
+        bank = score_partner(_bank("A", 418e6, 41.5e6, 137e6))
+        union = score_partner(cu(id="u", total_assets=486e6, net_worth=53e6,
+                                 business_loans_outstanding=55e6))
+        self.assertIn("real_estate", bank.products_matched)
+        self.assertNotEqual(bank.products_matched, union.products_matched)
+
+
+class FdicIngest(unittest.TestCase):
+    def test_sample_file_loads_cleanly(self):
+        partners, diag = ingest_fdic.load("data/sample_fdic_mn.csv")
+        self.assertEqual(len(partners), 8)
+        self.assertEqual(diag["columns_unmatched"], [])
+        self.assertEqual(ingest_fdic.validate(partners), [])
+
+    def test_thousands_scaled_file_is_caught(self):
+        partners = [_bank("A", 418_000, 41_500, 137_000)]
+        codes = {f["code"] for f in ingest_fdic.validate(partners)}
+        self.assertIn("scale", codes)
+
+    def test_capital_above_assets_is_an_error(self):
+        codes = {f["code"] for f in ingest_fdic.validate([_bank("A", 41e6, 418e6, 10e6)])}
+        self.assertIn("capital_exceeds_assets", codes)
+
+    def test_cre_above_assets_is_an_error(self):
+        codes = {f["code"] for f in ingest_fdic.validate([_bank("A", 100e6, 10e6, 400e6)])}
+        self.assertIn("cre_exceeds_assets", codes)
+
+    def test_missing_capital_blocks_the_import(self):
+        partners = [_bank("A", 418e6, None, 137e6), _bank("B", 212e6, None, 31e6)]
+        errors = {f["code"] for f in ingest_fdic.validate(partners)
+                  if f["level"] == "error"}
+        self.assertIn("missing_capital", errors)
+
+    def test_rescale_restores_the_figures(self):
+        partners = [_bank("A", 418_000, 41_500, 137_000)]
+        ingest_fdic.rescale(partners, 1000.0)
+        self.assertEqual(partners[0].total_assets, 418_000_000)
+        self.assertEqual(ingest_fdic.validate(partners), [])
+
+
+class ReconciliationRegression(unittest.TestCase):
+    """Three bugs found by the end-to-end sweep after reconciliation landed.
+
+    Merging two sources onto one record is where partial data does damage,
+    and none of it raised: the contacts silently detached, the call-report
+    figures silently blanked, and the tier silently dropped.
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "t.db")
+        # As if imported from NCUA: full figures, no people.
+        db.upsert(self.conn, score_partner(Partner(
+            id="cu-90001", name="Northgate Community CU",
+            partner_type="credit_union", total_assets=486e6, net_worth=53.4e6,
+            business_loans_outstanding=55.9e6, business_loan_count=214)))
+        self.conn.commit()
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def _linkedin_partner(self):
+        return Partner(id="cu-northgate-community-credit-union",
+                       name="Northgate Community Credit Union",
+                       partner_type="credit_union")
+
+    def test_reconcile_reports_the_id_mapping(self):
+        """Callers need it to carry contacts across; a count is not enough."""
+        _, remapped = db.reconcile_ids(self.conn, [self._linkedin_partner()])
+        self.assertEqual(remapped,
+                         {"cu-northgate-community-credit-union": "cu-90001"})
+
+    def test_contacts_follow_the_remapped_id(self):
+        contacts = [{"partner_id": "cu-northgate-community-credit-union",
+                     "name": "Dana Whitfield"}]
+        _, remapped = db.reconcile_ids(self.conn, [self._linkedin_partner()])
+        for c in contacts:
+            c["partner_id"] = remapped.get(c["partner_id"], c["partner_id"])
+        self.assertEqual(contacts[0]["partner_id"], "cu-90001")
+
+    def test_a_partial_source_does_not_blank_existing_figures(self):
+        """A LinkedIn export has no call-report data and must not erase it."""
+        incoming, _ = db.reconcile_ids(self.conn, [self._linkedin_partner()])
+        db.upsert(self.conn, incoming[0])
+        self.conn.commit()
+        merged = db.get(self.conn, "cu-90001")
+        self.assertEqual(merged.total_assets, 486e6)
+        self.assertEqual(merged.net_worth, 53.4e6)
+        self.assertEqual(merged.business_loan_count, 214)
+
+    def test_scoring_after_the_merge_keeps_the_tier(self):
+        """Scored before the merge, the partner lands at the bottom."""
+        incoming, _ = db.reconcile_ids(self.conn, [self._linkedin_partner()])
+        score_partner(incoming[0])
+        self.assertEqual(incoming[0].tier, "D")      # scored from empty fields
+
+        db.upsert(self.conn, incoming[0])
+        self.conn.commit()
+        merged = score_partner(db.get(self.conn, "cu-90001"))
+        self.assertEqual(merged.tier, "A")           # scored from the merge
+
+    def test_no_orphaned_contacts_after_a_merge(self):
+        _, remapped = db.reconcile_ids(self.conn, [self._linkedin_partner()])
+        target = remapped["cu-northgate-community-credit-union"]
+        db.add_contact(self.conn, target, "Dana Whitfield")
+        self.conn.commit()
+        partner_ids = {p.id for p in db.all_partners(self.conn)}
+        rows = self.conn.execute("SELECT partner_id FROM contacts")
+        for row in rows:
+            self.assertIn(row["partner_id"], partner_ids)

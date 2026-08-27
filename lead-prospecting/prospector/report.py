@@ -69,6 +69,16 @@ def _money(value: float | None) -> str:
 
 
 def _fmt_pressure(partner: Partner) -> str:
+    """The concentration figure that constrains this institution.
+
+    Credit unions are constrained by the statutory MBL cap; banks by CRE
+    concentration against risk-based capital. Different regulators, different
+    numbers, same column -- it is "how boxed in are they".
+    """
+    from .scoring import cre_concentration
+    if partner.partner_type == PartnerType.COMMUNITY_BANK.value:
+        concentration = cre_concentration(partner)
+        return f"{concentration:.0%}" if concentration is not None else "--"
     pressure = cap_pressure(partner)
     return f"{pressure:.0%}" if pressure is not None else "--"
 
@@ -81,14 +91,14 @@ def ranked_table(partners: list[Partner], limit: int = 25) -> str:
 
     out = [
         f"{'#':>3}  {'T':<2} {'SCORE':>5}  {'NAME':<38} {'CITY':<16} "
-        f"{'TYPE':<16} {'CAP%':>5} {'ASSETS':>10}  STAGE",
+        f"{'TYPE':<16} {'CONC%':>6} {'ASSETS':>10}  STAGE",
         "-" * 132,
     ]
     for i, p in enumerate(rows, 1):
         out.append(
             f"{i:>3}  {p.tier:<2} {p.total_score:>5.1f}  {p.name[:38]:<38} "
             f"{p.city[:16]:<16} {p.partner_type[:16]:<16} "
-            f"{_fmt_pressure(p):>5} {_money(p.total_assets):>10}  {p.stage}"
+            f"{_fmt_pressure(p):>6} {_money(p.total_assets):>10}  {p.stage}"
         )
     return "\n".join(out)
 
@@ -126,7 +136,10 @@ def detail(partner: Partner, contacts: list[dict] | None = None) -> str:
                  f"capacity {partner.capacity_score:.0f}/35  "
                  f"access {partner.access_score:.0f}/25")
 
-    if partner.total_assets:
+    # The MBL cap is a credit-union statutory construct. Rendering it for a
+    # bank invents a constraint that does not exist.
+    if (partner.total_assets
+            and partner.partner_type != PartnerType.COMMUNITY_BANK.value):
         cap = mbl_cap(partner.total_assets, partner.net_worth)
         lines += [
             "",
@@ -139,6 +152,24 @@ def detail(partner: Partner, contacts: list[dict] | None = None) -> str:
             f"  Statutory MBL cap     : {_money(cap)}",
             f"  Cap utilization       : {_fmt_pressure(partner)}",
             f"  Low-income designated : {'yes (cap-exempt)' if partner.low_income_designated else 'no'}",
+        ]
+
+    if partner.risk_based_capital or partner.cre_loans:
+        from .scoring import (cre_concentration, construction_concentration,
+                              legal_lending_limit)
+        cre = cre_concentration(partner)
+        cons = construction_concentration(partner)
+        limit = legal_lending_limit(partner)
+        lines += [
+            "",
+            "Call report",
+            f"  Total assets          : {_money(partner.total_assets)}",
+            f"  Risk-based capital    : {_money(partner.risk_based_capital)}",
+            f"  CRE loans             : {_money(partner.cre_loans)}"
+            + (f"   ({cre:.0%} of capital)" if cre is not None else ""),
+            f"  Construction and land : {_money(partner.construction_loans)}"
+            + (f"   ({cons:.0%} of capital)" if cons is not None else ""),
+            f"  Legal lending limit   : {_money(limit)}  (one borrower)",
         ]
 
     if partner.score_rationale:

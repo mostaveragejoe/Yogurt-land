@@ -94,6 +94,85 @@ python3 prospect.py ingest-ncua ncua.csv --units thousands
 `--force` imports despite errors, if you're certain. Warnings (partial missing
 net worth, a few missing assets) never block.
 
+### Community banks — FDIC (free)
+
+Download from <https://banks.data.fdic.gov/>, then the same three steps:
+
+```bash
+python3 prospect.py ingest-fdic fdic.csv --inspect
+python3 prospect.py ingest-fdic fdic.csv --dry-run
+python3 prospect.py ingest-fdic fdic.csv
+```
+
+**Banks are scored on a different rubric, deliberately.** They have no
+member-business-lending cap — that is a credit-union statutory construct.
+What throttles a community bank's commercial appetite is CRE concentration
+against total risk-based capital, measured against the 2006 interagency
+supervisory criteria:
+
+| Criterion | Threshold |
+|---|---|
+| Construction, land and land development | ≥ 100% of total risk-based capital |
+| Total non-owner-occupied CRE | ≥ 300% of total risk-based capital |
+
+These are **supervisory triggers, not limits**. A bank over them is not in
+violation — it is under heightened examination scrutiny, which is exactly when
+it starts turning CRE away. That is the bank equivalent of a credit union
+pressed against its cap.
+
+The dossier also shows the **legal lending limit** — roughly 15% of capital to
+one borrower — which is why a small bank declines a large deal on size alone
+with nothing wrong with the credit.
+
+The `CONC%` column in `rank` shows whichever constraint applies: MBL cap
+utilisation for credit unions, CRE concentration for banks.
+
+### LinkedIn Sales Navigator
+
+Sales Navigator exports rows of *people*, which is the shape the contacts
+table wants — each row becomes a contact, each company becomes a partner:
+
+```bash
+python3 prospect.py ingest-linkedin sales-nav-export.csv
+```
+
+Partner type is inferred from the company name (`... Credit Union` → credit
+union, `... CPAs` → CPA firm, `... Business Brokers` → business broker, and so
+on). **Companies it cannot identify are held back**, not defaulted into a
+bucket — guessing would score them by the wrong rubric entirely. They are
+written to a `-needs-type.csv` you fill in and load with `ingest-csv`.
+`--type` sets a fallback if you know they are all one kind.
+
+Sales Navigator carries no call-report figures, so credit unions and banks
+imported this way score on defaults until NCUA or FDIC fills them in.
+
+### One institution, several sources
+
+The same institution arrives from different sources under different names —
+NCUA keys on the charter number, a LinkedIn export only has "Northgate
+Community Credit Union" where NCUA said "Northgate Community CU". The
+importers reconcile these onto one record by canonical name, scoped by
+partner type so a brokerage never merges into a similarly named credit union.
+
+Import order does not matter. Contacts follow the merge, existing call-report
+figures are never blanked by a source that does not carry them, and scoring
+runs on the merged record rather than on whichever half arrived last.
+
+## Backing it up
+
+The database holds months of relationship history that no external source can
+rebuild. NCUA can tell you a credit union's assets again; nothing can tell you
+that you messaged their CLO three times and he never replied.
+
+```bash
+python3 prospect.py backup backups/2026-08-27.json
+python3 prospect.py --database new.db restore backups/2026-08-27.json
+```
+
+JSON rather than a copy of the SQLite file: readable, diffable, and
+restorable into a schema that has moved on since the backup was taken.
+Restoring over a database that already holds data requires `--force`.
+
 ### Everyone else — hand-built CSV
 
 There is no NCUA equivalent for CPAs or brokers. Build those lists from the

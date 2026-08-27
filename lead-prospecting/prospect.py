@@ -23,7 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from prospector import analytics, cadence, db, ingest_csv, ingest_ncua, report
+from prospector import (analytics, backup, cadence, db, ingest_csv,
+                        ingest_fdic, ingest_linkedin, ingest_ncua, report)
 from prospector.models import PRODUCTS, PartnerType, Stage
 from prospector.scoring import score_all, score_partner
 
@@ -107,10 +108,13 @@ def cmd_ingest_ncua(args) -> int:
         return 0
 
     conn = db.connect(args.database)
-    for partner in scored:
-        db.upsert(conn, partner)
-    conn.commit()
+    scored, remapped = db.reconcile_ids(conn, scored)
+    merged = len(remapped)
+    scored = _store_and_score(conn, scored)
     print(f"\nStored and scored {len(scored)} credit unions.")
+    if merged:
+        print(f"  {merged} matched an institution already on file under "
+              "another name and were merged rather than duplicated.")
     print(report.ranked_table(db.all_partners(conn, partner_type="credit_union"),
                               limit=15))
     conn.close()
@@ -244,6 +248,30 @@ def cmd_rescore(args) -> int:
     conn.close()
     return 0
 
+
+
+
+def _store_and_score(conn, partners):
+    """Write partners, then score them from the MERGED record.
+
+    Scoring before the write is wrong whenever a source carries only part of
+    the picture: a LinkedIn export has no call-report figures, so a partner
+    scored from it alone lands at the bottom even though the database already
+    holds the assets and capital that would rank it top.
+    """
+    for partner in partners:
+        db.upsert(conn, partner)
+    conn.commit()
+
+    rescored = []
+    for partner in partners:
+        merged = db.get(conn, partner.id)
+        if merged:
+            score_partner(merged)
+            db.upsert(conn, merged)
+            rescored.append(merged)
+    conn.commit()
+    return rescored
 
 
 def _resolve(conn, query: str):
@@ -690,6 +718,188 @@ def cmd_calibrate(args) -> int:
     return 0
 
 
+
+
+
+def cmd_ingest_fdic(args) -> int:
+    """Community banks. Scored on CRE concentration, not the credit-union
+    MBL cap -- banks have no such cap."""
+    if args.inspect:
+        print(f"Columns in {args.path}\n")
+        for header, values in ingest_fdic.sample_values(args.path):
+            shown = ", ".join(v[:22] for v in values if v) or "(empty)"
+            print(f"  {header[:34]:<34} {shown}")
+        print("\nMapping this file would use:\n")
+        suggested = ingest_fdic.suggest_mapping(args.path)
+        print("  " + json.dumps(suggested, indent=2).replace("\n", "\n  "))
+        unmatched = [f for f in ingest_fdic.DEFAULT_MAP if f not in suggested]
+        if unmatched:
+            print(f"\n  UNMATCHED: {', '.join(unmatched)}")
+        return 0
+
+    overrides = ingest_fdic.load_map(args.map)
+    partners, diag = ingest_fdic.load(args.path, state=args.state,
+                                      overrides=overrides)
+
+    factor = ingest_fdic.UNIT_FACTORS[args.units]
+    if factor != 1.0:
+        ingest_fdic.rescale(partners, factor)
+        print(f"Scaled every monetary column by {factor:,.0f} "
+              f"(--units {args.units}).\n")
+
+    print(f"Read {diag['rows_read']} rows; {diag['matched_state']} in {args.state}.")
+    print("Columns matched:")
+    for field, header in sorted(diag["columns_matched"].items()):
+        print(f"  {field:<24} <- {header}")
+    if diag["columns_unmatched"]:
+        print("\n  Unmatched: " + ", ".join(diag["columns_unmatched"]))
+        print("  Run --inspect for the file's columns and a paste-ready mapping.")
+
+    findings = ingest_fdic.validate(partners)
+    errors = [f for f in findings if f["level"] == "error"]
+    if findings:
+        print()
+        for f in errors:
+            print(f"  ERROR   [{f['code']}] {f['message']}")
+        for f in (x for x in findings if x["level"] == "warning"):
+            print(f"  WARNING [{f['code']}] {f['message']}")
+
+    if errors and not args.force:
+        print("\nRefusing to import. Pass --force to override.")
+        return 1
+
+    scored = score_all(partners)
+
+    if args.dry_run:
+        print(f"\nDRY RUN -- nothing written. {len(scored)} would be imported.\n")
+        print(report.ranked_table(scored, limit=args.preview))
+        return 0
+
+    conn = db.connect(args.database)
+    scored, remapped = db.reconcile_ids(conn, scored)
+    merged = len(remapped)
+    scored = _store_and_score(conn, scored)
+    print(f"\nStored and scored {len(scored)} community banks.")
+    if merged:
+        print(f"  {merged} merged with an institution already on file.")
+    print(report.ranked_table(
+        db.all_partners(conn, partner_type="community_bank"), limit=15))
+    conn.close()
+    return 0
+
+
+def cmd_ingest_linkedin(args) -> int:
+    """Import a Sales Navigator export: one partner per company, one contact
+    per person."""
+    partners, contacts, diag, unresolved = ingest_linkedin.load(
+        args.path, default_type=args.type, state=args.state)
+
+    print(f"Read {diag['rows_read']} rows.")
+    print(f"  {diag['partners']} companies, {diag['contacts']} people")
+    if diag["skipped_no_company"]:
+        print(f"  {diag['skipped_no_company']} row(s) skipped with no company")
+    if diag["columns_unmatched"]:
+        print(f"  Columns not found: {', '.join(diag['columns_unmatched'])}")
+
+    conn = db.connect(args.database)
+    existing = {p.id for p in db.all_partners(conn)}
+
+    # An institution already on file under another name -- a credit union
+    # imported from NCUA by charter, say -- must take that record's id, or
+    # the contacts land on a scoreless stub while the scored record has
+    # nobody to call.
+    scored, remapped = db.reconcile_ids(conn, score_all(partners))
+    # Contacts were built against the pre-reconciliation ids; carry them over
+    # or they are orphaned onto a partner that was never inserted.
+    for c in contacts:
+        c["partner_id"] = remapped.get(c["partner_id"], c["partner_id"])
+    merged = len(remapped)
+
+    new_partners = sum(1 for p in scored if p.id not in existing)
+    scored = _store_and_score(conn, scored)
+
+    added_contacts, skipped_contacts = 0, 0
+    for c in contacts:
+        # Re-importing the same export must not duplicate people.
+        if db.find_contact(conn, c["partner_id"], c["name"]):
+            skipped_contacts += 1
+            continue
+        db.add_contact(conn, c["partner_id"], c["name"], title=c["title"],
+                       linkedin_url=c["linkedin_url"], email=c["email"],
+                       phone=c["phone"])
+        added_contacts += 1
+    conn.commit()
+
+    print(f"\nStored {new_partners} new partner(s), "
+          f"{diag['partners'] - new_partners} already known.")
+    if merged:
+        print(f"  {merged} matched an institution already on file under "
+              "another name -- contacts attached to the existing record.")
+    print(f"Added {added_contacts} contact(s)"
+          + (f", {skipped_contacts} already on file." if skipped_contacts else "."))
+
+    if unresolved:
+        out = args.unresolved or (Path(args.path).with_name(
+            Path(args.path).stem + "-needs-type.csv"))
+        written = ingest_linkedin.write_unresolved(unresolved, out)
+        print(f"\n  {written} compan(y/ies) could not be typed from the name.")
+        print(f"  Written to {out}")
+        print("  Fill in partner_type, then:  prospect.py ingest-csv "
+              f"{out}")
+        print("  Guessing a type would score them by the wrong rubric, so "
+              "they are held back.")
+
+    if new_partners:
+        print()
+        print(report.ranked_table(
+            [p for p in db.all_partners(conn) if p.id in
+             {x.id for x in scored}], limit=12))
+    conn.close()
+    return 0
+
+
+def cmd_backup(args) -> int:
+    conn = db.connect(args.database)
+    counts = backup.write(conn, args.path)
+    conn.close()
+    print(f"Backed up to {args.path}")
+    for table, n in counts.items():
+        print(f"  {table:<12} {n:>6}")
+    print("\nRestore with:  prospect.py --database <db> restore "
+          f"{args.path}")
+    return 0
+
+
+def cmd_restore(args) -> int:
+    try:
+        payload = backup.read(args.path)
+    except (ValueError, json.JSONDecodeError) as exc:
+        print(f"Cannot read backup: {exc}", file=sys.stderr)
+        return 1
+
+    conn = db.connect(args.database)
+    if not backup.is_empty(conn) and not args.force:
+        print(f"{args.database} already holds data. Restoring REPLACES all of "
+              "it.", file=sys.stderr)
+        print("Back the current database up first, then pass --force.",
+              file=sys.stderr)
+        conn.close()
+        return 1
+
+    dropped = backup.dropped_columns(conn, payload)
+    counts = backup.restore(conn, payload)
+    conn.close()
+
+    print(f"Restored from {args.path}  (taken {payload.get('created_at', '?')})")
+    for table, n in counts.items():
+        print(f"  {table:<12} {n:>6}")
+    if dropped:
+        print("\n  Columns in the backup that no longer exist were dropped:")
+        for table, cols in dropped.items():
+            print(f"    {table}: {', '.join(cols)}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="prospect",
@@ -865,6 +1075,39 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--primary", action="store_true")
     p.add_argument("--note")
     p.set_defaults(func=cmd_contact_set)
+
+    p = sub.add_parser("backup", help="write the whole database to JSON")
+    p.add_argument("path")
+    p.set_defaults(func=cmd_backup)
+
+    p = sub.add_parser("restore", help="replace the database from a backup")
+    p.add_argument("path")
+    p.add_argument("--force", action="store_true",
+                   help="required when the target database is not empty")
+    p.set_defaults(func=cmd_restore)
+
+    p = sub.add_parser("ingest-linkedin",
+                       help="import a LinkedIn Sales Navigator export")
+    p.add_argument("path")
+    p.add_argument("--type", choices=[t.value for t in PartnerType],
+                   help="fallback type for companies the name cannot identify")
+    p.add_argument("--state", default="MN")
+    p.add_argument("--unresolved", help="where to write untyped companies")
+    p.set_defaults(func=cmd_ingest_linkedin)
+
+    p = sub.add_parser("ingest-fdic", help="load FDIC data for community banks")
+    p.add_argument("path")
+    p.add_argument("--state", default="MN")
+    p.add_argument("--map", help="JSON file overriding column matching")
+    p.add_argument("--inspect", action="store_true",
+                   help="show columns with sample values and a paste-ready mapping")
+    p.add_argument("--dry-run", action="store_true",
+                   help="parse, validate and preview without writing")
+    p.add_argument("--units", choices=list(ingest_fdic.UNIT_FACTORS),
+                   default="dollars")
+    p.add_argument("--preview", type=int, default=12)
+    p.add_argument("--force", action="store_true")
+    p.set_defaults(func=cmd_ingest_fdic)
 
     return parser
 

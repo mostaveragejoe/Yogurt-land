@@ -25,6 +25,21 @@ from .models import Partner, PartnerType
 MBL_CAP_ASSET_RATIO = 0.1225
 MBL_CAP_NET_WORTH_MULTIPLE = 1.75
 
+# 2006 Interagency Guidance on CRE Concentration Risk Management (OCC/FRB/FDIC).
+# Two supervisory criteria, measured against total risk-based capital:
+#   - construction, land and land development >= 100% of capital
+#   - total non-owner-occupied CRE >= 300% of capital, with 50%+ growth over 36 months
+# These are supervisory triggers, NOT limits. A bank over them is not in
+# violation -- it is under heightened examination scrutiny, which is precisely
+# what makes it start declining CRE deals it would otherwise book.
+CRE_CONCENTRATION_TRIGGER = 3.0
+CONSTRUCTION_CONCENTRATION_TRIGGER = 1.0
+
+# Legal lending limit: a national bank may lend one borrower up to 15% of
+# capital and surplus unsecured. It is why a small bank declines a large deal
+# on size alone, with nothing wrong with the credit.
+LEGAL_LENDING_LIMIT_RATIO = 0.15
+
 # Tier thresholds on the 0-100 total.
 TIER_BREAKS = ((75, "A"), (60, "B"), (45, "C"), (0, "D"))
 
@@ -55,6 +70,26 @@ def cap_pressure(partner: Partner) -> float | None:
     if not cap or partner.business_loans_outstanding is None:
         return None
     return partner.business_loans_outstanding / cap
+
+
+def cre_concentration(partner: Partner) -> float | None:
+    """Total CRE loans as a multiple of total risk-based capital."""
+    if not partner.risk_based_capital or partner.cre_loans is None:
+        return None
+    return partner.cre_loans / partner.risk_based_capital
+
+
+def construction_concentration(partner: Partner) -> float | None:
+    if not partner.risk_based_capital or partner.construction_loans is None:
+        return None
+    return partner.construction_loans / partner.risk_based_capital
+
+
+def legal_lending_limit(partner: Partner) -> float | None:
+    """Roughly the largest single-borrower loan this bank may write."""
+    if not partner.risk_based_capital:
+        return None
+    return partner.risk_based_capital * LEGAL_LENDING_LIMIT_RATIO
 
 
 def _band(value, bands, default=0.0):
@@ -259,9 +294,82 @@ def _score_intermediary(partner: Partner) -> tuple[float, float, float, list[str
     return fit, capacity, access, why
 
 
+def _score_bank(partner: Partner) -> tuple[float, float, float, list[str]]:
+    """Community banks. Deliberately not the credit-union rubric.
+
+    Banks have no member-business-lending cap -- that is a credit-union
+    statutory construct. What throttles a community bank's commercial
+    appetite is CRE concentration against the 2006 interagency supervisory
+    criteria, plus a legal lending limit that makes large single deals
+    impossible regardless of credit quality.
+    """
+    why: list[str] = []
+
+    # --- FIT: concentration pressure ------------------------------------
+    cre = cre_concentration(partner)
+    construction = construction_concentration(partner)
+
+    if cre is None and construction is None:
+        fit = 12.0
+        why.append("No CRE or capital figures on file: concentration unknown.")
+    else:
+        fit = 8.0
+        if cre is not None:
+            fit = _band(cre, [(3.0, 40.0), (2.25, 32.0), (1.5, 24.0),
+                              (0.75, 14.0)], 8.0)
+            why.append(f"CRE at {cre:.0%} of total risk-based capital.")
+            if cre >= CRE_CONCENTRATION_TRIGGER:
+                why.append("Over the 300% interagency supervisory trigger -- "
+                           "not a violation, but heightened examiner scrutiny, "
+                           "which is exactly when a bank starts turning CRE away.")
+            elif cre >= 2.25:
+                why.append("Approaching the 300% trigger; already rationing CRE.")
+        if construction is not None and construction >= CONSTRUCTION_CONCENTRATION_TRIGGER:
+            fit = max(fit, 36.0)
+            why.append(f"Construction and land development at "
+                       f"{construction:.0%} of capital, over the 100% trigger.")
+
+    limit = legal_lending_limit(partner)
+    if limit:
+        why.append(f"Legal lending limit roughly ${limit/1e6:,.1f}M to one "
+                   "borrower -- anything larger is declined on size alone.")
+
+    # --- CAPACITY --------------------------------------------------------
+    if partner.cre_loans:
+        capacity = _band(partner.cre_loans,
+                         [(500e6, 35.0), (200e6, 30.0), (75e6, 24.0),
+                          (25e6, 16.0), (5e6, 9.0)], 4.0)
+    elif partner.total_assets:
+        capacity = _band(partner.total_assets,
+                         [(1e9, 30.0), (500e6, 24.0), (200e6, 18.0),
+                          (75e6, 12.0)], 6.0)
+        why.append("Capacity estimated from asset size.")
+    else:
+        capacity = 6.0
+
+    # --- ACCESS: same inverse-size logic as credit unions ----------------
+    assets = partner.total_assets or 0
+    if assets == 0:
+        access = 12.0
+    elif assets < 500e6:
+        access = 25.0
+        why.append("Community-sized: the commercial lender or president is "
+                   "directly reachable.")
+    elif assets < 2e9:
+        access = 18.0
+    elif assets < 10e9:
+        access = 10.0
+        why.append("Regional: expect a commercial department and a vendor process.")
+    else:
+        access = 5.0
+        why.append("Too large to be a referral partner in practice.")
+
+    return fit, capacity, access, why
+
+
 _RUBRICS = {
     PartnerType.CREDIT_UNION.value: _score_depository,
-    PartnerType.COMMUNITY_BANK.value: _score_depository,
+    PartnerType.COMMUNITY_BANK.value: _score_bank,
     PartnerType.CPA_FIRM.value: _score_cpa,
     PartnerType.BUSINESS_BROKER.value: _score_intermediary,
     PartnerType.CRE_BROKER.value: _score_intermediary,
@@ -308,10 +416,15 @@ def score_partner(partner: Partner) -> Partner:
 def infer_products(partner: Partner) -> list[str]:
     """Best guess at which of our products this partner's flow maps onto."""
     t = partner.partner_type
-    if t in (PartnerType.CREDIT_UNION.value, PartnerType.COMMUNITY_BANK.value):
+    if t == PartnerType.CREDIT_UNION.value:
         # Exactly the products a depository cannot or will not do in-house.
         return ["sba_loans", "equipment_leasing", "commercial_bridge",
                 "accounts_receivable", "fix_and_flip", "business_acquisition"]
+    if t == PartnerType.COMMUNITY_BANK.value:
+        # A concentration-constrained bank sheds CRE first, then anything
+        # over its lending limit.
+        return ["real_estate", "commercial_bridge", "fix_and_flip",
+                "business_acquisition", "sba_loans", "accounts_receivable"]
     if t == PartnerType.CPA_FIRM.value:
         out = ["debt_restructuring", "business_term_loans", "unsecured_loans_loc", "sba_loans"]
         for spec in partner.industry_specialties:

@@ -102,6 +102,14 @@ class Partner:
     business_loan_count: Optional[int] = None
     low_income_designated: bool = False
 
+    # --- bank-only call-report fields (FDIC) -----------------------------
+    # Banks have no statutory MBL cap. What constrains their commercial
+    # appetite is CRE concentration against the 2006 interagency supervisory
+    # criteria, measured against total risk-based capital.
+    risk_based_capital: Optional[float] = None
+    cre_loans: Optional[float] = None
+    construction_loans: Optional[float] = None
+
     # --- professional-firm metrics (entered by hand or scraped) ---------
     headcount: Optional[int] = None
     does_attest_work: Optional[bool] = None
