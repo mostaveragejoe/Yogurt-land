@@ -24,9 +24,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from prospector import (analytics, backup, cadence, db, ingest_csv,
-                        ingest_fdic, ingest_linkedin, ingest_ncua, report)
+                        ingest_fdic, ingest_linkedin, ingest_ncua,
+                        ingest_sba, report, trajectory)
 from prospector.models import PRODUCTS, PartnerType, Stage
-from prospector.scoring import score_all, score_partner
+from prospector.scoring import (apply_sba_signal, apply_trajectory,
+                                full_score, score_all, score_partner)
 
 DB_DEFAULT = str(Path(__file__).resolve().parent / "data" / "partners.db")
 
@@ -110,7 +112,7 @@ def cmd_ingest_ncua(args) -> int:
     conn = db.connect(args.database)
     scored, remapped = db.reconcile_ids(conn, scored)
     merged = len(remapped)
-    scored = _store_and_score(conn, scored)
+    scored = _store_and_score(conn, scored, as_of=args.as_of, source="ncua")
     print(f"\nStored and scored {len(scored)} credit unions.")
     if merged:
         print(f"  {merged} matched an institution already on file under "
@@ -156,8 +158,9 @@ def cmd_show(args) -> int:
         conn.close()
         return 1
     contacts = db.contacts_for(conn, partner.id)
+    _full_score(conn, partner)
     conn.close()
-    print(report.detail(score_partner(partner), contacts))
+    print(report.detail(partner, contacts))
     return 0
 
 
@@ -222,7 +225,7 @@ def cmd_touch(args) -> int:
     db.update_fields(conn, args.id, **changes)
     conn.commit()
 
-    refreshed = score_partner(db.get(conn, args.id))
+    refreshed = _full_score(conn, db.get(conn, args.id))
     db.upsert(conn, refreshed)
     conn.commit()
     print(report.detail(refreshed, db.contacts_for(conn, args.id)))
@@ -242,7 +245,11 @@ def cmd_export(args) -> int:
 def cmd_rescore(args) -> int:
     conn = db.connect(args.database)
     partners = db.all_partners(conn)
-    count = _rescore_and_store(conn, partners)
+    for partner in partners:
+        _full_score(conn, partner)
+        db.upsert(conn, partner)
+    conn.commit()
+    count = len(partners)
     print(f"Rescored {count} partners.")
     print(report.pipeline_summary(db.all_partners(conn)))
     conn.close()
@@ -251,25 +258,39 @@ def cmd_rescore(args) -> int:
 
 
 
-def _store_and_score(conn, partners):
+
+def _full_score(conn, partner):
+    """Score a partner with every layer, using its recorded history."""
+    return full_score(partner, db.concentration_series(conn, partner))
+
+
+def _store_and_score(conn, partners, as_of=None, source=None):
     """Write partners, then score them from the MERGED record.
 
     Scoring before the write is wrong whenever a source carries only part of
     the picture: a LinkedIn export has no call-report figures, so a partner
     scored from it alone lands at the bottom even though the database already
     holds the assets and capital that would rank it top.
+
+    When `as_of` is given the figures are also snapshotted for that quarter,
+    and every partner is re-scored against its full observation history --
+    so importing an older quarter re-ranks the whole file on direction of
+    travel, not just on the newest numbers.
     """
     for partner in partners:
         db.upsert(conn, partner)
+        if as_of:
+            db.record_observation(conn, partner, as_of, source or "unknown")
     conn.commit()
 
     rescored = []
     for partner in partners:
         merged = db.get(conn, partner.id)
-        if merged:
-            score_partner(merged)
-            db.upsert(conn, merged)
-            rescored.append(merged)
+        if not merged:
+            continue
+        _full_score(conn, merged)
+        db.upsert(conn, merged)
+        rescored.append(merged)
     conn.commit()
     return rescored
 
@@ -778,7 +799,7 @@ def cmd_ingest_fdic(args) -> int:
     conn = db.connect(args.database)
     scored, remapped = db.reconcile_ids(conn, scored)
     merged = len(remapped)
-    scored = _store_and_score(conn, scored)
+    scored = _store_and_score(conn, scored, as_of=args.as_of, source="fdic")
     print(f"\nStored and scored {len(scored)} community banks.")
     if merged:
         print(f"  {merged} merged with an institution already on file.")
@@ -858,6 +879,96 @@ def cmd_ingest_linkedin(args) -> int:
     return 0
 
 
+
+
+def cmd_ingest_sba(args) -> int:
+    """Mark which institutions originate SBA themselves, and pull in CDCs."""
+    if args.inspect:
+        print(f"Columns in {args.path}\n")
+        for header, values in ingest_sba.sample_values(args.path):
+            shown = ", ".join(v[:24] for v in values if v) or "(empty)"
+            print(f"  {header[:32]:<32} {shown}")
+        print("\nMapping this file would use:\n")
+        print("  " + json.dumps(ingest_sba.suggest_mapping(args.path),
+                                indent=2).replace("\n", "\n  "))
+        return 0
+
+    overrides = ingest_sba.load_map(args.map)
+    lenders, cdcs, diag = ingest_sba.load(args.path, state=args.state,
+                                          overrides=overrides)
+    print(f"Read {diag['rows_read']} rows; {diag['rows_in_state']} with a "
+          f"{args.state} borrower.")
+    print(f"  {diag['lenders']} originating lenders, {diag['cdcs']} CDCs")
+    if diag["columns_unmatched"]:
+        print(f"  Columns not found: {', '.join(diag['columns_unmatched'])}")
+
+    conn = db.connect(args.database)
+
+    # --- mark every depository we already hold -------------------------
+    depositories = [p for p in db.all_partners(conn)
+                    if p.partner_type in (PartnerType.CREDIT_UNION.value,
+                                          PartnerType.COMMUNITY_BANK.value)]
+    marked_active, marked_zero = 0, 0
+    for partner in depositories:
+        activity = lenders.get(db.canonical_name(partner.name))
+        partner.sba_loan_count = activity.count if activity else 0
+        partner.sba_volume = activity.volume if activity else 0.0
+        partner.sba_last_approval = activity.last_approval if activity else ""
+        _full_score(conn, partner)
+        db.upsert(conn, partner)
+        if activity:
+            marked_active += 1
+        else:
+            marked_zero += 1
+    conn.commit()
+
+    # --- CDCs are new leads --------------------------------------------
+    added_cdcs = 0
+    if cdcs and not args.skip_cdcs:
+        existing = {p.id for p in db.all_partners(conn)}
+        scored, _ = db.reconcile_ids(conn, score_all(cdcs))
+        added_cdcs = sum(1 for p in scored if p.id not in existing)
+        _store_and_score(conn, scored)
+
+    print(f"\nMarked {marked_active + marked_zero} institutions already on file:")
+    print(f"  {marked_active} originate SBA themselves")
+    print(f"  {marked_zero} originate none -- these are your SBA outlets")
+    if added_cdcs:
+        print(f"Added {added_cdcs} CDC(s) as new partners.")
+
+    if depositories:
+        print()
+        print(report.sba_report(db.all_partners(conn), lenders,
+                                limit=args.limit))
+    conn.close()
+    return 0
+
+
+def cmd_trend(args) -> int:
+    """Rank on direction of travel rather than today's number."""
+    conn = db.connect(args.database)
+    partners = db.all_partners(conn, partner_type=args.type, state=args.state)
+
+    rows = []
+    for partner in partners:
+        series = db.concentration_series(conn, partner)
+        if not series:
+            continue
+        _full_score(conn, partner)
+        rows.append({"partner": partner, "series": series})
+    conn.close()
+
+    if not rows:
+        print("No call-report history recorded yet.\n"
+              "Import at least two quarters with --as-of, for example:\n"
+              "  prospect.py ingest-ncua 2026-03.csv --as-of 2026-03-31\n"
+              "  prospect.py ingest-ncua 2026-06.csv --as-of 2026-06-30")
+        return 0
+
+    print(report.trend_report(rows, pattern=args.pattern))
+    return 0
+
+
 def cmd_backup(args) -> int:
     conn = db.connect(args.database)
     counts = backup.write(conn, args.path)
@@ -925,6 +1036,10 @@ def build_parser() -> argparse.ArgumentParser:
                    help="rows to show in a dry run")
     p.add_argument("--force", action="store_true",
                    help="import despite validation errors")
+    p.add_argument("--as-of", dest="as_of",
+                   help="call-report quarter end, e.g. 2026-06-30. Recording "
+                        "it lets the tool rank on direction of travel once a "
+                        "second quarter is loaded.")
     p.set_defaults(func=cmd_ingest_ncua)
 
     p = sub.add_parser("ingest-csv", help="load a hand-built partner CSV")
@@ -1107,7 +1222,30 @@ def build_parser() -> argparse.ArgumentParser:
                    default="dollars")
     p.add_argument("--preview", type=int, default=12)
     p.add_argument("--force", action="store_true")
+    p.add_argument("--as-of", dest="as_of",
+                   help="call-report quarter end, e.g. 2026-06-30")
     p.set_defaults(func=cmd_ingest_fdic)
+
+    p = sub.add_parser("trend", help="rank on direction of travel")
+    p.add_argument("--type", choices=[t.value for t in PartnerType])
+    p.add_argument("--state")
+    # Sourced from the module rather than restated, so a new pattern cannot
+    # be classifiable but unselectable -- which is exactly what happened to
+    # "breaching".
+    p.add_argument("--pattern", choices=sorted(trajectory.ADJUSTMENTS),
+                   help="show only one pattern")
+    p.set_defaults(func=cmd_trend)
+
+    p = sub.add_parser("ingest-sba",
+                       help="mark which institutions originate SBA themselves")
+    p.add_argument("path")
+    p.add_argument("--state", default="MN")
+    p.add_argument("--map", help="JSON file overriding column matching")
+    p.add_argument("--inspect", action="store_true")
+    p.add_argument("--skip-cdcs", action="store_true",
+                   help="do not add CDCs as new partners")
+    p.add_argument("--limit", type=int, default=15)
+    p.set_defaults(func=cmd_ingest_sba)
 
     return parser
 

@@ -172,6 +172,15 @@ def detail(partner: Partner, contacts: list[dict] | None = None) -> str:
             f"  Legal lending limit   : {_money(limit)}  (one borrower)",
         ]
 
+    if partner.trend_pattern and partner.trend_pattern != "unknown":
+        lines += ["", "Direction of travel",
+                  f"  Pattern     : {partner.trend_pattern}",
+                  f"  Slope       : {partner.trend_slope:+.1f} points/quarter "
+                  f"over {partner.trend_quarters} quarters"]
+        if partner.quarters_to_ceiling:
+            lines.append(f"  Hits ceiling: about {partner.quarters_to_ceiling:.0f} "
+                         "quarters at this pace")
+
     if partner.score_rationale:
         lines += ["", "Why this score"]
         lines += [f"  - {reason}" for reason in partner.score_rationale]
@@ -542,4 +551,126 @@ def contact_roster(partner, contacts: list[dict], unanswered: dict) -> str:
     for c in contacts:
         if c["linkedin_url"]:
             out.append(f"  #{c['id']} {c['name']}: {c['linkedin_url']}")
+    return "\n".join(out)
+
+
+def trend_report(rows: list[dict], pattern: str | None = None) -> str:
+    """Institutions ranked by where their constraint is heading.
+
+    Ordered by fit adjustment then by how soon they hit the ceiling, so the
+    ones worth reaching before they need you come first.
+    """
+    from .trajectory import ADJUSTMENTS, describe
+
+    if pattern:
+        rows = [r for r in rows if r["partner"].trend_pattern == pattern]
+        if not rows:
+            return f"No institutions currently match the {pattern!r} pattern."
+
+    def sort_key(row):
+        p = row["partner"]
+        eta = p.quarters_to_ceiling if p.quarters_to_ceiling is not None else 99
+        return (-ADJUSTMENTS.get(p.trend_pattern, 0.0), eta, -p.total_score)
+
+    rows.sort(key=sort_key)
+
+    out = ["DIRECTION OF TRAVEL", "=" * 88, "",
+           "Where the constraint is heading, not just where it stands today.", "",
+           f"{'PATTERN':<13} {'NAME':<34} {'NOW':>6} {'SLOPE':>8} {'ETA':>7} "
+           f"{'Q':>3}  SCORE", "-" * 88]
+
+    for row in rows:
+        p = row["partner"]
+        level = row["series"][-1][1]
+        slope = f"{p.trend_slope:+.1f}" if p.trend_slope is not None else "--"
+        eta = (f"{p.quarters_to_ceiling:.0f}q" if p.quarters_to_ceiling
+               else "--")
+        out.append(f"{p.trend_pattern:<13} {p.name[:34]:<34} {level:>5.0%} "
+                   f"{slope:>8} {eta:>7} {p.trend_quarters or 0:>3}  "
+                   f"{p.total_score:>5.1f} [{p.tier}]")
+
+    out += ["", "NOW = share of the constraint used (MBL cap, or 300% CRE "
+            "criterion for banks).",
+            "SLOPE = percentage points per quarter.  ETA = quarters to the "
+            "ceiling.  Q = quarters on file.", ""]
+
+    counts: dict[str, int] = {}
+    for row in rows:
+        key = row["partner"].trend_pattern
+        counts[key] = counts.get(key, 0) + 1
+
+    notable = {
+        "breaching": "at the limit and STILL climbing -- their outlet is not "
+                     "keeping up. Call this quarter.",
+        "approaching": "will be constrained soon -- reach them before they need you",
+        "shedding": "at the limit and actively turning business away right now",
+        "entrenched": "parked at the limit; they already have an outlet, and it "
+                      "is not us",
+        "accelerating": "early but moving fast; a cheap relationship to start now",
+    }
+    shown = [(k, v) for k, v in counts.items() if k in notable]
+    if shown:
+        out.append("WHAT THESE MEAN")
+        out.append("-" * 88)
+        for key, count in sorted(shown, key=lambda kv: -ADJUSTMENTS.get(kv[0], 0)):
+            out.append(f"  {key:<13} {count:>3}   {notable[key]}")
+    return "\n".join(out)
+
+
+def sba_report(partners: list, lenders: dict, limit: int = 15) -> str:
+    """Who does SBA, who does not, and which of those is worth calling.
+
+    The zero-SBA list is the point: a depository with commercial borrowers and
+    no SBA capability has the demand and not the product.
+    """
+    from .models import PartnerType
+
+    depositories = [p for p in partners
+                    if p.partner_type in (PartnerType.CREDIT_UNION.value,
+                                          PartnerType.COMMUNITY_BANK.value)
+                    and p.sba_loan_count is not None]
+    if not depositories:
+        return "No depositories on file to mark."
+
+    outlets = [p for p in depositories
+               if p.sba_loan_count == 0
+               and (p.business_loans_outstanding or p.cre_loans)]
+    in_house = [p for p in depositories if p.sba_loan_count]
+
+    outlets.sort(key=lambda p: -p.total_score)
+    in_house.sort(key=lambda p: -(p.sba_loan_count or 0))
+
+    out = ["SBA PARTICIPATION", "=" * 82, ""]
+
+    if outlets:
+        out += [f"COMMERCIAL LENDERS WITH NO SBA ({len(outlets)})  <-- your SBA outlets",
+                "-" * 82,
+                "They have the borrowers. They do not have the product.", ""]
+        for p in outlets[:limit]:
+            out.append(f"  {p.total_score:>5.1f} [{p.tier}]  {p.name[:38]:<38} "
+                       f"{p.city[:16]:<16} {p.partner_type}")
+        if len(outlets) > limit:
+            out.append(f"  ... and {len(outlets) - limit} more")
+        out.append("")
+
+    if in_house:
+        out += [f"ORIGINATE SBA THEMSELVES ({len(in_house)})", "-" * 82,
+                "Not SBA outlets. Pitch what they do not do -- equipment "
+                "leasing, bridge, A/R.", ""]
+        for p in in_house[:limit]:
+            last = f"  last {p.sba_last_approval}" if p.sba_last_approval else ""
+            out.append(f"  {p.sba_loan_count:>4} loans  {_money(p.sba_volume):>9}  "
+                       f"{p.name[:38]:<38}{last}")
+        if len(in_house) > limit:
+            out.append(f"  ... and {len(in_house) - limit} more")
+        out.append("")
+
+    ranked = sorted(lenders.values(), key=lambda a: -a.count)[:limit]
+    if ranked:
+        out += ["MOST ACTIVE SBA ORIGINATORS IN THE STATE", "-" * 82,
+                "Not all of these are on file -- the ones that are not are "
+                "themselves leads.", ""]
+        for activity in ranked:
+            out.append(f"  {activity.count:>4} loans  {_money(activity.volume):>9}  "
+                       f"{activity.name[:44]}")
     return "\n".join(out)

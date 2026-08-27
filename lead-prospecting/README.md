@@ -94,6 +94,60 @@ python3 prospect.py ingest-ncua ncua.csv --units thousands
 `--force` imports despite errors, if you're certain. Warnings (partial missing
 net worth, a few missing assets) never block.
 
+### Direction of travel — import more than one quarter
+
+Concentration today is a snapshot. Pass `--as-of` and the tool keeps the
+history, and once a second quarter is loaded it ranks on where the number is
+*heading*:
+
+```bash
+python3 prospect.py ingest-ncua 2026-03.csv --as-of 2026-03-31
+python3 prospect.py ingest-ncua 2026-06.csv --as-of 2026-06-30
+python3 prospect.py trend
+```
+
+This matters more than the level, and a snapshot gets it backwards:
+
+| Pattern | Meaning | Fit |
+|---|---|---|
+| **breaching** | At the limit and *still climbing*. Their outlet is not keeping up. | +10 |
+| **approaching** | Mid-level and rising; will be constrained inside a few quarters. | +8 |
+| **shedding** | At the limit and falling — turning business away right now. | +6 |
+| **accelerating** | Low but moving fast. A cheap relationship to start early. | +5 |
+| **entrenched** | Parked at the limit for a year. They already have an outlet. | **−6** |
+
+The penalty is the point. A credit union sitting at 127% of its cap for three
+years looks like the best prospect in the file and is not — whatever it does
+with the overflow, it already does, and it isn't with you. A rising
+institution at 76% outranks it.
+
+`trend` also estimates quarters-to-ceiling, so you can reach an institution
+before it needs you rather than after.
+
+### SBA participation — who has borrowers but no product
+
+Download the 7(a)/504 FOIA data from
+<https://data.sba.gov/dataset/7-a-504-foia> (free, quarterly), then:
+
+```bash
+python3 prospect.py ingest-sba sba_7a.csv --state MN
+```
+
+This replaces a guess with a measurement. The tool otherwise assumes "most
+credit unions aren't PLP lenders"; this checks each institution against the
+actual loan record:
+
+- **Commercial lending, zero SBA originations → +6 fit.** The borrowers are on
+  their books and the product is not. You would be their SBA desk. These are
+  listed first in the report.
+- **Heavy SBA volume → −4 fit.** They run their own department. Still worth
+  knowing: pitch what they *don't* do — equipment leasing, bridge, A/R.
+
+It also pulls **CDCs** in as new partners. A Certified Development Company does
+the 504 real-estate half and needs somewhere to send working capital,
+equipment, and anything failing 504 eligibility — structurally complementary
+rather than competing.
+
 ### Community banks — FDIC (free)
 
 Download from <https://banks.data.fdic.gov/>, then the same three steps:

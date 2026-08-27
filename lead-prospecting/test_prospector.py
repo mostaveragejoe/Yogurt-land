@@ -1473,3 +1473,344 @@ class ReconciliationRegression(unittest.TestCase):
         rows = self.conn.execute("SELECT partner_id FROM contacts")
         for row in rows:
             self.assertIn(row["partner_id"], partner_ids)
+
+
+# ---------------------------------------------------------------------------
+# Trajectory -- direction of travel
+# ---------------------------------------------------------------------------
+
+from prospector import ingest_sba, trajectory
+from prospector.scoring import apply_sba_signal, apply_trajectory, full_score
+
+
+def _series(*pairs):
+    return list(pairs)
+
+
+class Slope(unittest.TestCase):
+    def test_rising_series_has_positive_slope(self):
+        s = trajectory.slope_per_quarter(_series(
+            ("2025-09-30", 0.62), ("2025-12-31", 0.66),
+            ("2026-03-31", 0.71), ("2026-06-30", 0.76)))
+        self.assertGreater(s, 4.0)
+
+    def test_falling_series_has_negative_slope(self):
+        s = trajectory.slope_per_quarter(_series(
+            ("2025-09-30", 1.02), ("2026-06-30", 0.91)))
+        self.assertLess(s, 0)
+
+    def test_one_observation_gives_no_slope(self):
+        self.assertIsNone(trajectory.slope_per_quarter(_series(("2026-06-30", 0.9))))
+
+    def test_unparseable_dates_are_ignored(self):
+        self.assertIsNone(trajectory.slope_per_quarter(
+            _series(("not-a-date", 0.5), ("also-bad", 0.6))))
+
+    def test_missing_values_are_skipped(self):
+        s = trajectory.slope_per_quarter(_series(
+            ("2025-12-31", None), ("2026-03-31", 0.5), ("2026-06-30", 0.6)))
+        self.assertIsNotNone(s)
+
+
+class Patterns(unittest.TestCase):
+    """The two-dimensional read: level AND slope, not either alone."""
+
+    def test_high_and_rising_is_breaching(self):
+        self.assertEqual(trajectory.classify(0.94, 13.0, 3), "breaching")
+
+    def test_high_and_falling_is_shedding(self):
+        """Falling concentration at the ceiling means declining deals NOW."""
+        self.assertEqual(trajectory.classify(0.91, -3.7, 3), "shedding")
+
+    def test_high_and_flat_is_entrenched(self):
+        self.assertEqual(trajectory.classify(0.93, 0.1, 4), "entrenched")
+
+    def test_mid_and_rising_is_approaching(self):
+        self.assertEqual(trajectory.classify(0.66, 4.7, 4), "approaching")
+
+    def test_low_and_fast_is_accelerating(self):
+        self.assertEqual(trajectory.classify(0.20, 7.0, 3), "accelerating")
+
+    def test_a_single_observation_is_unknown(self):
+        self.assertEqual(trajectory.classify(0.93, None, 1), "unknown")
+
+    def test_entrenched_needs_several_quarters(self):
+        """Two flat quarters is not yet evidence of being stuck."""
+        self.assertNotEqual(trajectory.classify(0.93, 0.1, 2), "entrenched")
+
+    def test_breaching_outranks_entrenched(self):
+        self.assertGreater(trajectory.adjustment("breaching"),
+                           trajectory.adjustment("entrenched"))
+
+    def test_entrenched_is_the_only_penalty(self):
+        for pattern, value in trajectory.ADJUSTMENTS.items():
+            if pattern == "entrenched":
+                self.assertLess(value, 0)
+            else:
+                self.assertGreaterEqual(value, 0)
+
+
+class QuartersToCeiling(unittest.TestCase):
+    def test_estimates_from_the_gap_and_the_pace(self):
+        self.assertAlmostEqual(
+            trajectory.quarters_to_ceiling(0.60, 5.0), 8.0, places=1)
+
+    def test_no_estimate_when_flat_or_falling(self):
+        self.assertIsNone(trajectory.quarters_to_ceiling(0.60, 0.0))
+        self.assertIsNone(trajectory.quarters_to_ceiling(0.60, -3.0))
+
+    def test_no_estimate_once_past_the_ceiling(self):
+        self.assertIsNone(trajectory.quarters_to_ceiling(1.05, 3.0))
+
+    def test_bank_trigger_is_three_hundred_percent(self):
+        """Banks are measured against 300% of capital, not 100% of a cap."""
+        self.assertIsNotNone(
+            trajectory.quarters_to_ceiling(2.4, 10.0, trigger=3.0))
+
+
+class TrajectoryScoring(unittest.TestCase):
+    def _cu(self, name, loans):
+        return Partner(id=name, name=name, partner_type="credit_union",
+                       total_assets=500e6, net_worth=55e6,
+                       business_loans_outstanding=loans)
+
+    def test_a_rising_partner_overtakes_an_entrenched_one(self):
+        """The whole point: a snapshot ranks these the wrong way round."""
+        rising = score_partner(self._cu("rising", 46.5e6))
+        parked = score_partner(self._cu("parked", 57e6))
+        self.assertLess(rising.total_score, parked.total_score)
+
+        apply_trajectory(rising, _series(
+            ("2025-09-30", 0.62), ("2025-12-31", 0.66),
+            ("2026-03-31", 0.71), ("2026-06-30", 0.76)))
+        apply_trajectory(parked, _series(
+            ("2025-09-30", 0.93), ("2025-12-31", 0.93),
+            ("2026-03-31", 0.94), ("2026-06-30", 0.93)))
+        self.assertGreater(rising.total_score, parked.total_score)
+
+    def test_no_history_leaves_the_score_untouched(self):
+        partner = score_partner(self._cu("solo", 57e6))
+        before = partner.total_score
+        apply_trajectory(partner, [])
+        self.assertEqual(partner.total_score, before)
+        self.assertEqual(partner.trend_pattern, "unknown")
+
+    def test_the_adjustment_is_bounded(self):
+        partner = score_partner(self._cu("max", 59e6))
+        apply_trajectory(partner, _series(
+            ("2025-09-30", 0.70), ("2025-12-31", 0.85), ("2026-06-30", 0.99)))
+        self.assertLessEqual(partner.total_score, 100.0)
+        self.assertLessEqual(partner.fit_score, 40.0)
+
+
+class Observations(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "t.db")
+        self.partner = cu(id="c", total_assets=500e6, net_worth=55e6,
+                          business_loans_outstanding=46e6)
+        db.upsert(self.conn, self.partner)
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_a_quarter_is_recorded(self):
+        db.record_observation(self.conn, self.partner, "2026-06-30", "ncua")
+        self.assertEqual(len(db.observations_for(self.conn, "c")), 1)
+
+    def test_reimporting_a_quarter_replaces_rather_than_stacks(self):
+        db.record_observation(self.conn, self.partner, "2026-06-30", "ncua")
+        self.partner.business_loans_outstanding = 50e6
+        db.record_observation(self.conn, self.partner, "2026-06-30", "ncua")
+        rows = db.observations_for(self.conn, "c")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["business_loans_outstanding"], 50e6)
+
+    def test_series_is_the_ratio_not_the_raw_figure(self):
+        db.record_observation(self.conn, self.partner, "2026-06-30", "ncua")
+        series = db.concentration_series(self.conn, self.partner)
+        self.assertEqual(len(series), 1)
+        self.assertAlmostEqual(series[0][1], 46e6 / min(500e6 * 0.1225, 55e6 * 1.75),
+                               places=4)
+
+    def test_a_bank_series_uses_cre_over_capital(self):
+        bank = Partner(id="b", name="B", partner_type="community_bank",
+                       total_assets=418e6, risk_based_capital=41.5e6,
+                       cre_loans=137e6)
+        db.upsert(self.conn, bank)
+        db.record_observation(self.conn, bank, "2026-06-30", "fdic")
+        series = db.concentration_series(self.conn, bank)
+        self.assertAlmostEqual(series[0][1], 137e6 / 41.5e6, places=3)
+
+
+# ---------------------------------------------------------------------------
+# SBA participation
+# ---------------------------------------------------------------------------
+
+class SbaSignal(unittest.TestCase):
+    def _cu(self, count):
+        return Partner(id="c", name="C", partner_type="credit_union",
+                       total_assets=500e6, net_worth=55e6,
+                       business_loans_outstanding=46e6, sba_loan_count=count)
+
+    def test_commercial_lender_with_no_sba_is_promoted(self):
+        partner = score_partner(self._cu(0))
+        before = partner.total_score
+        apply_sba_signal(partner)
+        self.assertGreater(partner.total_score, before)
+        self.assertTrue(any("SBA desk" in r for r in partner.score_rationale))
+
+    def test_an_in_house_originator_is_demoted(self):
+        partner = score_partner(self._cu(45))
+        before = partner.total_score
+        apply_sba_signal(partner)
+        self.assertLess(partner.total_score, before)
+
+    def test_light_activity_is_neutral_but_noted(self):
+        partner = score_partner(self._cu(4))
+        before = partner.total_score
+        apply_sba_signal(partner)
+        self.assertEqual(partner.total_score, before)
+        self.assertTrue(any("Light SBA" in r for r in partner.score_rationale))
+
+    def test_unloaded_sba_data_leaves_the_score_alone(self):
+        partner = score_partner(self._cu(None))
+        before = partner.total_score
+        apply_sba_signal(partner)
+        self.assertEqual(partner.total_score, before)
+
+    def test_a_zero_without_commercial_lending_is_not_promoted(self):
+        """No commercial book means no borrowers to refer, SBA or otherwise."""
+        partner = Partner(id="c", name="C", partner_type="credit_union",
+                          total_assets=500e6, net_worth=55e6,
+                          business_loans_outstanding=0, sba_loan_count=0)
+        score_partner(partner)
+        before = partner.total_score
+        apply_sba_signal(partner)
+        self.assertEqual(partner.total_score, before)
+
+    def test_non_depositories_are_untouched(self):
+        partner = score_partner(Partner(id="x", name="X", partner_type="cpa_firm",
+                                        headcount=20, sba_loan_count=0))
+        before = partner.total_score
+        apply_sba_signal(partner)
+        self.assertEqual(partner.total_score, before)
+
+
+class SbaIngest(unittest.TestCase):
+    def test_sample_file_parses(self):
+        lenders, cdcs, diag = ingest_sba.load("data/sample_sba_mn.csv")
+        self.assertEqual(diag["rows_in_state"], 10)
+        self.assertEqual(len(cdcs), 2)
+
+    def test_out_of_state_borrowers_are_excluded(self):
+        """A Minnesota lender's North Dakota loan is not Minnesota activity."""
+        _, _, diag = ingest_sba.load("data/sample_sba_mn.csv", state="MN")
+        self.assertEqual(diag["rows_read"] - diag["rows_in_state"], 1)
+
+    def test_lenders_key_on_canonical_name(self):
+        lenders, _, _ = ingest_sba.load("data/sample_sba_mn.csv")
+        self.assertIn(db.canonical_name("Bluestem Heritage CU"), lenders)
+
+    def test_activity_aggregates_count_and_volume(self):
+        lenders, _, _ = ingest_sba.load("data/sample_sba_mn.csv")
+        activity = lenders[db.canonical_name("Bluestem Heritage CU")]
+        self.assertEqual(activity.count, 3)
+        self.assertAlmostEqual(activity.volume, 1_465_000.0)
+
+    def test_third_party_lenders_on_504_records_count(self):
+        lenders, _, _ = ingest_sba.load("data/sample_sba_mn.csv")
+        self.assertIn(db.canonical_name("Summit Valley Bank"), lenders)
+
+    def test_cdcs_become_partners(self):
+        _, cdcs, _ = ingest_sba.load("data/sample_sba_mn.csv")
+        names = {c.name for c in cdcs}
+        self.assertIn("Great Lakes Development Company", names)
+        self.assertTrue(all(c.partner_type == PartnerType.CDC.value for c in cdcs))
+
+    def test_a_file_with_no_lender_column_fails_loudly(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as fh:
+            fh.write("foo,bar\n1,2\n")
+            path = fh.name
+        with self.assertRaises(SystemExit):
+            ingest_sba.load(path)
+
+
+class ScoringConsistencyRegression(unittest.TestCase):
+    """`rank` and `show` disagreed by up to ten points.
+
+    Scoring grew to three layers -- the level rubric, trajectory, and SBA
+    participation -- and only the import paths ran all three. `show` ran the
+    first alone, so the dossier showed a different number from the leaderboard
+    and omitted the reasoning for the gap. full_score is now the only entry.
+    """
+
+    def test_full_score_applies_every_layer(self):
+        partner = Partner(id="c", name="C", partner_type="credit_union",
+                          total_assets=500e6, net_worth=55e6,
+                          business_loans_outstanding=46e6, sba_loan_count=0)
+        full_score(partner, _series(
+            ("2025-09-30", 0.62), ("2025-12-31", 0.66),
+            ("2026-03-31", 0.71), ("2026-06-30", 0.76)))
+        self.assertEqual(partner.trend_pattern, "approaching")
+        self.assertTrue(any("SBA desk" in r for r in partner.score_rationale))
+
+    def test_full_score_beats_the_base_rubric_when_signals_apply(self):
+        def build():
+            return Partner(id="c", name="C", partner_type="credit_union",
+                           total_assets=500e6, net_worth=55e6,
+                           business_loans_outstanding=46e6, sba_loan_count=0)
+        base = score_partner(build())
+        complete = full_score(build(), _series(
+            ("2025-12-31", 0.66), ("2026-03-31", 0.71), ("2026-06-30", 0.76)))
+        self.assertNotEqual(base.total_score, complete.total_score)
+
+    def test_full_score_is_idempotent(self):
+        partner = Partner(id="c", name="C", partner_type="credit_union",
+                          total_assets=500e6, net_worth=55e6,
+                          business_loans_outstanding=46e6, sba_loan_count=0)
+        series = _series(("2025-12-31", 0.66), ("2026-06-30", 0.76))
+        first = full_score(partner, series).total_score
+        second = full_score(partner, series).total_score
+        self.assertEqual(first, second)
+
+    def test_counts_round_trip_as_ints(self):
+        tmp = tempfile.TemporaryDirectory()
+        conn = db.connect(Path(tmp.name) / "t.db")
+        partner = cu(id="c", total_assets=1e8)
+        partner.sba_loan_count = 3
+        db.upsert(conn, partner)
+        self.assertIsInstance(db.get(conn, "c").sba_loan_count, int)
+        conn.close()
+        tmp.cleanup()
+
+
+class PatternChoicesRegression(unittest.TestCase):
+    """`breaching` was classifiable but not selectable.
+
+    The CLI restated the pattern list instead of sourcing it, so adding a
+    pattern to the classifier left `trend --pattern breaching` rejecting a
+    value the tool itself produced.
+    """
+
+    def test_every_classifiable_pattern_has_an_adjustment(self):
+        produced = set()
+        for level in (0.1, 0.5, 0.9, 1.1):
+            for slope in (-5.0, -0.5, 0.5, 3.0, 8.0, None):
+                produced.add(trajectory.classify(level, slope, 4))
+        for pattern in produced:
+            self.assertIn(pattern, trajectory.ADJUSTMENTS,
+                          f"{pattern} is classifiable but has no adjustment")
+
+    def test_the_cli_offers_every_pattern(self):
+        import prospect
+        parser = prospect.build_parser()
+        action = next(
+            a for sub in parser._subparsers._group_actions
+            for name, sp in sub.choices.items() if name == "trend"
+            for a in sp._actions if a.dest == "pattern")
+        for pattern in trajectory.ADJUSTMENTS:
+            if pattern == "unknown":
+                continue
+            self.assertIn(pattern, action.choices)

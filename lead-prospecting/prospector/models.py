@@ -23,6 +23,7 @@ class PartnerType(str, Enum):
     CRE_BROKER = "cre_broker"
     EQUIPMENT_DEALER = "equipment_dealer"
     MEDICAL_ADJACENT = "medical_adjacent"
+    CDC = "cdc"                    # Certified Development Company (SBA 504)
     ATTORNEY = "attorney"
     OTHER = "other"
 
@@ -54,6 +55,7 @@ ID_PREFIX = {
     PartnerType.CRE_BROKER.value: "creb",
     PartnerType.EQUIPMENT_DEALER.value: "eq",
     PartnerType.MEDICAL_ADJACENT.value: "med",
+    PartnerType.CDC.value: "cdc",
     PartnerType.ATTORNEY.value: "atty",
     PartnerType.OTHER.value: "other",
 }
@@ -107,6 +109,14 @@ class Partner:
     # appetite is CRE concentration against the 2006 interagency supervisory
     # criteria, measured against total risk-based capital.
     risk_based_capital: Optional[float] = None
+
+    # --- SBA participation (from the 7(a)/504 FOIA data) -----------------
+    # Whether an institution originates SBA loans itself. A depository with
+    # commercial borrowers and no SBA volume is the strongest SBA referral
+    # partner there is: the demand exists, the product does not.
+    sba_loan_count: Optional[int] = None
+    sba_volume: Optional[float] = None
+    sba_last_approval: str = ""
     cre_loans: Optional[float] = None
     construction_loans: Optional[float] = None
 
@@ -130,6 +140,13 @@ class Partner:
     do_not_contact: bool = False
 
     # --- computed (populated by scoring.score_partner) -------------------
+    # Direction of travel, computed from the observations table by
+    # scoring.apply_trajectory. Not persisted source data -- derived.
+    trend_pattern: str = ""
+    trend_slope: Optional[float] = None
+    trend_quarters: Optional[int] = None
+    quarters_to_ceiling: Optional[float] = None
+
     fit_score: float = 0.0
     capacity_score: float = 0.0
     access_score: float = 0.0
@@ -162,7 +179,7 @@ class Partner:
         # SQLite stores these as REAL; restore them as ints so they format
         # as counts ("214 loans") rather than floats ("214.0 loans").
         for key in ("business_loan_count", "headcount", "active_listings",
-                    "years_active"):
+                    "years_active", "sba_loan_count", "trend_quarters"):
             if data.get(key) is not None:
                 data[key] = int(float(data[key]))
         known = {f.name for f in fields(cls)}

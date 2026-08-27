@@ -16,6 +16,7 @@ partner scores well is the opening line of the LinkedIn message.
 
 from __future__ import annotations
 
+from . import trajectory
 from .models import Partner, PartnerType
 
 # --- Statutory constants ------------------------------------------------
@@ -276,6 +277,12 @@ def _score_intermediary(partner: Partner) -> tuple[float, float, float, list[str
     elif partner.partner_type == PartnerType.EQUIPMENT_DEALER.value:
         fit += 6.0
         why.append("Maps onto Equipment Leasing via a vendor-finance program.")
+    elif partner.partner_type == PartnerType.CDC.value:
+        fit += 10.0
+        why.append("A CDC does the 504 real-estate half and needs somewhere to "
+                   "send working capital, equipment and anything that fails "
+                   "504 eligibility. Structurally complementary rather than "
+                   "competing.")
     fit = min(40.0, fit)
 
     # --- CAPACITY -------------------------------------------------------
@@ -374,6 +381,7 @@ _RUBRICS = {
     PartnerType.BUSINESS_BROKER.value: _score_intermediary,
     PartnerType.CRE_BROKER.value: _score_intermediary,
     PartnerType.EQUIPMENT_DEALER.value: _score_intermediary,
+    PartnerType.CDC.value: _score_intermediary,
 }
 
 
@@ -438,9 +446,114 @@ def infer_products(partner: Partner) -> list[str]:
         return ["real_estate", "commercial_bridge", "fix_and_flip"]
     if t == PartnerType.EQUIPMENT_DEALER.value:
         return ["equipment_leasing"]
+    if t == PartnerType.CDC.value:
+        return ["unsecured_loans_loc", "equipment_leasing", "commercial_bridge",
+                "accounts_receivable", "business_acquisition"]
     if t == PartnerType.MEDICAL_ADJACENT.value:
         return ["medical_working_capital", "accounts_receivable", "equipment_leasing"]
     return []
+
+
+def apply_trajectory(partner: Partner, series: list[tuple[str, float]]) -> Partner:
+    """Adjust an already-scored partner for direction of travel.
+
+    Deliberately applied after the level-based rubric rather than inside it:
+    the level is the fact, the trend is the refinement, and keeping them
+    separate means a missing history degrades to today's snapshot instead of
+    silently distorting it.
+    """
+    trigger = (CRE_CONCENTRATION_TRIGGER
+               if partner.partner_type == PartnerType.COMMUNITY_BANK.value
+               else 1.0)
+    slope = trajectory.slope_per_quarter(series)
+    level = series[-1][1] if series else None
+    pattern = trajectory.classify(level, slope, len(series), trigger)
+    quarters = trajectory.quarters_to_ceiling(level, slope, trigger)
+
+    partner.trend_pattern = pattern
+    partner.trend_slope = round(slope, 2) if slope is not None else None
+    partner.trend_quarters = len(series)
+    partner.quarters_to_ceiling = round(quarters, 1) if quarters else None
+
+    delta = trajectory.adjustment(pattern)
+    if delta:
+        partner.fit_score = max(0.0, min(40.0, partner.fit_score + delta))
+        partner.total_score = max(0.0, min(100.0, partner.total_score + delta))
+        partner.tier = next(letter for cut, letter in TIER_BREAKS
+                            if partner.total_score >= cut)
+    if pattern != "unknown":
+        partner.score_rationale = list(partner.score_rationale) + [
+            trajectory.describe(pattern, slope, level, len(series), quarters)]
+    return partner
+
+
+# An institution originating this many SBA loans has its own department and
+# does not need an outside desk.
+SBA_IN_HOUSE = 20
+
+
+def apply_sba_signal(partner: Partner) -> Partner:
+    """Adjust a depository for whether it originates SBA loans itself.
+
+    The tool otherwise asserts "most credit unions are not PLP lenders" as a
+    domain assumption. Once the SBA FOIA data is loaded this becomes a
+    measurement per institution, and the two ends of it point opposite ways:
+
+    - Commercial borrowers, zero SBA originations: the demand is on their
+      books and the product is not. The strongest SBA referral partner there
+      is, and invisible without this data.
+    - Heavy SBA volume: they run their own department. Still worth knowing --
+      pitch them the products they do not do -- but not as an SBA outlet.
+    """
+    if partner.partner_type not in (PartnerType.CREDIT_UNION.value,
+                                    PartnerType.COMMUNITY_BANK.value):
+        return partner
+    if partner.sba_loan_count is None:
+        return partner            # SBA data not loaded; leave the score alone
+
+    does_commercial = bool(partner.business_loans_outstanding
+                           or partner.cre_loans)
+
+    if partner.sba_loan_count == 0 and does_commercial:
+        delta, note = 6.0, (
+            "Originates NO SBA loans despite commercial lending on the books. "
+            "The borrowers are there and the product is not -- you would be "
+            "their SBA desk.")
+    elif partner.sba_loan_count >= SBA_IN_HOUSE:
+        delta, note = -4.0, (
+            f"Originates SBA in-house ({partner.sba_loan_count} loans). Not an "
+            "SBA outlet -- pitch the products they do not do: equipment "
+            "leasing, bridge, A/R.")
+    elif partner.sba_loan_count > 0:
+        delta, note = 0.0, (
+            f"Light SBA activity ({partner.sba_loan_count} loans) -- has the "
+            "capability but not the volume; overflow is plausible.")
+    else:
+        return partner
+
+    if delta:
+        partner.fit_score = max(0.0, min(40.0, partner.fit_score + delta))
+        partner.total_score = max(0.0, min(100.0, partner.total_score + delta))
+        partner.tier = next(letter for cut, letter in TIER_BREAKS
+                            if partner.total_score >= cut)
+    partner.score_rationale = list(partner.score_rationale) + [note]
+    return partner
+
+
+def full_score(partner: Partner,
+               series: list[tuple[str, float]] | None = None) -> Partner:
+    """Apply every scoring layer, in order.
+
+    Scoring grew into three stages -- the level rubric, direction of travel,
+    and SBA participation -- and for a while only the import paths ran all
+    three. `show` ran the first alone, so the dossier disagreed with the
+    leaderboard by up to ten points and omitted the reasoning behind the gap.
+    Every caller goes through here now; there is no partial path.
+    """
+    score_partner(partner)
+    apply_trajectory(partner, series or [])
+    apply_sba_signal(partner)
+    return partner
 
 
 def score_all(partners: list[Partner]) -> list[Partner]:

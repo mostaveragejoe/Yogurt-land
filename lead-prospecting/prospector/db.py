@@ -14,6 +14,8 @@ _NUMERIC = {
     "total_assets", "net_worth", "business_loans_outstanding",
     "business_loan_count", "headcount", "active_listings", "years_active",
     "risk_based_capital", "cre_loans", "construction_loans",
+    "trend_slope", "trend_quarters", "quarters_to_ceiling",
+    "sba_loan_count", "sba_volume",
     "fit_score", "capacity_score", "access_score", "total_score",
     "low_income_designated", "has_advisory_practice", "do_not_contact",
     "does_attest_work",
@@ -40,6 +42,7 @@ def connect(path: str | Path = DEFAULT_DB) -> sqlite3.Connection:
     conn.execute(_EVENTS_DDL)
     conn.execute(_DEALS_DDL)
     conn.execute(_CONTACTS_DDL)
+    conn.execute(_OBSERVATIONS_DDL)
     _migrate(conn)
     _migrate_legacy_contacts(conn)
     conn.commit()
@@ -481,3 +484,85 @@ def reconcile_ids(conn: sqlite3.Connection, partners: list) -> tuple[list, int]:
             partner.id = existing.id
             partner.name = existing.name or partner.name
     return partners, remapped
+
+
+# --- Observations -------------------------------------------------------
+# One row per institution per call-report quarter. Keeping history is what
+# turns a snapshot into a direction of travel: an institution's concentration
+# today says less about whether to call it than where that number is heading.
+
+_OBSERVATIONS_DDL = """
+CREATE TABLE IF NOT EXISTS observations (
+    id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id                 TEXT NOT NULL,
+    as_of                      TEXT NOT NULL,
+    source                     TEXT NOT NULL,
+    total_assets               REAL,
+    net_worth                  REAL,
+    business_loans_outstanding REAL,
+    risk_based_capital         REAL,
+    cre_loans                  REAL,
+    construction_loans         REAL,
+    created_at                 TEXT NOT NULL,
+    UNIQUE(partner_id, as_of, source)
+)
+"""
+
+OBSERVATION_FIELDS = ("total_assets", "net_worth", "business_loans_outstanding",
+                      "risk_based_capital", "cre_loans", "construction_loans")
+
+
+def record_observation(conn: sqlite3.Connection, partner, as_of: str,
+                       source: str) -> None:
+    """Snapshot one institution's figures for a quarter.
+
+    Re-importing the same quarter replaces the row rather than stacking
+    duplicates, so a corrected file can simply be loaded again.
+    """
+    values = [getattr(partner, f, None) for f in OBSERVATION_FIELDS]
+    conn.execute(
+        "INSERT INTO observations (partner_id, as_of, source, "
+        + ", ".join(OBSERVATION_FIELDS)
+        + ", created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT(partner_id, as_of, source) DO UPDATE SET "
+        + ", ".join(f"{f}=excluded.{f}" for f in OBSERVATION_FIELDS),
+        [partner.id, as_of, source, *values,
+         _dt.datetime.now().isoformat(timespec="seconds")],
+    )
+
+
+def observations_for(conn: sqlite3.Connection, partner_id: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM observations WHERE partner_id = ? ORDER BY as_of",
+        (partner_id,))
+    return [dict(r) for r in rows]
+
+
+def concentration_series(conn: sqlite3.Connection, partner) -> list[tuple[str, float]]:
+    """The constraint ratio at each observed quarter, oldest first.
+
+    Credit unions are measured against the statutory MBL cap, banks against
+    total risk-based capital -- different regulators, same question: how much
+    of their headroom is gone.
+    """
+    from .models import PartnerType
+    from .scoring import MBL_CAP_ASSET_RATIO, MBL_CAP_NET_WORTH_MULTIPLE
+
+    series: list[tuple[str, float]] = []
+    for row in observations_for(conn, partner_id=partner.id):
+        if partner.partner_type == PartnerType.COMMUNITY_BANK.value:
+            capital, cre = row["risk_based_capital"], row["cre_loans"]
+            if capital and cre is not None:
+                series.append((row["as_of"], cre / capital))
+            continue
+
+        assets, net_worth = row["total_assets"], row["net_worth"]
+        loans = row["business_loans_outstanding"]
+        if not assets or loans is None:
+            continue
+        cap = assets * MBL_CAP_ASSET_RATIO
+        if net_worth:
+            cap = min(cap, net_worth * MBL_CAP_NET_WORTH_MULTIPLE)
+        if cap:
+            series.append((row["as_of"], loans / cap))
+    return series

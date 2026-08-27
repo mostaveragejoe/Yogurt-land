@@ -1,0 +1,12 @@
+Program,BankName,BankCity,BankState,CDC_Name,CDC_City,CDC_State,ThirdPartyLender_Name,BorrName,BorrCity,BorrState,GrossApproval,ApprovalDate,ApprovalFiscalYear,NaicsCode
+7A,Bluestem Heritage CU,Rochester,MN,,,,,Vollmer Machining LLC,Rochester,MN,485000,2026-03-11,2026,332710
+7A,Bluestem Heritage CU,Rochester,MN,,,,,Kettle Creek Foods,Winona,MN,220000,2026-01-22,2026,311999
+7A,Bluestem Heritage CU,Rochester,MN,,,,,Redwing Fabrication,Red Wing,MN,760000,2025-11-04,2025,332312
+7A,Riverbend State Bank,Minneapolis,MN,,,,,Northline Logistics,Eagan,MN,1250000,2026-04-02,2026,484121
+7A,Riverbend State Bank,Minneapolis,MN,,,,,Halcyon Dental Group,Edina,MN,540000,2026-02-18,2026,621210
+7A,Lakeline Bank & Trust,Duluth,MN,,,,,Superior Freight Co,Duluth,MN,880000,2026-05-19,2026,484110
+504,,,,Great Lakes Development Company,Duluth,MN,Lakeline Bank & Trust,Ironwood Properties,Duluth,MN,1400000,2026-04-28,2026,531120
+504,,,,Great Lakes Development Company,Duluth,MN,Riverbend State Bank,Mesabi Warehousing,Hibbing,MN,980000,2026-02-09,2026,493110
+504,,,,Twin Cities Certified Development,Saint Paul,MN,Summit Valley Bank,Cedar Point Manufacturing,Eagan,MN,2100000,2026-03-30,2026,332999
+7A,Out Of State Bank NA,Chicago,IL,,,,,Bemidji Auto Works,Bemidji,MN,310000,2026-01-15,2026,811111
+7A,Bluestem Heritage CU,Rochester,MN,,,,,Somewhere Else Inc,Fargo,ND,400000,2026-02-01,2026,238220
