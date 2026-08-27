@@ -468,7 +468,7 @@ class ChannelAggregation(unittest.TestCase):
         """A list of 500 unworked prospects must not read as a 0% channel."""
         worked = self._partner("a", "credit_union", Stage.CONTACTED.value)
         self._partner("b", "credit_union", Stage.NOT_CONTACTED.value)
-        stats = analytics.channel_stats(self.conn, [worked, db.get(self.conn, "b")],
+        stats = analytics.channel_stats([worked, db.get(self.conn, "b")],
                                         {}, {})
         self.assertEqual(stats["credit_union"].total, 2)
         self.assertEqual(stats["credit_union"].worked, 1)
@@ -479,7 +479,7 @@ class ChannelAggregation(unittest.TestCase):
                         "referred_date": "2026-05-01"},
                        {"status": "funded", "amount": 200.0, "revenue": 6.0,
                         "referred_date": "2026-06-01"}]}
-        stats = analytics.channel_stats(self.conn, [p], deals, {"a": "2026-04-01"})
+        stats = analytics.channel_stats([p], deals, {"a": "2026-04-01"})
         st = stats["credit_union"]
         self.assertEqual(st.producing, 1)
         self.assertEqual(st.deals, 2)
@@ -489,7 +489,7 @@ class ChannelAggregation(unittest.TestCase):
         p = self._partner("a", "credit_union", Stage.PRODUCING.value)
         deals = {"a": [{"status": "declined", "amount": 500.0, "revenue": None,
                         "referred_date": "2026-05-01"}]}
-        stats = analytics.channel_stats(self.conn, [p], deals, {"a": "2026-04-01"})
+        stats = analytics.channel_stats([p], deals, {"a": "2026-04-01"})
         self.assertEqual(stats["credit_union"].funded, 0)
         self.assertEqual(stats["credit_union"].revenue, 0.0)
 
@@ -497,7 +497,7 @@ class ChannelAggregation(unittest.TestCase):
         p = self._partner("a", "credit_union", Stage.PRODUCING.value)
         deals = {"a": [{"status": "funded", "amount": 1.0, "revenue": 1.0,
                         "referred_date": "2026-05-01"}]}
-        stats = analytics.channel_stats(self.conn, [p], deals, {"a": "2026-04-01"})
+        stats = analytics.channel_stats([p], deals, {"a": "2026-04-01"})
         self.assertEqual(stats["credit_union"].median_days_to_deal, 30)
 
 
@@ -607,3 +607,120 @@ class ProducerRanking(unittest.TestCase):
         }
         rows = analytics.producer_stats([small, big], deals, {})
         self.assertEqual(rows[0].partner.id, "b")
+
+
+# ---------------------------------------------------------------------------
+# Regression tests -- each pins a bug found and fixed during the audit round
+# ---------------------------------------------------------------------------
+
+from prospector import report
+from prospector.models import ID_PREFIX
+from prospector.report import _money
+
+
+class IdCollisionRegression(unittest.TestCase):
+    """Partner ids were built from partner_type[:3] plus the name alone.
+
+    Two failure modes, both silent: credit_union[:3] and cre_broker[:3] are
+    both "cre", and two firms sharing a name (ordinary in real data) produced
+    one id. The second record overwrote the first on import.
+    """
+
+    def test_credit_union_and_cre_broker_prefixes_differ(self):
+        self.assertNotEqual(ID_PREFIX[PartnerType.CREDIT_UNION.value],
+                            ID_PREFIX[PartnerType.CRE_BROKER.value])
+
+    def test_every_partner_type_has_a_unique_prefix(self):
+        prefixes = list(ID_PREFIX.values())
+        self.assertEqual(len(prefixes), len(set(prefixes)))
+
+    def test_every_partner_type_is_covered(self):
+        for ptype in PartnerType:
+            self.assertIn(ptype.value, ID_PREFIX)
+
+    def test_same_name_different_city_gets_distinct_ids(self):
+        taken = set()
+        a = ingest_csv.make_id("cpa_firm", "Smith & Associates", "Minneapolis", taken)
+        b = ingest_csv.make_id("cpa_firm", "Smith & Associates", "Duluth", taken)
+        self.assertNotEqual(a, b)
+
+    def test_same_name_same_city_falls_back_to_a_counter(self):
+        taken = set()
+        ids = [ingest_csv.make_id("cpa_firm", "Duplicate Firm", "Eagan", taken)
+               for _ in range(3)]
+        self.assertEqual(len(set(ids)), 3)
+
+    def test_same_name_different_type_gets_distinct_ids(self):
+        taken = set()
+        a = ingest_csv.make_id("credit_union", "Lakeside Partners", "Rochester", taken)
+        b = ingest_csv.make_id("cre_broker", "Lakeside Partners", "Rochester", taken)
+        self.assertNotEqual(a, b)
+
+    def test_import_preserves_every_row(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False) as fh:
+            fh.write("name,partner_type,city\n"
+                     "Smith & Associates,cpa_firm,Minneapolis\n"
+                     "Smith & Associates,cpa_firm,Duluth\n"
+                     "Lakeside Partners,credit_union,Rochester\n"
+                     "Lakeside Partners,cre_broker,Rochester\n")
+            path = fh.name
+        partners, diag = ingest_csv.load(path)
+        self.assertEqual(diag["imported"], 4)
+        self.assertEqual(len({p.id for p in partners}), 4)
+
+
+class TouchSchedulesFollowUpRegression(unittest.TestCase):
+    """`touch --stage` set a stage without scheduling a next action.
+
+    The partner then had no due date and never appeared in `due` -- silently
+    dropping out of the pipeline while looking correctly updated.
+    """
+
+    def test_stage_change_implies_a_due_date(self):
+        for stage in (Stage.CONTACTED.value, Stage.RESPONDED.value,
+                      Stage.AGREEMENT.value):
+            due = cadence.next_due(stage, PartnerType.CREDIT_UNION.value,
+                                   dt.date(2026, 8, 27))
+            self.assertTrue(due, f"{stage} produced no due date")
+
+    def test_dead_stage_correctly_has_no_due_date(self):
+        self.assertEqual(
+            cadence.next_due(Stage.DEAD.value, PartnerType.CREDIT_UNION.value,
+                             dt.date(2026, 8, 27)), "")
+
+
+class MoneyFormatRegression(unittest.TestCase):
+    """A millions-only formatter rendered $1.24B as "$1,240.00M"."""
+
+    def test_billions_use_a_b_suffix(self):
+        self.assertEqual(_money(1_240_000_000), "$1.24B")
+
+    def test_millions_stay_readable(self):
+        self.assertEqual(_money(486_000_000), "$486.0M")
+        self.assertEqual(_money(2_950_000), "$2.95M")
+
+    def test_thousands_and_units(self):
+        self.assertEqual(_money(86_000), "$86k")
+        self.assertEqual(_money(540), "$540")
+
+    def test_empty_values_render_as_a_dash(self):
+        self.assertEqual(_money(None), "--")
+        self.assertEqual(_money(0), "--")
+
+    def test_output_never_exceeds_the_column_width(self):
+        for value in (1e3, 1e6, 1e9, 9.8e9, 4.86e8, 2.95e6):
+            self.assertLessEqual(len(_money(value)), 10)
+
+
+class EmptyDatabaseRegression(unittest.TestCase):
+    """`worklist` claimed every partner was worked when there were none."""
+
+    def test_empty_database_says_so(self):
+        message = report.worklist([])
+        self.assertIn("No partners in the database", message)
+
+    def test_all_worked_is_a_different_message(self):
+        p = Partner(id="a", name="A", partner_type="cpa_firm",
+                    stage=Stage.CONTACTED.value)
+        message = report.worklist([p])
+        self.assertIn("Nothing unworked", message)

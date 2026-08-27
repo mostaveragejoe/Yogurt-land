@@ -48,7 +48,24 @@ ANGLES = {
     ),
 }
 
-_MONEY = lambda v: f"${v/1e6:,.1f}M" if v else "--"
+def _money(value: float | None) -> str:
+    """Compact dollar formatting, shared by every report in this module.
+
+    Roughly three significant figures: $1.24B, $486.0M, $2.95M, $86k. Credit
+    unions routinely hold billions, so a millions-only formatter renders
+    "$1,240.00M" and wrecks the column.
+    """
+    if not value:
+        return "--"
+    magnitude = abs(value)
+    for scale, suffix in ((1e9, "B"), (1e6, "M")):
+        if magnitude >= scale:
+            scaled = value / scale
+            places = 2 if abs(scaled) < 10 else 1
+            return f"${scaled:,.{places}f}{suffix}"
+    if magnitude >= 1e3:
+        return f"${value/1e3:,.0f}k"
+    return f"${value:,.0f}"
 
 
 def _fmt_pressure(partner: Partner) -> str:
@@ -71,7 +88,7 @@ def ranked_table(partners: list[Partner], limit: int = 25) -> str:
         out.append(
             f"{i:>3}  {p.tier:<2} {p.total_score:>5.1f}  {p.name[:38]:<38} "
             f"{p.city[:16]:<16} {p.partner_type[:16]:<16} "
-            f"{_fmt_pressure(p):>5} {_MONEY(p.total_assets):>10}  {p.stage}"
+            f"{_fmt_pressure(p):>5} {_money(p.total_assets):>10}  {p.stage}"
         )
     return "\n".join(out)
 
@@ -102,12 +119,12 @@ def detail(partner: Partner) -> str:
         lines += [
             "",
             "Call report",
-            f"  Total assets          : {_MONEY(partner.total_assets)}",
-            f"  Net worth             : {_MONEY(partner.net_worth)}",
-            f"  Business loans        : {_MONEY(partner.business_loans_outstanding)}"
+            f"  Total assets          : {_money(partner.total_assets)}",
+            f"  Net worth             : {_money(partner.net_worth)}",
+            f"  Business loans        : {_money(partner.business_loans_outstanding)}"
             + (f"  ({partner.business_loan_count:,} loans)"
                if partner.business_loan_count else ""),
-            f"  Statutory MBL cap     : {_MONEY(cap)}",
+            f"  Statutory MBL cap     : {_money(cap)}",
             f"  Cap utilization       : {_fmt_pressure(partner)}",
             f"  Low-income designated : {'yes (cap-exempt)' if partner.low_income_designated else 'no'}",
         ]
@@ -153,6 +170,10 @@ def worklist(partners: list[Partner], size: int = 10) -> str:
     for p in fresh:
         by_type.setdefault(p.partner_type, []).append(p)
 
+    if not partners:
+        return ("No partners in the database yet.\n"
+                "Load some first: `ingest-ncua` for credit unions, "
+                "`ingest-csv` for everyone else.")
     if not by_type:
         return "Nothing unworked. Every partner is contacted or later."
 
@@ -196,10 +217,13 @@ def export_csv(partners: list[Partner], path: str | Path) -> int:
     """Write the scored list out for a spreadsheet or a CRM import."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    rows = [p.to_row() for p in sorted(partners, key=lambda p: p.total_score, reverse=True)]
-    for row, partner in zip(rows, sorted(partners, key=lambda p: p.total_score, reverse=True)):
+    ordered = sorted(partners, key=lambda p: p.total_score, reverse=True)
+    rows = []
+    for partner in ordered:
+        row = partner.to_row()
         pressure = cap_pressure(partner)
         row["cap_utilization"] = f"{pressure:.4f}" if pressure is not None else ""
+        rows.append(row)
     if not rows:
         return 0
     with open(path, "w", newline="", encoding="utf-8") as fh:
@@ -288,16 +312,6 @@ def _pct(triple) -> str:
     """Render a Wilson triple as 'point% [low-high]'."""
     point, low, high = triple
     return f"{point:5.0%}  [{low:.0%}-{high:.0%}]"
-
-
-def _money(value: float) -> str:
-    if not value:
-        return "--"
-    if value >= 1e6:
-        return f"${value/1e6:,.2f}M"
-    if value >= 1e3:
-        return f"${value/1e3:,.0f}k"
-    return f"${value:,.0f}"
 
 
 def channels_report(stats: dict, can_rank: bool, gate_reason: str) -> str:

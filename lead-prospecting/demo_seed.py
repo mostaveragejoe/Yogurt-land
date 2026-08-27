@@ -23,7 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from prospector import cadence, db
-from prospector.models import Partner, PartnerType, Stage
+from prospector.models import ID_PREFIX, Partner, PartnerType, Stage
 from prospector.scoring import score_partner
 
 START = dt.date(2026, 3, 2)
@@ -50,15 +50,6 @@ PRODUCTS_BY_TYPE = {
 CITIES = ["Minneapolis", "Saint Paul", "Rochester", "Duluth", "Bloomington",
           "Saint Cloud", "Mankato", "Eagan", "Moorhead", "Winona"]
 
-# Explicit, distinct id prefixes. Truncating the type name collides:
-# credit_union[:3] and cre_broker[:3] are both "cre".
-ID_PREFIX = {
-    PartnerType.CREDIT_UNION.value: "cu",
-    PartnerType.CPA_FIRM.value: "cpa",
-    PartnerType.BUSINESS_BROKER.value: "bb",
-    PartnerType.CRE_BROKER.value: "creb",
-    PartnerType.EQUIPMENT_DEALER.value: "eq",
-}
 
 
 def business_day(base: dt.date, offset: int) -> dt.date:

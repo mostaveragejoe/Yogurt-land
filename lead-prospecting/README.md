@@ -64,6 +64,11 @@ a LinkedIn Sales Navigator export, then import:
 python3 prospect.py ingest-csv my-cpas.csv --type cpa_firm
 ```
 
+Partner ids are built from type, name **and city**, because two firms sharing
+a name is ordinary in real data. If a genuine duplicate remains after that, a
+counter is appended and the import reports how many it disambiguated — a row
+is never silently dropped.
+
 `prospect.py init` writes `data/partner_import_template.csv` with the expected
 headers.
 

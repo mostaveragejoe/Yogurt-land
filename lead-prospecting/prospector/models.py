@@ -41,6 +41,24 @@ class Stage(str, Enum):
     DEAD = "dead"
 
 
+# Short, explicit id prefixes per partner type.
+#
+# Never derive these by truncating the type name: credit_union[:3] and
+# cre_broker[:3] are both "cre", which silently overwrites one type's records
+# with the other's on import.
+ID_PREFIX = {
+    PartnerType.CREDIT_UNION.value: "cu",
+    PartnerType.COMMUNITY_BANK.value: "bank",
+    PartnerType.CPA_FIRM.value: "cpa",
+    PartnerType.BUSINESS_BROKER.value: "bb",
+    PartnerType.CRE_BROKER.value: "creb",
+    PartnerType.EQUIPMENT_DEALER.value: "eq",
+    PartnerType.MEDICAL_ADJACENT.value: "med",
+    PartnerType.ATTORNEY.value: "atty",
+    PartnerType.OTHER.value: "other",
+}
+
+
 # Products on the Elite Business Financing sheet. Used to record which of our
 # products a given partner's decline flow actually maps onto -- this is what
 # goes in the LinkedIn message, so it is worth storing explicitly.

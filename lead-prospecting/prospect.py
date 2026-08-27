@@ -137,6 +137,18 @@ def cmd_touch(args) -> int:
     changes = {}
     if args.stage:
         changes["stage"] = args.stage
+        # Changing the stage here must schedule a follow-up exactly as `log`
+        # does. Without this a partner touched through this command never
+        # acquires a due date and so never surfaces in `due` -- silently
+        # dropping out of the pipeline.
+        if not args.next_action:
+            changes["next_action"] = cadence.suggest_action(
+                args.stage, db.unanswered_touches(conn, partner.id),
+                partner.partner_type, partner.tier)
+        if not args.due:
+            changes["next_action_due"] = cadence.next_due(
+                args.stage, partner.partner_type,
+                dt.date.fromisoformat(args.date or dt.date.today().isoformat()))
     if args.owner:
         changes["owner"] = args.owner
     if args.next_action:
@@ -341,6 +353,11 @@ def cmd_deal(args) -> int:
         conn.close()
         return 1
 
+    if args.amount is not None and args.amount < 0:
+        print("Deal amount cannot be negative.", file=sys.stderr)
+        conn.close()
+        return 1
+
     when = args.date or dt.date.today().isoformat()
     deal_id = db.add_deal(conn, partner.id, args.product, when,
                           amount=args.amount, note=args.note or "")
@@ -385,6 +402,12 @@ def _close_deal(args, status: str) -> int:
         print(f"No deal #{args.deal_id}.", file=sys.stderr)
         conn.close()
         return 1
+    for field in ("amount", "revenue"):
+        value = getattr(args, field, None)
+        if value is not None and value < 0:
+            print(f"Deal {field} cannot be negative.", file=sys.stderr)
+            conn.close()
+            return 1
     db.update_deal(conn, args.deal_id, status,
                    closed_date=args.date,
                    amount=getattr(args, "amount", None),
@@ -450,7 +473,7 @@ def cmd_channels(args) -> int:
     conn = db.connect(args.database)
     partners, deals_by_partner, first_contacts = _outcome_inputs(
         conn, state=args.state)
-    stats = analytics.channel_stats(conn, partners, deals_by_partner, first_contacts)
+    stats = analytics.channel_stats(partners, deals_by_partner, first_contacts)
     can_rank, reason = analytics.can_rank_channels(stats)
     print(report.channels_report(stats, can_rank, reason))
     conn.close()

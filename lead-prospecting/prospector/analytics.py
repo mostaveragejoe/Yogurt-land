@@ -127,7 +127,7 @@ class ChannelStats:
         return self.worked >= MIN_WORKED_FOR_RATE
 
 
-def channel_stats(conn, partners, deals_by_partner, first_contacts) -> dict:
+def channel_stats(partners, deals_by_partner, first_contacts) -> dict:
     """Aggregate every partner and deal into per-channel statistics."""
     stats: dict[str, ChannelStats] = {}
 

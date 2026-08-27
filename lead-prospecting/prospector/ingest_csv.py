@@ -22,7 +22,7 @@ import csv
 import re
 from pathlib import Path
 
-from .models import Partner, PartnerType
+from .models import ID_PREFIX, Partner, PartnerType
 
 _TRUE = {"y", "yes", "true", "1", "t"}
 
@@ -50,6 +50,28 @@ def _split(raw) -> list[str]:
     return [part.strip() for part in re.split(r"[|,;]", str(raw)) if part.strip()]
 
 
+def make_id(partner_type: str, name: str, city: str, taken: set[str]) -> str:
+    """Build a stable, unique id for a partner.
+
+    Two firms sharing a name is ordinary in real data -- "Smith & Associates"
+    exists in every city -- so the city is part of the id. When even that
+    collides, a counter is appended rather than letting the second record
+    silently overwrite the first.
+    """
+    prefix = ID_PREFIX.get(partner_type, "other")
+    parts = [prefix, _norm(name)]
+    if city:
+        parts.append(_norm(city))
+    base = "-".join(p for p in parts if p)
+
+    candidate, suffix = base, 2
+    while candidate in taken:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    taken.add(candidate)
+    return candidate
+
+
 def load(path: str | Path, default_type: str = PartnerType.CPA_FIRM.value,
          state: str = "MN") -> tuple[list[Partner], dict]:
     """Parse a hand-built CSV into Partner records."""
@@ -60,6 +82,8 @@ def load(path: str | Path, default_type: str = PartnerType.CPA_FIRM.value,
     partners: list[Partner] = []
     skipped = 0
     bad_types: set[str] = set()
+    taken_ids: set[str] = set()
+    collisions = 0
 
     for row in rows:
         row = { (k or "").strip().lower(): v for k, v in row.items() }
@@ -73,11 +97,16 @@ def load(path: str | Path, default_type: str = PartnerType.CPA_FIRM.value,
             bad_types.add(ptype)
             ptype = default_type
 
+        city = (row.get("city") or "").strip()
+        partner_id = make_id(ptype, name, city, taken_ids)
+        if partner_id.rsplit("-", 1)[-1].isdigit():
+            collisions += 1
+
         partners.append(Partner(
-            id=f"{ptype[:3]}-{_norm(name)}",
+            id=partner_id,
             name=name,
             partner_type=ptype,
-            city=(row.get("city") or "").strip(),
+            city=city,
             state=(row.get("state") or state).strip().upper(),
             website=(row.get("website") or "").strip(),
             phone=(row.get("phone") or "").strip(),
@@ -100,6 +129,7 @@ def load(path: str | Path, default_type: str = PartnerType.CPA_FIRM.value,
         "imported": len(partners),
         "skipped_no_name": skipped,
         "unrecognized_types": sorted(bad_types),
+        "name_collisions": collisions,
     }
     return partners, diagnostics
 
