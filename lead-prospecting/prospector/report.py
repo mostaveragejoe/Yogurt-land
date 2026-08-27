@@ -207,3 +207,74 @@ def export_csv(partners: list[Partner], path: str | Path) -> int:
         writer.writeheader()
         writer.writerows(rows)
     return len(rows)
+
+
+# ---------------------------------------------------------------------------
+# Follow-up surfacing
+# ---------------------------------------------------------------------------
+
+def due_list(rows: list[dict], today=None, show_upcoming: bool = False) -> str:
+    """What needs action, most urgent first.
+
+    `rows` are dicts of {partner, overdue, unanswered, stale, action} built by
+    the caller (which owns the database handle). Overdue items come first,
+    then stale ones, then -- optionally -- what is coming up.
+    """
+    import datetime as dt
+    today = today or dt.date.today()
+
+    overdue = [r for r in rows if r["overdue"] > 0]
+    stale = [r for r in rows if r["overdue"] <= 0 and r["stale"]]
+    upcoming = [r for r in rows if r["overdue"] <= 0 and not r["stale"]
+                and r["partner"].next_action_due]
+
+    overdue.sort(key=lambda r: -r["priority"])
+    stale.sort(key=lambda r: -r["partner"].total_score)
+    upcoming.sort(key=lambda r: r["partner"].next_action_due)
+
+    out = [f"FOLLOW-UP  --  {today.isoformat()}", "=" * 78]
+
+    if not (overdue or stale or upcoming):
+        out.append("")
+        out.append("  Nothing due. Run `worklist` to open new conversations.")
+        return "\n".join(out)
+
+    if overdue:
+        out += ["", f"OVERDUE ({len(overdue)})", "-" * 78]
+        for r in overdue:
+            p = r["partner"]
+            flag = "  <-- REPLIED, UNANSWERED" if p.stage == Stage.RESPONDED.value else ""
+            out.append(f"  {r['overdue']:>3}d late  [{p.tier}] {p.total_score:>5.1f}  "
+                       f"{p.name[:40]:<40}{flag}")
+            out.append(f"            {p.stage:<14} {r['action']}")
+            if r["unanswered"]:
+                out.append(f"            {r['unanswered']} unanswered touch(es)")
+            out.append("")
+
+    if stale:
+        out += [f"GONE QUIET ({len(stale)})", "-" * 78]
+        for r in stale:
+            p = r["partner"]
+            out.append(f"  last touch {p.last_touch or '--':<12} [{p.tier}] "
+                       f"{p.name[:40]:<40}")
+            out.append(f"            {r['action']}")
+        out.append("")
+
+    if show_upcoming and upcoming:
+        out += [f"COMING UP ({len(upcoming)})", "-" * 78]
+        for r in upcoming[:15]:
+            p = r["partner"]
+            out.append(f"  due {p.next_action_due:<12} [{p.tier}] {p.name[:40]:<40}")
+
+    return "\n".join(out)
+
+
+def history(partner, events: list[dict]) -> str:
+    """Interaction history for one partner."""
+    if not events:
+        return "  (no logged interactions)"
+    lines = []
+    for e in events:
+        note = f"  {e['note']}" if e["note"] else ""
+        lines.append(f"  {e['date']}  {e['kind']:<10}{note}")
+    return "\n".join(lines)

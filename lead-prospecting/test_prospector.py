@@ -222,3 +222,154 @@ class CsvIngest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Follow-up cadence
+# ---------------------------------------------------------------------------
+
+import datetime as dt
+from prospector import cadence
+
+
+class BusinessDays(unittest.TestCase):
+    def test_friday_plus_one_is_monday(self):
+        self.assertEqual(cadence.add_business_days(dt.date(2026, 8, 28), 1),
+                         dt.date(2026, 8, 31))
+
+    def test_friday_plus_five_is_next_friday(self):
+        self.assertEqual(cadence.add_business_days(dt.date(2026, 8, 28), 5),
+                         dt.date(2026, 9, 4))
+
+    def test_zero_days_is_a_noop(self):
+        self.assertEqual(cadence.add_business_days(dt.date(2026, 8, 28), 0),
+                         dt.date(2026, 8, 28))
+
+    def test_due_dates_never_land_on_a_weekend(self):
+        start = dt.date(2026, 8, 24)
+        for days in range(1, 40):
+            self.assertLess(cadence.add_business_days(start, days).weekday(), 5)
+
+
+class TaxSeason(unittest.TestCase):
+    def test_february_is_tax_season(self):
+        self.assertTrue(cadence.in_tax_season(dt.date(2027, 2, 10)))
+
+    def test_august_is_not(self):
+        self.assertFalse(cadence.in_tax_season(dt.date(2026, 8, 27)))
+
+    def test_cpa_follow_up_is_pushed_past_april(self):
+        due = cadence.next_due("contacted", PartnerType.CPA_FIRM.value,
+                               dt.date(2027, 1, 20))
+        self.assertEqual(due, "2027-04-20")
+
+    def test_credit_union_is_not_deferred(self):
+        due = cadence.next_due("contacted", PartnerType.CREDIT_UNION.value,
+                               dt.date(2027, 1, 20))
+        self.assertEqual(due, "2027-01-27")
+
+    def test_cpa_is_not_stale_during_tax_season(self):
+        self.assertFalse(cadence.is_stale("contacted", "2027-01-05",
+                                          PartnerType.CPA_FIRM.value,
+                                          dt.date(2027, 2, 20)))
+
+    def test_credit_union_is_stale_after_the_same_silence(self):
+        self.assertTrue(cadence.is_stale("contacted", "2026-08-01",
+                                         PartnerType.CREDIT_UNION.value,
+                                         dt.date(2026, 8, 27)))
+
+
+class Parking(unittest.TestCase):
+    def test_weak_prospect_is_parked(self):
+        self.assertTrue(cadence.should_park(3, "D"))
+
+    def test_strong_prospect_is_not_parked(self):
+        """You exhausted one contact, not the institution."""
+        self.assertFalse(cadence.should_park(3, "A"))
+        self.assertFalse(cadence.should_park(5, "B"))
+
+    def test_no_parking_below_the_ceiling(self):
+        self.assertFalse(cadence.should_park(2, "D"))
+
+    def test_strong_prospect_is_told_to_try_another_contact(self):
+        action = cadence.suggest_action("contacted", 3,
+                                        PartnerType.CREDIT_UNION.value, "A")
+        self.assertIn("different contact", action)
+
+
+class Overdue(unittest.TestCase):
+    def test_past_due_is_positive(self):
+        self.assertEqual(cadence.days_overdue("2026-08-20", dt.date(2026, 8, 27)), 7)
+
+    def test_future_is_negative(self):
+        self.assertLess(cadence.days_overdue("2026-09-05", dt.date(2026, 8, 27)), 0)
+
+    def test_empty_due_date_is_not_overdue(self):
+        self.assertEqual(cadence.days_overdue("", dt.date(2026, 8, 27)), 0)
+
+    def test_unanswered_reply_outranks_a_later_cold_prospect(self):
+        replied = cadence.priority(60.0, 2, Stage.RESPONDED.value)
+        cold = cadence.priority(90.0, 5, Stage.CONTACTED.value)
+        self.assertGreater(replied, cold)
+
+
+class EventLog(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "t.db")
+        db.upsert(self.conn, cu(id="c", total_assets=1e8))
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_unanswered_counts_outbound_since_last_reply(self):
+        db.add_event(self.conn, "c", "messaged", "2026-08-01")
+        db.add_event(self.conn, "c", "nudge", "2026-08-05")
+        self.assertEqual(db.unanswered_touches(self.conn, "c"), 2)
+
+    def test_a_reply_resets_the_count(self):
+        db.add_event(self.conn, "c", "messaged", "2026-08-01")
+        db.add_event(self.conn, "c", "nudge", "2026-08-05")
+        db.add_event(self.conn, "c", "replied", "2026-08-06")
+        self.assertEqual(db.unanswered_touches(self.conn, "c"), 0)
+
+    def test_notes_do_not_count_as_touches(self):
+        db.add_event(self.conn, "c", "messaged", "2026-08-01")
+        db.add_event(self.conn, "c", "note", "2026-08-02")
+        self.assertEqual(db.unanswered_touches(self.conn, "c"), 1)
+
+    def test_events_come_back_in_order(self):
+        db.add_event(self.conn, "c", "messaged", "2026-08-01", "first")
+        db.add_event(self.conn, "c", "replied", "2026-08-04", "second")
+        kinds = [e["kind"] for e in db.events_for(self.conn, "c")]
+        self.assertEqual(kinds, ["messaged", "replied"])
+
+
+class FuzzyLookup(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.conn = db.connect(Path(self.tmp.name) / "t.db")
+        for pid, name in [("cu-1", "Northgate Community CU"),
+                          ("cu-2", "Northern Light Community CU"),
+                          ("cpa-1", "Halvorsen & Reed CPAs")]:
+            db.upsert(self.conn, Partner(id=pid, name=name,
+                                         partner_type="credit_union"))
+
+    def tearDown(self):
+        self.conn.close()
+        self.tmp.cleanup()
+
+    def test_name_fragment_resolves(self):
+        found = db.find(self.conn, "northgate")
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0].id, "cu-1")
+
+    def test_exact_id_still_works(self):
+        self.assertEqual(db.find(self.conn, "cpa-1")[0].name, "Halvorsen & Reed CPAs")
+
+    def test_ambiguous_fragment_returns_all_candidates(self):
+        self.assertEqual(len(db.find(self.conn, "community")), 2)
+
+    def test_no_match_returns_empty(self):
+        self.assertEqual(db.find(self.conn, "zzzz"), [])

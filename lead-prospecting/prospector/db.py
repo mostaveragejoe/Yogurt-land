@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 import sqlite3
 from pathlib import Path
 
@@ -35,6 +36,7 @@ def connect(path: str | Path = DEFAULT_DB) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute(_ddl())
+    conn.execute(_EVENTS_DDL)
     _migrate(conn)
     conn.commit()
     return conn
@@ -103,3 +105,63 @@ def update_fields(conn: sqlite3.Connection, partner_id: str, **changes) -> bool:
     cur = conn.execute(f"UPDATE partners SET {sets} WHERE id=?",
                        [*changes.values(), partner_id])
     return cur.rowcount > 0
+
+# --- Event log ----------------------------------------------------------
+# Every interaction is appended here rather than overwriting a field, so the
+# follow-up logic can reason about the actual sequence: how many unanswered
+# touches, when the last inbound reply landed, whether a stage ever advanced.
+
+_EVENTS_DDL = """
+CREATE TABLE IF NOT EXISTS events (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id TEXT NOT NULL,
+    date       TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    note       TEXT,
+    created_at TEXT NOT NULL
+)
+"""
+
+
+def add_event(conn: sqlite3.Connection, partner_id: str, kind: str,
+              date: str, note: str = "") -> None:
+    conn.execute(
+        "INSERT INTO events (partner_id, date, kind, note, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (partner_id, date, kind, note, _dt.datetime.now().isoformat(timespec="seconds")),
+    )
+
+
+def events_for(conn: sqlite3.Connection, partner_id: str) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM events WHERE partner_id = ? ORDER BY date, id", (partner_id,))
+    return [dict(r) for r in rows]
+
+
+def unanswered_touches(conn: sqlite3.Connection, partner_id: str) -> int:
+    """Outbound messages sent since the last time they responded."""
+    from .cadence import INBOUND, OUTBOUND
+    count = 0
+    for event in reversed(events_for(conn, partner_id)):
+        if event["kind"] in INBOUND:
+            break
+        if event["kind"] in OUTBOUND:
+            count += 1
+    return count
+
+
+def find(conn: sqlite3.Connection, query: str) -> list[Partner]:
+    """Look a partner up by id or by a fragment of its name.
+
+    Typing `cu-90001` during a LinkedIn session is friction nobody sustains,
+    so `northgate` resolves too. Exact id wins outright; otherwise every
+    name match is returned for the caller to disambiguate.
+    """
+    exact = get(conn, query)
+    if exact:
+        return [exact]
+    like = f"%{query.strip().lower()}%"
+    rows = conn.execute(
+        "SELECT * FROM partners WHERE lower(name) LIKE ? OR lower(id) LIKE ? "
+        "ORDER BY total_score DESC", (like, like))
+    return [Partner.from_row(r) for r in rows]

@@ -70,13 +70,65 @@ headers.
 ## Daily use
 
 ```bash
-python3 prospect.py worklist --size 10        # who to message, grouped by channel
-python3 prospect.py rank --type credit_union --tier A
-python3 prospect.py show cu-90001             # read before you message
-python3 prospect.py touch cu-90001 --stage contacted --note "Connect sent"
+python3 prospect.py due                       # what needs action today  <- start here
+python3 prospect.py worklist --size 10        # new conversations to open
+python3 prospect.py show northgate            # read before you message
+python3 prospect.py log northgate messaged "referenced their 94% cap"
 python3 prospect.py pipeline                  # the weekly number
 python3 prospect.py export out/partners.csv   # hand to a CRM or spreadsheet
 ```
+
+Partners resolve by **name fragment as well as id** — `northgate` works, you
+never have to remember `cu-90001`. If a fragment is ambiguous the tool lists
+the candidates instead of guessing.
+
+## Logging what happened
+
+Outreach is done by a person, so recording it has to be near-frictionless. One
+command logs the touch, advances the stage, and schedules the next action:
+
+```bash
+python3 prospect.py log northgate messaged "LinkedIn connect sent"
+python3 prospect.py log bluestem  replied  "CLO wants to talk SBA"
+python3 prospect.py log northstar meeting  "Thursday 2pm"
+python3 prospect.py log "mill city,twin ports" messaged      # several at once
+python3 prospect.py log northgate nudge --date 2026-08-21    # backdate
+```
+
+Events: `messaged` `nudge` `replied` `meeting` `agreement` `referral` `no`
+`dormant` `note`. Each one sets the stage and the next due date for you — you
+never decide when to follow up.
+
+```bash
+python3 prospect.py history northgate         # the full interaction log
+```
+
+## Follow-up rules
+
+`due` sorts by lateness, but **an unanswered reply carries 3× weight** — a warm
+reply left sitting is the most expensive thing in a pipeline.
+
+| Stage | Next touch | |
+|---|---|---|
+| contacted | 5 business days | |
+| responded | 2 business days | hot — do not let it cool |
+| meeting_set | 2 business days | |
+| agreement | 21 business days | |
+| producing | 45 business days | |
+| dormant | 90 business days | |
+
+Two rules encode judgment rather than arithmetic:
+
+- **CPA follow-ups skip tax season.** Anything due between 15 January and
+  15 April is pushed to 20 April, and a silent CPA is not counted as stale
+  during that window. They aren't ignoring you; it's March.
+- **Silence parks a weak prospect, not a strong one.** After three unanswered
+  touches a C/D partner goes dormant. An A or B partner does not — you've
+  exhausted one contact, not the institution, and the tool tells you to try the
+  CEO or VP Business Lending instead. Parking an A-tier credit union for ninety
+  days because one person never opened LinkedIn is how good prospects get lost.
+
+Both live in `prospector/cadence.py` as constants at the top of the file.
 
 Re-ingesting refreshed source data **never overwrites** hand-entered fields —
 stage, notes, contact name, LinkedIn URL, owner, next action and warm-intro
